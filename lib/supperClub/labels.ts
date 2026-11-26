@@ -85,6 +85,30 @@ export const LENGTH_OPTIONS = [
   { value: "end", label: "End date" },
 ];
 
+// The CHECK constraint on suppers.length_minutes.
+export const SUPPER_LENGTHS = [90, 120, 150, 180, 210, 240] as const;
+export type SupperLength = (typeof SUPPER_LENGTHS)[number];
+
+export function isSupperLength(value: number): value is SupperLength {
+  return (SUPPER_LENGTHS as readonly number[]).includes(value);
+}
+
+/** "2½ hours" for 150 minutes. */
+export function supperLengthLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 === 30 ? `${hours}½ hours` : `${hours} ${hours === 1 ? "hour" : "hours"}`;
+}
+
+export const SUPPER_LENGTH_OPTIONS = SUPPER_LENGTHS.map((value) => ({
+  value: String(value),
+  label: supperLengthLabel(value),
+}));
+
+/** The UTC instant a supper ends: its start plus its length. */
+export function supperEndsAt(startsAt: string, minutes: number): string {
+  return new Date(new Date(startsAt).getTime() + minutes * 60_000).toISOString();
+}
+
 export function isSupperFormat(value: string): value is SupperFormat {
   return oneOf(SUPPER_FORMATS, value);
 }

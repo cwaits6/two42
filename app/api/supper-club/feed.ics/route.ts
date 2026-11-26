@@ -112,7 +112,7 @@ export async function GET(request: Request) {
   const { data: suppers, error: suppersError } = tableIds.length
     ? await supabase
         .from("suppers")
-        .select("id, rotation_id, table_id, starts_at, host_party_id")
+        .select("id, rotation_id, table_id, starts_at, length_minutes, host_party_id")
         .eq("org_id", orgId)
         .in("table_id", tableIds)
     : { data: [], error: null };
@@ -171,6 +171,7 @@ export async function GET(request: Request) {
   const entries: SupperCalendarEntry[] = (suppers ?? []).map((d) => ({
     supperId: d.id,
     startsAt: d.starts_at,
+    lengthMinutes: d.length_minutes,
     rotationTitle: titles.get(d.rotation_id) ?? "Supper club",
     hostNames: d.host_party_id
       ? partyName(

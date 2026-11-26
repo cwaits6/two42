@@ -5,6 +5,7 @@ describe("suppersICS", () => {
   const entry = {
     supperId: "d-1",
     startsAt: "2027-01-10T00:00:00.000Z",
+    lengthMinutes: 180,
     rotationTitle: "Supper Club",
     hostNames: "Henry and Chloe",
     address: "12 Fixture Lane, Springfield, IL 62701",
@@ -19,10 +20,18 @@ describe("suppersICS", () => {
     expect(ics).toContain("SUMMARY:Supper Club: supper at Henry and Chloe's");
   });
 
+  it("ends a supper at its start plus its own length", () => {
+    expect(suppersICS([entry], "America/Chicago")).toContain("DTEND:20270110T030000Z");
+    const short = suppersICS([{ ...entry, lengthMinutes: 90 }], "America/Chicago");
+    expect(short).toContain("DTEND:20270110T013000Z");
+    expect(short).not.toContain("DURATION");
+  });
+
   it("moves a supper in place: same id, new time", () => {
     const moved = suppersICS([{ ...entry, startsAt: "2027-01-11T00:00:00.000Z" }], "America/Chicago");
     expect(moved).toContain("UID:supper-d-1@two42");
     expect(moved).toContain("DTSTART:20270111T000000Z");
+    expect(moved).toContain("DTEND:20270111T030000Z");
   });
 
   it("is an empty calendar with no suppers", () => {

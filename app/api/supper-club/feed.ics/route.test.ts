@@ -60,9 +60,9 @@ function seed(): Record<string, Row[]> {
       { org_id: OTHER_ORG, id: "s9", title: "Other Supper", status: "published" },
     ],
     suppers: [
-      { org_id: ORG, id: "d1", table_id: "t1", rotation_id: "s1", starts_at: "2031-01-05T00:00:00.000Z", host_party_id: "p-henry" },
-      { org_id: ORG, id: "d2", table_id: "t2", rotation_id: "s1", starts_at: "2031-01-05T00:00:00.000Z", host_party_id: "p-leo" },
-      { org_id: OTHER_ORG, id: "d9", table_id: "t9", rotation_id: "s9", starts_at: "2031-01-05T00:00:00.000Z", host_party_id: "p-other" },
+      { org_id: ORG, id: "d1", table_id: "t1", rotation_id: "s1", starts_at: "2031-01-05T00:00:00.000Z", length_minutes: 120, host_party_id: "p-henry" },
+      { org_id: ORG, id: "d2", length_minutes: 180, table_id: "t2", rotation_id: "s1", starts_at: "2031-01-05T00:00:00.000Z", host_party_id: "p-leo" },
+      { org_id: OTHER_ORG, id: "d9", length_minutes: 180, table_id: "t9", rotation_id: "s9", starts_at: "2031-01-05T00:00:00.000Z", host_party_id: "p-other" },
     ],
     supper_party_addresses: [
       { org_id: ORG, party_id: "p-henry", address_line1: "12 Fixture Lane", address_line2: null, city: null, state: null, postal_code: null },
@@ -142,6 +142,7 @@ describe("GET /api/supper-club/feed.ics", () => {
     expect(body).toContain("UID:supper-d1@two42");
     expect(body).toContain("LOCATION:12 Fixture Lane");
     expect(body).toContain("DTSTART:20310105T000000Z");
+    expect(body).toContain("DTEND:20310105T020000Z");
     expect(body).not.toContain("48 Sample Row");
     expect(body).not.toContain("d2@two42");
     expect(body).not.toContain("9 Elsewhere Road");

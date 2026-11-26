@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { supperOpen } from "./labels";
+import { SUPPER_LENGTH_OPTIONS, isSupperLength, supperEndsAt, supperLengthLabel, supperOpen } from "./labels";
 
 const NOW = new Date("2027-03-01T12:00:00Z");
 
@@ -14,5 +14,29 @@ describe("supperOpen", () => {
 
   it("is closed for every supper of an ended rotation, so it shows no reply prompts", () => {
     expect(supperOpen("ended", "2027-03-02T00:00:00Z", NOW)).toBe(false);
+  });
+});
+
+describe("supper length", () => {
+  it("offers 1½ to 4 hours in half hours, labelled as people say them", () => {
+    expect(SUPPER_LENGTH_OPTIONS).toEqual([
+      { value: "90", label: "1½ hours" },
+      { value: "120", label: "2 hours" },
+      { value: "150", label: "2½ hours" },
+      { value: "180", label: "3 hours" },
+      { value: "210", label: "3½ hours" },
+      { value: "240", label: "4 hours" },
+    ]);
+    expect(supperLengthLabel(60)).toBe("1 hour");
+  });
+
+  it("accepts only the lengths the database allows", () => {
+    expect(isSupperLength(150)).toBe(true);
+    expect(isSupperLength(60)).toBe(false);
+    expect(isSupperLength(165)).toBe(false);
+  });
+
+  it("ends a supper at its start plus its length", () => {
+    expect(supperEndsAt("2027-03-02T00:00:00.000Z", 150)).toBe("2027-03-02T02:30:00.000Z");
   });
 });
