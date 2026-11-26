@@ -78,7 +78,8 @@ export type FieldValueRow = { profile_id: string; field: string; state: string; 
 export type ApplyCopyArgs = {
   _org_id: string;
   _profile_id: string;
-  _expected: Record<string, Columns | null>;
+  /** The person the copy was read from, and the values it was worked out from. */
+  _expected: { person: string; profile: Columns; household: Columns | null; grade: Columns | null };
   _profile: Columns;
   _household: Columns;
   _grade: Columns;
@@ -251,18 +252,28 @@ export interface AllOrgsResult {
   notStarted: string[];
   /** Churches whose refresh another run held, so this run skipped them. */
   busy: string[];
+  /** Churches where some people's copy failed; the next run copies them again. */
+  copyFailed: string[];
   /** Every church was refreshed to the end. */
   finished: boolean;
 }
 
 /**
  * Refreshes every church in turn on one shared time budget. refreshOne answers
- * null for a church with no connection.
+ * null for a church with no connection. The order starts `turn` churches in,
+ * so a church that uses up the time can't keep the ones after it waiting.
  */
 export async function refreshAllOrgs(
   orgs: Org[],
-  options: { elapsed: () => number; budgetMs: number; refreshOne: (org: Org) => Promise<RefreshResult | null> },
+  options: {
+    elapsed: () => number;
+    budgetMs: number;
+    turn?: number;
+    refreshOne: (org: Org) => Promise<RefreshResult | null>;
+  },
 ): Promise<AllOrgsResult> {
+  const start = orgs.length === 0 ? 0 : (((options.turn ?? 0) % orgs.length) + orgs.length) % orgs.length;
+  const ordered = [...orgs.slice(start), ...orgs.slice(0, start)];
   const all: AllOrgsResult = {
     connected: 0,
     copied: 0,
@@ -272,9 +283,10 @@ export async function refreshAllOrgs(
     cutShort: [],
     notStarted: [],
     busy: [],
+    copyFailed: [],
     finished: true,
   };
-  const results = await forEachOrg(orgs, async (org) => {
+  const results = await forEachOrg(ordered, async (org) => {
     // A church reached after the time is spent waits for the next run rather
     // than starting reads it can't finish.
     if (options.elapsed() >= options.budgetMs) {
@@ -292,10 +304,12 @@ export async function refreshAllOrgs(
     all.review += result.review;
     all.pending += result.pending;
     if (result.stoppedAtBudget) all.cutShort.push(org.id);
+    if (result.failed > 0) all.copyFailed.push(org.id);
     return { sent: result.copied, sendFailures: result.failed };
   });
   all.failed = results.filter((r) => r.error).map((r) => r.orgId);
-  all.finished = all.failed.length + all.cutShort.length + all.notStarted.length + all.busy.length === 0;
+  all.finished =
+    all.failed.length + all.cutShort.length + all.notStarted.length + all.busy.length + all.copyFailed.length === 0;
   return all;
 }
 
@@ -361,10 +375,14 @@ async function run(
   if (settings.size === 0) return changes.cursor;
 
   const changed = new Set(changes.ids);
+  const uncopied = (link: { profile_id: string }) => !states.get(link.profile_id)?.copied_at;
   const due = links.filter((link) => {
     if (presence.get(link.external_person_id) !== "active") return false;
-    return !states.get(link.profile_id)?.copied_at || changed.has(link.external_person_id);
+    return uncopied(link) || changed.has(link.external_person_id);
   });
+  // The mark is inclusive, so people copied already can come back every run;
+  // whoever is still waiting goes first, or the same ones could use the time each night.
+  due.sort((a, b) => Number(uncopied(b)) - Number(uncopied(a)));
   const retry: string[] = [];
   let done = 0;
   for (let i = 0; i < due.length; i += BATCH) {
@@ -556,7 +574,7 @@ async function copyPerson(
   const { data, error } = await db.rpc("records_apply_copy", {
     _org_id: orgId,
     _profile_id: profileId,
-    _expected: { profile: current.profile, household: current.household, grade: current.grade },
+    _expected: { person: person.id, profile: current.profile, household: current.household, grade: current.grade },
     _profile: plan.profile,
     _household: plan.household,
     _grade: plan.grade,

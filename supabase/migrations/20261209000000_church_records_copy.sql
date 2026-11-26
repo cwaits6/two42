@@ -247,6 +247,10 @@ declare
   _after jsonb;
   _running timestamptz;
 begin
+  -- Before a church's first refresh there is no row to lock, so one is made.
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
   select running_since into _running from public.records_refresh_state
    where org_id = _org_id
      for update;
@@ -293,7 +297,7 @@ grant execute on function public.records_save_field_settings(uuid, jsonb, uuid) 
 -- is 'stale', so a member's edit is never overwritten by an older read.
 -- _filled names the fields that went from empty to filled, for the one-time
 -- notice. Answers 'gone' for a profile not in this church and 'unlinked' for
--- one no longer linked.
+-- one no longer linked to _expected's person, the one the copy was read from.
 --
 -- SECURITY INVOKER and executable by the service role only, like
 -- records_save_field_settings(). Running as the service role is also what
@@ -331,7 +335,9 @@ begin
     return 'gone';
   end if;
   if not exists (
-    select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id
+    select 1 from public.records_person_links
+     where org_id = _org_id and profile_id = _profile_id
+       and external_person_id = _expected ->> 'person'
   ) then
     return 'unlinked';
   end if;

@@ -24,7 +24,7 @@ export function gateError(status: 401 | 403) {
 export function recordsFailureMessage(error: RecordsError, product: string): string {
   switch (error.kind) {
     case "unauthorized":
-      return `${product} didn't accept the key. Check it is active and its user can view people.`;
+      return `${product} didn't accept the key. Check it is active and its user can view everything the key instructions list.`;
     case "unreachable":
       return `Couldn't reach ${product} at that address. Check the address and try again.`;
     case "not_provider":

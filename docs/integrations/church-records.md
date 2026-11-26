@@ -188,7 +188,9 @@ unreadable, and each church admin has to connect again; the links stay.
 1. **Connect.** In Rock, add a REST key under Admin Tools › Settings › REST
    Keys, active, on a user made for two42 alone (see
    [Rock RMS](#rock-rms) for the role it needs). Enter the Rock address and
-   the key. two42 tries the key before it saves anything. The key is never
+   the key. two42 tries the key on every controller a refresh reads before it
+   saves anything, so a missing permission shows now, not at the first
+   refresh. The key is never
    shown again; the page shows its last four characters.
 2. **Link people.** two42 suggests a person from the records for each approved
    two42 profile without a link. A suggestion shows the person's name in the
@@ -362,9 +364,11 @@ and kept up to date.
   `refresh-church-records` edge function and on **Refresh now**. It claims the
   church's refresh so two never overlap, reads every link's existence and
   status by id for **Needs review**, then copies linked people never copied and
-  people changed since the last mark, 50 at a time, within a time budget. Each
+  people changed since the last mark, 50 at a time, within a time budget,
+  people never copied first. Each
   copy goes through `records_apply_copy()`, which writes nothing if the
-  member's values changed since they were read. A refresh that runs out of
+  member's values changed since they were read, or if the profile is now
+  linked to someone else. A refresh that runs out of
   time marks the people it didn't reach to be copied in full next time, and
   still moves the mark on. Details are read only for those
   people; existence and status are read for everyone linked, because a
@@ -476,8 +480,8 @@ The controllers, from the requests the code makes
 | REST controller | Read for | Requests |
 |---|---|---|
 | **People** | Connecting, suggesting, linking, copying, review | `GET /api/People` with `$select` of the fields in the tables above |
-| **DefinedValues** | Record type and status, phone types, and the names of titles and suffixes | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
-| **PhoneNumbers** | Copying phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId` or `ModifiedDateTime`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId` |
+| **DefinedValues** | Connecting, record type and status, phone types, and the names of titles and suffixes | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
+| **PhoneNumbers** | Connecting, copying phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId`; or by `ModifiedDateTime` then `Id`, `$select=PersonId,Id,ModifiedDateTime` |
 
 Photos aren't read through the REST API: Rock has no endpoint for them. They
 come from `GetImage.ashx?id=<PhotoId>&maxwidth=400&maxheight=400&format=jpg`,

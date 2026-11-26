@@ -141,6 +141,22 @@ Deno.test("changedSince asks only for people and phones changed since the mark",
   }
 });
 
+Deno.test("changedSince asks for each next page after the last row read, not by offset", async () => {
+  const page = Array.from({ length: 500 }, (_, i) => ({ Id: i + 1, ModifiedDateTime: "2026-11-22T09:00:00.5" }));
+  const { calls, source } = rock({
+    "/api/People": (url) => json(url.searchParams.get("$filter")!.includes("Id gt") ? [{ Id: 900, ModifiedDateTime: "2026-11-22T10:00:00" }] : page),
+    "/api/PhoneNumbers": () => json([]),
+  });
+  const { ids } = await source.changedSince(creds, "2026-11-21T08:00:00");
+  assertEquals(ids.length, 501);
+  const people = calls.filter((c) => c.url.pathname === "/api/People").map((c) => c.url.searchParams);
+  assertEquals(
+    people[1].get("$filter"),
+    "ModifiedDateTime gt datetime'2026-11-22T09:00:00.5' or (ModifiedDateTime eq datetime'2026-11-22T09:00:00.5' and Id gt 500)",
+  );
+  assert(people.every((params) => params.get("$skip") === null && params.get("$orderby") === "ModifiedDateTime,Id"));
+});
+
 Deno.test("a stored mark that isn't a Rock time never reaches a filter", async () => {
   const { calls, source } = rock({ "/api/People": () => json([]), "/api/PhoneNumbers": () => json([]) });
   await source.changedSince(creds, "2026-11-21T08:00:00' or Id gt 0 or '");

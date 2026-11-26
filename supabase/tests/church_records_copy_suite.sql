@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(49);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -69,6 +69,8 @@ $$;
 -- What records_apply_copy() expects: the person's values as they are now.
 create function pg_temp.expected(_profile uuid) returns jsonb language sql stable as $$
   select jsonb_build_object(
+    'person', (select l.external_person_id from public.records_person_links l
+                where l.profile_id = p.id and l.org_id = p.org_id),
     'profile', public.records_pick(to_jsonb(p), array[
       'first_name', 'last_name', 'preferred_name', 'title', 'suffix', 'gender', 'phone_mobile',
       'phone_work', 'birth_month', 'birth_day', 'birth_year', 'avatar_url']),
@@ -119,6 +121,10 @@ insert into public.records_person_links (org_id, connection_id, profile_id, exte
 select public.records_save_field_settings(
   pg_temp.fx('org'), '{"name": "locked", "phone_mobile": "member", "birthday": "member", "anniversary": "member", "grade": "locked"}',
   pg_temp.fx('admin'));
+
+select is(
+  (select running_since from public.records_refresh_state where org_id = pg_temp.fx('org')),
+  null, 'a save before the first refresh makes the refresh''s row, so the two take one lock');
 
 -- ── The boundary on every table ─────────────────────────────────────────────
 select ok(
@@ -197,7 +203,8 @@ select is(
   'only the service role saves settings or applies a copy');
 
 insert into public.records_refresh_state (org_id, connection_id, running_since)
-  select org_id, connection_id, now() from public.records_connections where org_id = pg_temp.fx('org');
+  select org_id, connection_id, now() from public.records_connections where org_id = pg_temp.fx('org')
+on conflict (org_id) do update set running_since = excluded.running_since;
 select is(
   public.records_save_field_settings(pg_temp.fx('org'), '{"name": "member"}', pg_temp.fx('admin')),
   'busy', 'settings aren''t saved while a refresh is running, since it works from the ones it read');
@@ -361,6 +368,11 @@ select is(
     '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
   'unlinked', 'a profile without a link gets no copy');
 select is(
+  public.records_apply_copy(pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || '{"person": "999"}',
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
+  'unlinked', 'a copy read from a person the profile is no longer linked to is not written');
+select is(
   public.records_apply_copy(pg_temp.fx('org'), pg_temp.fx('other_admin'), pg_temp.expected(pg_temp.fx('other_admin')),
     '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
   'gone', 'a profile from another church is not this church''s to copy into');
@@ -450,7 +462,8 @@ select is(
   0, 'and asks the next refresh to copy everyone in full');
 
 insert into public.records_refresh_state (org_id, connection_id, cursor)
-  select org_id, connection_id, '2026-11-20T10:00:00' from public.records_connections where org_id = pg_temp.fx('org');
+  select org_id, connection_id, '2026-11-20T10:00:00' from public.records_connections where org_id = pg_temp.fx('org')
+on conflict (org_id) do update set cursor = excluded.cursor;
 
 delete from public.records_connections where org_id = pg_temp.fx('org');
 select is(

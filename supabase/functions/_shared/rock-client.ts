@@ -102,12 +102,15 @@ export function parsePerson(value: unknown): RockPerson | null {
 }
 
 /**
- * Proves the address is a Rock and the key can read people. Rock answers a
- * key without that permission with 401, the same as a wrong key.
+ * Proves the address is a Rock and the key can read every controller a
+ * refresh reads, so a missing permission fails on save rather than nightly.
+ * Rock answers a key without a permission with 401, the same as a wrong key.
  */
 export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<void> {
-  const body = await getJson(creds, "/api/People", { $top: "1", $select: "Id" }, fetcher);
-  if (!Array.isArray(body)) throw new RecordsError("not_provider");
+  for (const path of ["/api/People", "/api/PhoneNumbers", "/api/DefinedValues"]) {
+    const body = await getJson(creds, path, { $top: "1", $select: "Id" }, fetcher);
+    if (!Array.isArray(body)) throw new RecordsError("not_provider");
+  }
 }
 
 export interface PersonFilterIds {

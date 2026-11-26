@@ -222,7 +222,11 @@ async function presence(
   return found;
 }
 
-/** The ids changed since `since`, oldest first, and the latest time read. */
+/**
+ * The ids changed since `since`, oldest first, and the latest time read. Pages
+ * follow the last row read rather than an offset: a row edited mid-scan moves
+ * to the end, and an offset would then skip the row after it.
+ */
 async function changedRows(
   creds: RecordsCredentials,
   path: string,
@@ -232,18 +236,17 @@ async function changedRows(
 ): Promise<{ ids: number[]; latest: string | null; cut: boolean }> {
   const ids: number[] = [];
   let latest: string | null = null;
+  let after: { time: string; id: number } | null = null;
+  const select = [...new Set([idColumn, "Id", "ModifiedDateTime"])].join(",");
   for (let page = 0; page < MAX_CHANGE_PAGES; page++) {
+    const filter: string = after
+      ? `ModifiedDateTime gt datetime'${after.time}' or (ModifiedDateTime eq datetime'${after.time}' and Id gt ${after.id})`
+      : `ModifiedDateTime ge datetime'${since}'`;
     const body = rows(
       await getJson(
         creds,
         path,
-        {
-          $filter: `ModifiedDateTime ge datetime'${since}'`,
-          $select: `${idColumn},ModifiedDateTime`,
-          $orderby: "ModifiedDateTime",
-          $top: String(PAGE),
-          $skip: String(page * PAGE),
-        },
+        { $filter: filter, $select: select, $orderby: "ModifiedDateTime,Id", $top: String(PAGE) },
         fetcher,
       ),
     );
@@ -253,6 +256,13 @@ async function changedRows(
       if (typeof row.ModifiedDateTime === "string" && ROCK_TIME.test(row.ModifiedDateTime)) latest = row.ModifiedDateTime;
     }
     if (body.length < PAGE) return { ids, latest, cut: false };
+    const last = body[body.length - 1];
+    const lastId = int(last.Id);
+    // Without the last row's place the next page can't be asked for safely.
+    if (typeof last.ModifiedDateTime !== "string" || !ROCK_TIME.test(last.ModifiedDateTime) || !lastId) {
+      return { ids, latest, cut: true };
+    }
+    after = { time: last.ModifiedDateTime, id: lastId };
   }
   return { ids, latest, cut: true };
 }

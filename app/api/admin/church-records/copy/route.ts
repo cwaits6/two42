@@ -78,7 +78,8 @@ export async function PUT(request: Request) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ fields: await readFieldSettings(gate.orgId) });
+    // The save stores exactly these, so no read can fail after it committed.
+    return NextResponse.json({ fields });
   } catch (err) {
     logError("Church records copy settings save failed", err, { route: "/api/admin/church-records/copy", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't save what two42 copies." }, { status: 500 });

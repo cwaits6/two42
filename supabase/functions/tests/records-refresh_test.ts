@@ -166,6 +166,21 @@ Deno.test("every read and write is bound to the church being refreshed", async (
   assert(rpcs.every((args) => args._org_id === ORG));
 });
 
+Deno.test("people still waiting for a copy go before people copied already and changed again", async () => {
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    states: [
+      { profile_id: P1, copied_at: "2026-11-21T00:00:00Z", review_reason: null, review_since: null },
+      { profile_id: P4, copied_at: null, review_reason: null, review_since: null },
+    ],
+  });
+  const { source, asked } = fakeSource();
+  await refreshOrg(db, options(source));
+  assertEquals(asked.peopleForCopy, [["103", "100"]]);
+  // The copy names the person it was read from, so a link changed meanwhile isn't written.
+  assertEquals(rpcs.map((args) => (args._expected as { person: string }).person), ["100"]);
+});
+
 Deno.test("details are read only for people changed since the last run, and for links never copied", async () => {
   const { db, rpcs, calls } = fakeDb(FIXTURE);
   const { source, asked } = fakeSource();
@@ -469,6 +484,28 @@ Deno.test("the nightly run shares one budget: a church reached after it is spent
   assertEquals(held.busy, ["org-1"]);
   assertEquals([held.connected, held.copied], [1, 1]);
   assertFalse(held.finished);
+
+  // People whose copy failed are copied again next run, but the run says so.
+  const partial = await refreshAllOrgs([org(1), org(2)], {
+    elapsed: () => 0,
+    budgetMs: 60_000,
+    refreshOne: (o) => Promise.resolve(o.id === "org-2" ? done({ failed: 2, pending: 2 }) : done()),
+  });
+  assertEquals(partial.copyFailed, ["org-2"]);
+  assertFalse(partial.finished);
+
+  // A later turn starts further in, so the church after a slow one gets the time first.
+  const order: string[] = [];
+  await refreshAllOrgs([org(1), org(2), org(3)], {
+    elapsed: () => 0,
+    budgetMs: 60_000,
+    turn: 4,
+    refreshOne: (o) => {
+      order.push(o.id);
+      return Promise.resolve(done());
+    },
+  });
+  assertEquals(order, ["org-2", "org-3", "org-1"]);
 
   const lines = await logged(async () => {
     const broken = await refreshAllOrgs([org(1)], {

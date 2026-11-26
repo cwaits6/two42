@@ -75,6 +75,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
     const all = await refreshAllOrgs(orgs, {
       elapsed,
       budgetMs: BUDGET_MS,
+      turn: Math.floor(startedAt / 86_400_000),
       refreshOne: async (org) => {
         const { data: connection, error } = await db
           .from("records_connections")
@@ -100,7 +101,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
       },
     });
 
-    const { connected, copied, review, pending, failed, cutShort, notStarted, busy } = all;
+    const { connected, copied, review, pending, failed, cutShort, notStarted, busy, copyFailed } = all;
     const summary = {
       route: "refresh-church-records",
       ids: {
@@ -112,14 +113,16 @@ Deno.serve(serviceKeyCallerOnly(async () => {
         orgsCutShort: cutShort.length,
         orgsNotStarted: notStarted.length,
         orgsBusy: busy.length,
+        orgsCopyFailed: copyFailed.length,
       },
     };
     if (cutShort.length || notStarted.length) logWarn("church records refresh ran out of time", undefined, summary);
     else if (busy.length) logWarn("church records refresh skipped churches another refresh held", undefined, summary);
+    else if (copyFailed.length) logWarn("church records refresh failed to copy some people", undefined, summary);
     else logInfo("church records refresh run", summary);
     // The org failures carry ids only: an error's text could hold a database message.
     return json(
-      { orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted, busy },
+      { orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted, busy, copyFailed },
       all.finished ? 200 : 500,
     );
   } catch (err) {

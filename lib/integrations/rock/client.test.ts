@@ -13,7 +13,7 @@ function reply(body: unknown, init: { status?: number; type?: string } = {}) {
 
 describe("Rock client", () => {
   it("sends the key in Authorization-Token, refuses redirects, and only GETs", async () => {
-    const fetcher = vi.fn().mockResolvedValue(reply([{ Id: 1 }]));
+    const fetcher = vi.fn().mockImplementation(async () => reply([{ Id: 1 }]));
     await checkConnection(creds, fetcher);
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toMatch(/^https:\/\/rock\.example\.org\/api\/People\?/);
@@ -30,6 +30,24 @@ describe("Rock client", () => {
   ])("reports a failure by kind", async (response, kind) => {
     const fetcher = vi.fn().mockResolvedValue(response);
     await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({ kind });
+  });
+
+  it("checks every controller a refresh reads", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => reply([{ Id: 1 }]));
+    await checkConnection(creds, fetcher);
+    expect(fetcher.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      "/api/People",
+      "/api/PhoneNumbers",
+      "/api/DefinedValues",
+    ]);
+  });
+
+  it("refuses a key that can read people but not phone numbers", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply([{ Id: 1 }]))
+      .mockResolvedValueOnce(reply({ Message: "Authorization has been denied" }, { status: 401 }));
+    await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({ kind: "unauthorized" });
   });
 
   it("reports an unreachable host", async () => {

@@ -84,6 +84,11 @@ describe("/api/admin/church-records/copy", () => {
       { name: "locked", phone_mobile: "member", photo: "member" },
       "admin-1",
     );
+    // Answered from what was saved, so a failed read can't report a committed save as failed.
+    store.readFieldSettings.mockClear();
+    const again = await put({ fields: { name: "locked", phone_mobile: "member" } });
+    expect(await again.json()).toEqual({ fields: { name: "locked", phone_mobile: "member" } });
+    expect(store.readFieldSettings).not.toHaveBeenCalled();
   });
 
   it("answers 409 while a refresh is running, which saved nothing", async () => {
