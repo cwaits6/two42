@@ -34,9 +34,9 @@ vi.mock("@/lib/log", () => ({ logError: vi.fn() }));
 const { POST } = await import("@/app/api/supper-club/suppers/[supperId]/move/route");
 
 const SUPPER = "33333333-3333-4333-8333-333333333333";
-const move = () =>
+const move = (startsAt = "2031-02-08T18:00:00.000Z") =>
   POST(
-    new Request("https://two42.example", { method: "POST", body: JSON.stringify({ startsAt: "2031-02-08T18:00:00.000Z" }) }),
+    new Request("https://two42.example", { method: "POST", body: JSON.stringify({ startsAt }) }),
     { params: Promise.resolve({ supperId: SUPPER }) },
   );
 
@@ -81,5 +81,12 @@ describe("POST /api/supper-club/suppers/[supperId]/move", () => {
   it("says some emails didn't go out when one failed", async () => {
     notifySuppersMoved.mockResolvedValue({ sent: 2, failed: 1, capped: false });
     expect(await (await move()).json()).toEqual({ sent: 2, capped: false, unsent: true });
+  });
+
+  it("writes nothing and emails nobody when the start is unchanged", async () => {
+    const res = await move("2031-02-01T18:00:00.000Z");
+    expect(updates).toEqual([]);
+    expect(notifySuppersMoved).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ sent: 0, capped: false, unsent: false, unchanged: true });
   });
 });

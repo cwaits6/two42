@@ -21,7 +21,7 @@ export function MoveSupperButton({ supperId, startsAt, zone }: { supperId: strin
         open={open}
         onOpenChange={setOpen}
         title="Move supper"
-        description="Everyone at the table gets an email with the new date, and is asked to reply again."
+        description="Everyone else at the table gets an email with the new date, and is asked to reply again."
         initialIso={startsAt}
         zone={zone}
         onSave={async (iso) => {

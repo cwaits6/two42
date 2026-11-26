@@ -37,6 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ sup
     return serverError();
   }
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // The same start is no move: the database keeps the replies, so nobody is asked again.
+  if (Date.parse(before.starts_at) === Date.parse(startsAt)) {
+    return NextResponse.json({ ...emailOutcome({ sent: 0, failed: 0, capped: false }), unchanged: true });
+  }
 
   // A host who does not host this supper matches no row: zero rows is a refusal.
   const { data: moved, error } = await supabase

@@ -502,12 +502,47 @@ select is(pg_temp.wrote('u', format(
 select is(pg_temp.count_as('u', 'supper_replies', format('supper_id = %L', pg_temp.id('t1d1'))), '0',
   'nor reads its replies');
 
+-- ── A supper's length ───────────────────────────────────────────────────────
+select is((select count(*)::int from public.suppers where rotation_id = pg_temp.id('rotation') and length_minutes = 180), 4,
+  'every published supper lasts 3 hours to start');
+select pg_temp.keep('t1d1_replies', (select count(*)::text from public.supper_replies where supper_id = pg_temp.id('t1d1')));
+select pg_temp.keep('t1d1_starts', (select starts_at::text from public.suppers where id = pg_temp.id('t1d1')));
+select is(pg_temp.wrote('h', format(
+    'update public.suppers set length_minutes = 120 where id = %L', pg_temp.id('t1d1'))), '1',
+  'a host changes how long their own table''s supper lasts');
+select ok((select count(*)::text from public.supper_replies where supper_id = pg_temp.id('t1d1')) = current_setting('sc.t1d1_replies')
+    and current_setting('sc.t1d1_replies')::int > 0,
+  'and its replies stay');
+select ok((select starts_at::text = current_setting('sc.t1d1_starts') and follows_rotation_date
+    from public.suppers where id = pg_temp.id('t1d1')),
+  'and it is not a move: its start stays and it still follows its date');
+select is(pg_temp.wrote('h', format(
+    'update public.suppers set length_minutes = 120 where id = %L', pg_temp.id('t2d1'))), '0',
+  'a host cannot change another table''s supper''s length');
+select is(pg_temp.wrote('g1', format(
+    'update public.suppers set length_minutes = 120 where id = %L', pg_temp.id('t1d1'))), '0',
+  'nor can a guest');
+select is(pg_temp.wrote('l', format(
+    'update public.suppers set length_minutes = 240 where id = %L', pg_temp.id('t2d1'))), '1',
+  'a leader changes any supper''s length');
+select is(pg_temp.wrote('l', format(
+    'update public.suppers set length_minutes = 210 where id = %L', pg_temp.id('t2d2'))), '1',
+  'including one on a later date');
+select is(pg_temp.wrote('h', format(
+    'update public.suppers set length_minutes = 165 where id = %L', pg_temp.id('t1d1'))), '23514',
+  'a length other than 1½ to 4 hours in half hours is refused');
+select is(pg_temp.wrote('l', format(
+    'update public.suppers set length_minutes = 300 where id = %L', pg_temp.id('t2d1'))), '23514',
+  'for a leader too');
+
 -- ── Moving a supper ─────────────────────────────────────────────────────────
 select is(pg_temp.wrote('h', format(
     'update public.suppers set starts_at = ''2031-01-05 17:00-06'' where id = %L', pg_temp.id('t1d1'))), '1',
   'a host moves their own table''s supper');
 select is((select count(*)::int from public.supper_replies where supper_id = pg_temp.id('t1d1')), 0,
   'and its replies are cleared');
+select is((select length_minutes from public.suppers where id = pg_temp.id('t1d1')), 120::smallint,
+  'a moved supper keeps its length');
 select is(pg_temp.wrote('h', format(
     'update public.suppers set starts_at = ''2031-01-05 17:00-06'' where id = %L', pg_temp.id('t2d1'))), '0',
   'a host cannot move another table''s supper');
@@ -534,6 +569,8 @@ select is(pg_temp.wrote('l', format(
   'a leader moves the second date');
 select is((select starts_at from public.suppers where id = pg_temp.id('t2d2')), '2031-02-08 18:00-06'::timestamptz,
   'the other table''s supper moves with it');
+select is((select length_minutes from public.suppers where id = pg_temp.id('t2d2')), 210::smallint,
+  'and keeps its length');
 select is((select starts_at from public.suppers where id = pg_temp.id('t1d2')), '2031-02-02 18:00-06'::timestamptz,
   'the supper its host moved stays');
 select is(pg_temp.wrote('l', format(

@@ -44,6 +44,7 @@ export interface RotationData {
     table_id: string;
     rotation_date_id: string;
     starts_at: string;
+    length_minutes: number;
     host_party_id: string | null;
     host_unavailable: boolean;
   }[];
@@ -151,7 +152,7 @@ export async function loadRotationData(supabase: Client, rotationId: string): Pr
     fetchAll((from, to) =>
       supabase
         .from("suppers")
-        .select("id, table_id, rotation_date_id, starts_at, host_party_id, host_unavailable")
+        .select("id, table_id, rotation_date_id, starts_at, length_minutes, host_party_id, host_unavailable")
         .eq("rotation_id", rotationId)
         .order("starts_at")
         .order("id")

@@ -376,6 +376,7 @@ export default async function SupperClubPage({ params }: { params: Promise<{ gro
         key={d.id}
         supperId={d.id}
         startsAt={d.starts_at}
+        lengthMinutes={d.length_minutes}
         zone={zone}
         rotationTitle={rotation.title}
         heading={heading}
