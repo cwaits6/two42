@@ -14,6 +14,18 @@ export interface SeasonAttention {
 
 export const NOTHING_NEEDED: SeasonAttention = { cantHost: [], hostLeft: [], waiting: [], room: [] };
 
+/** Dinners whose host said they can't host and has not withdrawn from the season. */
+export function cantHostDinners<D extends { host_party_id: string | null; host_unavailable: boolean }>(
+  dinners: D[],
+  parties: { id: string; status: string }[]
+): (D & { host_party_id: string })[] {
+  const withdrawn = new Set(parties.filter((p) => p.status === "withdrawn").map((p) => p.id));
+  return dinners.filter(
+    (d): d is D & { host_party_id: string } =>
+      d.host_unavailable && d.host_party_id !== null && !withdrawn.has(d.host_party_id)
+  );
+}
+
 /** What a leader should sort out in a running season: hosts who can't host or left, and who is waiting. */
 export function seasonAttention(input: {
   status: SeasonStatus;
@@ -61,7 +73,7 @@ export function seasonAttention(input: {
 
   const hostLeft = future.filter((d) => !d.host_party_id || withdrawn.has(d.host_party_id)).map((d) => d.id);
   return {
-    cantHost: future.filter((d) => d.host_unavailable && !hostLeft.includes(d.id)).map((d) => d.id),
+    cantHost: cantHostDinners(future, input.parties).map((d) => d.id),
     hostLeft,
     waiting,
     room:

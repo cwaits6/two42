@@ -8,6 +8,7 @@ import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
+import { cantHostDinners } from "@/lib/dinnerClub/attention";
 import { bringListFor } from "@/lib/dinnerClub/bringList";
 import { pastPairsFromHistory } from "@/lib/dinnerClub/history";
 import { dinnerKey, draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
@@ -131,9 +132,10 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             heldDinners={heldDinners}
             futureDateIds={data.dates.filter((d) => new Date(d.starts_at) > now).map((d) => d.id)}
             cantHost={Object.fromEntries(
-              futureDinners
-                .filter((d) => d.host_unavailable && shuffleable.some((p) => p.id === d.host_party_id))
-                .map((d) => [dinnerKey(d.table_id, d.season_date_id), d.host_party_id])
+              cantHostDinners(futureDinners, data.parties).map((d) => [
+                dinnerKey(d.table_id, d.season_date_id),
+                d.host_party_id,
+              ])
             )}
             pastPairs={pastPairs}
           />
