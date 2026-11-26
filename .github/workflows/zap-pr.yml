@@ -3,7 +3,7 @@ name: ZAP Baseline Scan (PR)
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
     # Only scan PRs that can affect the deployed app. Later patterns override
     # earlier ones: .github/** is excluded as a whole, but this workflow and its
     # comment script are re-included so changes to the scan itself still run it.

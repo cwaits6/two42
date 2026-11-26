@@ -3,7 +3,8 @@ name: Vercel build on ready
 # Vercel skips preview builds while a PR is a draft (scripts/vercel-ignore-build.sh),
 # and a skipped build still leaves a green "Vercel – two42" status on the commit.
 # Marking a PR ready pushes nothing, so without this job the head a merge relies
-# on would never have been built. This asks Vercel to build that head now.
+# on would never have been built. This asks Vercel to build that head now, for the
+# app and the docs site. Each project's own skip still applies to the new deployment.
 
 on:
   pull_request:
@@ -23,11 +24,12 @@ jobs:
     # Fork PRs get no secrets, and Vercel doesn't build them without approval anyway.
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - name: Create a Vercel deployment for the head commit
+      - name: Create Vercel deployments for the head commit
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          DOCS_PROJECT: ${{ vars.VERCEL_DOCS_PROJECT || 'two42-docs' }}
           REPO_ID: ${{ github.event.repository.id }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -40,24 +42,45 @@ jobs:
           team=""
           if [ -n "$VERCEL_TEAM_ID" ]; then team="?teamId=$VERCEL_TEAM_ID"; fi
 
-          name=$(curl -fsS --max-time 20 --retry 3 --retry-all-errors \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID$team" | jq -r .name)
+          # Prints the project's id and name, or nothing when it doesn't exist.
+          project() {
+            curl -fsS --max-time 20 --retry 3 --retry-all-errors \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v9/projects/$1$team" | jq -r '"\(.id) \(.name)"' || true
+          }
 
-          body=$(jq -n --arg name "$name" --arg project "$VERCEL_PROJECT_ID" \
-            --arg ref "$HEAD_REF" --arg sha "$HEAD_SHA" --argjson repoId "$REPO_ID" \
-            '{name: $name, project: $project, target: "preview",
-              gitSource: {type: "github", repoId: $repoId, ref: $ref, sha: $sha}}')
+          # Omitting target makes it a preview deployment.
+          deploy() {
+            body=$(jq -n --arg name "$2" --arg project "$1" \
+              --arg ref "$HEAD_REF" --arg sha "$HEAD_SHA" --argjson repoId "$REPO_ID" \
+              '{name: $name, project: $project,
+                gitSource: {type: "github", repoId: $repoId, ref: $ref, sha: $sha}}')
+            if ! out=$(curl -sS --max-time 30 -w '\n%{http_code}' -X POST \
+                -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" \
+                -d "$body" "https://api.vercel.com/v13/deployments$team"); then
+              echo "::error::Couldn't reach Vercel for $2. Push a commit to build this PR."
+              return 1
+            fi
+            code=$(printf '%s' "$out" | tail -n1)
+            if [ "$code" -ge 300 ]; then
+              printf '%s' "$out" | sed '$d' | jq -r --arg p "$2" '"::error::Vercel answered \(.error.code // "an error") for \($p): \(.error.message // "no message")"' || true
+              return 1
+            fi
+            printf '%s' "$out" | sed '$d' | jq -r --arg p "$2" '"Vercel deployment \(.id) started for \($p)."'
+          }
 
-          if ! out=$(curl -sS --max-time 30 -w '\n%{http_code}' -X POST \
-              -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" \
-              -d "$body" "https://api.vercel.com/v13/deployments$team"); then
-            echo "::error::Couldn't reach Vercel. Push a commit to build this PR."
+          app=$(project "$VERCEL_PROJECT_ID")
+          if [ -z "$app" ]; then
+            echo "::error::Couldn't read the Vercel project in VERCEL_PROJECT_ID."
             exit 1
           fi
-          code=$(printf '%s' "$out" | tail -n1)
-          if [ "$code" -ge 300 ]; then
-            printf '%s' "$out" | sed '$d' | jq -r '"::error::Vercel answered \(.error.code // "an error"): \(.error.message // "no message")"' || true
-            exit 1
+          status=0
+          deploy $app || status=1
+
+          docs=$(project "$DOCS_PROJECT")
+          if [ -n "$docs" ]; then
+            deploy $docs || status=1
+          else
+            echo "No Vercel project named $DOCS_PROJECT. Skipping the docs site."
           fi
-          printf '%s' "$out" | sed '$d' | jq -r '"Vercel deployment \(.id) started for \(.meta.githubCommitSha // "the head")."'
+          exit $status

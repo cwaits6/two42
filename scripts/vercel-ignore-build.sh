@@ -4,8 +4,9 @@
 # changes need a build.
 #
 # A skipped build still reports a green "Vercel" status on the commit. A draft PR
-# can't merge, and .github/workflows/vercel-ready.yml builds the head again when
-# the PR is marked ready, so the green status a merge relies on comes from a real build.
+# can't merge, and .github/workflows/vercel-ready.yml builds the head again for
+# both projects when the PR is marked ready, so the green status a merge relies on
+# comes from a real build.
 
 if [ "$VERCEL_ENV" = "preview" ] && [ -n "$VERCEL_GIT_PULL_REQUEST_ID" ]; then
   # The repo is public, so this needs no token. Any failure falls through to the
@@ -19,9 +20,10 @@ if [ "$VERCEL_ENV" = "preview" ] && [ -n "$VERCEL_GIT_PULL_REQUEST_ID" ]; then
 fi
 
 # VERCEL_GIT_PREVIOUS_SHA is the last successful deployment's commit, so commits
-# skipped above are still inside this diff.
-P=${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}
-if git cat-file -e "$P^{commit}" 2>/dev/null && git diff --quiet "$P" HEAD -- "$@"; then
+# skipped above are still inside this diff. With no successful deployment yet,
+# nothing proves the earlier commits were built, so build.
+P=${VERCEL_GIT_PREVIOUS_SHA:-}
+if [ -n "$P" ] && git cat-file -e "$P^{commit}" 2>/dev/null && git diff --quiet "$P" HEAD -- "$@"; then
   echo "Nothing this project builds from changed. Skipping the build."
   exit 0
 fi
