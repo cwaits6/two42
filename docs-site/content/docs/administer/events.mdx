@@ -1,6 +1,17 @@
 ---
 title: Events
 description: How a leader adds, edits and deletes a group's events, including repeating events, online meetings and reminders.
+sources:
+  - "app/g/[groupId]/calendar/new/**"
+  - "app/g/[groupId]/calendar/[id]/edit/**"
+  - "components/events/NewEventForm.tsx"
+  - "components/events/EventTimeFields.tsx"
+  - "components/events/ReminderField.tsx"
+  - "components/events/MeetingFieldsSection.tsx"
+  - "components/events/CalendarSharingFields.tsx"
+  - "lib/recurrence.ts"
+  - "lib/events/reminders.ts"
+  - "lib/calendar/sharing.ts"
 ---
 
 ## Who adds events

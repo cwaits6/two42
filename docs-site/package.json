@@ -9,7 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "types:check": "next typegen && tsc --noEmit",
-    "check:links": "node scripts/check-links.mjs"
+    "check:links": "node scripts/check-links.mjs",
+    "check:sources": "node scripts/check-sources.mjs",
+    "test": "node --test scripts/"
   },
   "dependencies": {
     "fumadocs-core": "16.19.5",
@@ -17,7 +19,8 @@
     "fumadocs-ui": "16.19.5",
     "next": "16.4.6",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",

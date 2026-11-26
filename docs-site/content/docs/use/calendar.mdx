@@ -1,6 +1,19 @@
 ---
 title: Calendar
 description: See your groups' events, reply to them, get reminders, and subscribe from your own calendar app.
+sources:
+  - "app/calendar/**"
+  - "app/g/[groupId]/calendar/**"
+  - "components/events/**"
+  - "lib/calendar/**"
+  - "lib/events/**"
+  - "lib/recurrence.ts"
+  - "lib/meetings.ts"
+  - "app/api/calendar/**"
+  - "app/api/events/[id]/ics/**"
+  - "supabase/functions/send-event-reminders/**"
+  - "supabase/functions/_shared/event-*.ts"
+  - "supabase/functions/_shared/email-html.ts"
 ---
 
 ## Open the calendar

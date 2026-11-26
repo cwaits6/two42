@@ -1,6 +1,14 @@
 ---
 title: Dinner club
 description: "Run a season of dinners in members' homes: sign-ups, the shuffle into tables, changes mid-season, what guests bring, the next season, and who sees an address."
+sources:
+  - "app/g/[groupId]/dinner-club/**"
+  - "components/dinnerClub/**"
+  - "lib/dinnerClub/**"
+  - "app/api/dinner-club/**"
+  - "supabase/functions/send-dinner-reminders/**"
+  - "supabase/functions/_shared/dinner-*.ts"
+  - "app/g/[groupId]/settings/details/DinnerClubCard.tsx"
 ---
 
 A dinner club is a group's dinners in members' homes, run as **seasons**. Members sign up as a **party** of one or two, a leader shuffles the parties into **tables**, and each table has a **host** whose home it meets at for each **dinner**. A church that wants a dinner club for everyone makes a group for it and uses the same page.

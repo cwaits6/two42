@@ -1,0 +1,43 @@
+name: Docs freshness
+
+# A separate workflow so a label change re-runs this check without
+# rebuilding the docs site. No paths: filter, for the reason test.yml gives.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: docs-freshness-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  freshness:
+    name: Docs freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      # HEAD is the PR merged into its base, so the two-dot diff from the base
+      # is exactly the PR's change. --no-renames lists a moved file's old path
+      # too, so a page that names it still hears about the move.
+      - name: List the changed files
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE"
+          git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+
+      - name: Check the docs pages for each changed path
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node docs-site/scripts/check-freshness.mjs "$RUNNER_TEMP/changed.txt"

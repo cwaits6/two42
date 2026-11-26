@@ -1,6 +1,21 @@
 ---
 title: Edge functions
 description: The four scheduled edge functions, their pg_cron schedules, the Vault secrets they need, and how to check they ran.
+sources:
+  - "supabase/functions/send-event-reminders/**"
+  - "supabase/functions/send-dinner-reminders/**"
+  - "supabase/functions/send-serving-reminders/**"
+  - "supabase/functions/clean-up-expired-data/**"
+  - "supabase/functions/_shared/event-reminder-due.ts"
+  - "supabase/functions/_shared/event-reminder-schedule.ts"
+  - "supabase/functions/_shared/dinner-reminder-due.ts"
+  - "supabase/functions/_shared/serving-hourly.ts"
+  - "supabase/functions/_shared/serving-due.ts"
+  - "supabase/functions/_shared/cleanup.ts"
+  - "supabase/functions/_shared/retention.ts"
+  - "supabase/functions/_shared/orgs.ts"
+  - "supabase/functions/_shared/caller-auth.ts"
+  - "scripts/check-scheduled-jobs.sql"
 ---
 
 ## What runs on a schedule

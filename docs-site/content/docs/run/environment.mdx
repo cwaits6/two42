@@ -1,6 +1,18 @@
 ---
 title: Environment variables
 description: Every variable the app and the edge functions read, what each does, and what breaks without it.
+sources:
+  - ".env.example"
+  - "lib/config.ts"
+  - "lib/prayer/crypto.ts"
+  - "lib/serving/links.ts"
+  - "lib/serving/config.ts"
+  - "lib/email/domainCap.ts"
+  - "components/GoogleMapsScript.tsx"
+  - "instrumentation.ts"
+  - "instrumentation.node.ts"
+  - "components/analytics/PageMeasurement.tsx"
+  - "supabase/functions/_shared/service-key.ts"
 ---
 
 Configuration lives in three places: the app's environment, the edge function secrets, and two Supabase Vault secrets. Never commit a value. `.env.local` is ignored by git, and `.env.example` holds placeholders only.

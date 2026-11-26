@@ -38,5 +38,11 @@ jobs:
       - name: Check internal links
         run: npm run check:links
 
+      - name: Check each page's sources
+        run: npm run check:sources
+
+      - name: Test the docs scripts
+        run: npm test
+
       - name: Build
         run: npm run build
