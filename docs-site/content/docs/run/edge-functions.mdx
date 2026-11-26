@@ -69,6 +69,10 @@ Deletes data that has expired, one church at a time. It never deletes a church.
 | Serving, event and Supper club reminder records | 35 days after the date they cover |
 | Usage counts | 13 months after the day they count |
 
+### When Resend limits sending
+
+Every function sends through one helper. When Resend answers that the rate limit was exceeded, it waits the time Resend states and sends the same email again under the same idempotency key, up to three tries, so nobody gets it twice. A rate limit that outlasts those tries, or Resend's daily or monthly quota, stops the run's sending; what it didn't send is left for the next firing. See [When Resend limits sending](/docs/run/email#when-resend-limits-sending).
+
 ## Set the function secrets
 
 The functions read their own secrets, set with `npx supabase secrets set NAME=value` or under Edge Functions → Secrets in the dashboard. The full list is in [Environment variables](/docs/run/environment#edge-function-secrets). Supabase injects `SUPABASE_URL` and the service key; do not set them.
