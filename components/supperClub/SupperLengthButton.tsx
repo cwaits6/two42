@@ -53,7 +53,7 @@ export function SupperLengthButton({ supperId, lengthMinutes }: { supperId: stri
           <DialogHeader>
             <DialogTitle>Change length</DialogTitle>
             <DialogDescription className="text-base">
-              Sets when the supper ends in each person&apos;s calendar. Nobody gets an email, and replies stay.
+              Sets when the supper ends in each person&apos;s calendar link. Nobody gets an email, and replies stay.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
