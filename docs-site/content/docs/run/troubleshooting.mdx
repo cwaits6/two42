@@ -41,7 +41,7 @@ Check, in order:
 3. **The function secrets.** `RESEND_API_KEY` must be set in the edge function secrets as well as the app.
 4. **The church's status.** A suspended church gets no reminders. Reactivate it on its platform page; see [Suspend a church](/docs/run/add-a-church#suspend-a-church).
 5. **The daily email limit.** A church that has reached its limit skips further counted emails that day. See [Set a church's daily email limit](/docs/run/email#set-a-churchs-daily-email-limit).
-6. **Resend's quota.** When the Resend account's daily or monthly quota is reached, a run stops sending and the next run tries again. Resend's dashboard shows the account's usage. See [When Resend limits sending](/docs/run/email#when-resend-limits-sending).
+6. **Resend's quota.** When the Resend account's daily or monthly quota is reached, a run stops sending and a later firing the same day tries again; a reminder still unsent after the day's last firing is not sent. Resend's dashboard shows the account's usage. See [When Resend limits sending](/docs/run/email#when-resend-limits-sending).
 
 ## Links in reminder emails point to the wrong site
 
