@@ -14,8 +14,8 @@ const RATE_LIMITED = (retryAfter?: string): Answer => ({
 const QUOTA = (name: string): Answer => ({ data: null, error: { name, statusCode: 429, message: "Quota" }, headers: { "retry-after": "1" } });
 
 function resendAnswering(...answers: Answer[]) {
-  const send = vi.fn((..._args: unknown[]) => Promise.resolve(answers.shift() ?? SENT));
-  const sleep = vi.fn((_ms: number) => Promise.resolve());
+  const send = vi.fn<(payload: unknown, options: unknown) => Promise<Answer>>(() => Promise.resolve(answers.shift() ?? SENT));
+  const sleep = vi.fn<(ms: number) => Promise<void>>(() => Promise.resolve());
   return { emails: { send } as never, send, sleep };
 }
 

@@ -7,8 +7,6 @@ import { logError } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 
-const ROUTE = "/api/supper-club/rotation-dates/[dateId]";
-
 /**
  * Deletes one of the rotation's dates and, with it, each table's supper on
  * it; the people at those suppers are told it's off. Leaders only, by row
@@ -31,7 +29,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   try {
     deliver = await prepareDateDeletedEmails(orgId, dateId, user.id);
   } catch (err) {
-    logError("Failed to read who to email about a deleted date", err, { route: ROUTE });
+    logError("Failed to read who to email about a deleted date", err, { route: "/api/supper-club/rotation-dates/[dateId]" });
   }
 
   const { data: deleted, error } = await supabase.from("supper_rotation_dates").delete().eq("id", dateId).select("id");
@@ -41,7 +39,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     }
     const refused = supperClubRefusal(error);
     if (refused) return refused;
-    logError("Failed to delete a rotation date", error, { route: ROUTE });
+    logError("Failed to delete a rotation date", error, { route: "/api/supper-club/rotation-dates/[dateId]" });
     return serverError();
   }
   if (!deleted?.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -50,7 +48,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   try {
     return NextResponse.json(emailOutcome(await deliver()));
   } catch (err) {
-    logError("Failed to email a deleted date's suppers", err, { route: ROUTE });
+    logError("Failed to email a deleted date's suppers", err, { route: "/api/supper-club/rotation-dates/[dateId]" });
     return NextResponse.json(emailOutcome(null));
   }
 }
