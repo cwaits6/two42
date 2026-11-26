@@ -317,6 +317,10 @@ declare
   _family public.family_units%rowtype;
   _member public.family_members%rowtype;
   _key text;
+  _anniversary jsonb := (
+    select v -> 'church_value' from jsonb_array_elements(coalesce(_values, '[]'::jsonb)) as v
+     where v ->> 'field' = 'anniversary'
+  );
 begin
   select * into _person from public.profiles
    where id = _profile_id and org_id = _org_id
@@ -384,6 +388,30 @@ begin
       birth_year = case when _profile ? 'birth_year' then (_profile ->> 'birth_year')::smallint else birth_year end,
       avatar_url = case when _profile ? 'avatar_url' then _profile ->> 'avatar_url' else avatar_url end
     where id = _profile_id and org_id = _org_id;
+  end if;
+
+  -- The anniversary is one value for the household but each linked person's
+  -- records hold their own. While another linked person's differs, the first
+  -- one copied stands and this person's is not recorded, so every source in
+  -- the household agrees with the household's value.
+  if _anniversary is not null and _family.id is not null and exists (
+    select 1
+      from public.records_field_values v
+      join public.profiles p on p.id = v.profile_id and p.org_id = v.org_id
+     where v.org_id = _org_id
+       and v.field = 'anniversary'
+       and v.profile_id <> _profile_id
+       and p.family_id = _family.id
+       and public.records_pick(v.church_value, public.records_field_columns('anniversary'))
+           <> public.records_pick(_anniversary, public.records_field_columns('anniversary'))
+  ) then
+    _household := '{}'::jsonb;
+    _values := (
+      select coalesce(jsonb_agg(v), '[]'::jsonb) from jsonb_array_elements(_values) as v
+       where v ->> 'field' <> 'anniversary'
+    );
+    delete from public.records_field_values
+     where org_id = _org_id and profile_id = _profile_id and field = 'anniversary';
   end if;
 
   if _household <> '{}'::jsonb and _family.id is not null then

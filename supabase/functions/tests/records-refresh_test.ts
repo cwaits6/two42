@@ -29,6 +29,8 @@ interface Fixture {
   apply: (args: Record<string, unknown>) => { data: string | null; error: { message: string } | null };
   values?: Record<string, unknown>[];
   familyMembers?: Record<string, unknown>[];
+  profiles?: Record<string, unknown>[];
+  familyUnits?: Record<string, unknown>[];
   releaseFails?: boolean;
 }
 
@@ -44,8 +46,9 @@ function fakeDb(fixture: Fixture) {
       { profile_id: P4, external_person_id: "103" },
     ],
     records_person_state: fixture.states,
-    profiles: [P1, P4].map((id) => ({ id, family_id: null, first_name: "Kept", last_name: "Name", phone_mobile: null })),
-    family_units: [],
+    profiles: fixture.profiles ??
+      [P1, P4].map((id) => ({ id, family_id: null, first_name: "Kept", last_name: "Name", phone_mobile: null })),
+    family_units: fixture.familyUnits ?? [],
     family_members: fixture.familyMembers ?? [],
     records_field_values: fixture.values ?? [],
   };
@@ -58,7 +61,7 @@ function fakeDb(fixture: Fixture) {
       range: () => self,
       select: () => ((call.op = `${call.op}+select`), self),
       then(resolve: (r: unknown) => void) {
-        if (call.op === "select") resolve({ data: rows[call.table] ?? [], error: null });
+        if (call.op === "select") resolve({ data: structuredClone(rows[call.table] ?? []), error: null });
         else if (call.op === "update+select") resolve({ data: fixture.claim, error: null });
         else if (call.op === "update" && call.table === "records_refresh_state" && fixture.releaseFails) {
           resolve({ error: { message: "release refused" } });
@@ -85,7 +88,7 @@ function fakeDb(fixture: Fixture) {
       return Promise.resolve(fixture.apply(args));
     },
   };
-  return { db: db as unknown as RecordsRefreshClient, calls, rpcs };
+  return { db: db as unknown as RecordsRefreshClient, calls, rpcs, rows };
 }
 
 const CHURCH: RecordsCopyPerson = {
@@ -208,13 +211,21 @@ Deno.test("a refresh already running stops this one before it reads anything", a
   assertEquals(rpcs, []);
 });
 
-Deno.test("a run cut short by its time keeps the mark, so nobody changed is skipped", async () => {
-  const { db, calls, rpcs } = fakeDb(FIXTURE);
+Deno.test("a run cut short by its time keeps the mark and the last refresh time, and counts who it didn't reach", async () => {
+  const { db, calls, rpcs } = fakeDb({ ...FIXTURE, states: [] });
   const result = await refreshOrg(db, options(fakeSource().source, { elapsed: () => 60_000 }));
   assertEquals(rpcs, []);
   assertEquals(result.stoppedAtBudget, true);
+  // P1 changed and P4 never copied: both due, neither reached.
+  assertEquals(result.pending, 2);
+  assertEquals(calls.at(-1)!.values, { running_since: null });
+});
+
+Deno.test("someone copied before who changed and wasn't reached in time is still to copy", async () => {
+  const copied = (id: string) => ({ profile_id: id, copied_at: "2026-11-21T00:00:00Z", review_reason: null, review_since: null });
+  const { db } = fakeDb({ ...FIXTURE, states: [copied(P1), copied(P4)] });
+  const result = await refreshOrg(db, options(fakeSource().source, { elapsed: () => 60_000 }));
   assertEquals(result.pending, 1);
-  assertEquals((calls.at(-1)!.values as { cursor: string }).cursor, "2026-11-20T00:00:00");
 });
 
 Deno.test("a copy that finds the member's values changed meanwhile is tried in full next time", async () => {
@@ -294,4 +305,42 @@ Deno.test("with two household rows for one person, the copy works from the first
   });
   await refreshOrg(db, options(fakeSource().source));
   assertEquals((rpcs[0]._expected as { grade: unknown }).grade, { graduation_year: 2031 });
+});
+
+Deno.test("two linked spouses copied in one batch both get their copy, the second against the anniversary the first wrote", async () => {
+  const HOME = "00000000-0000-0000-0000-0000000000f1";
+  const empty = { anniversary_month: null, anniversary_day: null, anniversary_year: null };
+  const spouse = (id: string) => ({ id, family_id: HOME, first_name: "Kept", last_name: "Name", phone_mobile: null });
+  const fixture: Fixture = {
+    ...FIXTURE,
+    settings: [{ field: "phone_mobile", mode: "member" }, { field: "anniversary", mode: "member" }],
+    states: [],
+    profiles: [spouse(P1), spouse(P4)],
+    familyUnits: [{ id: HOME, ...empty }],
+    apply: (args) => {
+      // As records_apply_copy() does: stale unless the household still holds what the copy expected.
+      const home = rows.family_units[0];
+      const expected = (args._expected as { household: Record<string, unknown> }).household;
+      if (Object.entries(expected).some(([column, value]) => home[column] !== value)) return { data: "stale", error: null };
+      Object.assign(home, args._household as object);
+      return { data: "applied", error: null };
+    },
+  };
+  const { db, rpcs, rows } = fakeDb(fixture);
+  const { source } = fakeSource();
+  const married = { ...CHURCH, anniversary: { month: 6, day: 14, year: 2001 } };
+  const both: RecordsCopySource = {
+    ...source,
+    peopleForCopy: () => Promise.resolve([married, { ...married, id: "103", mobile: { countryCode: "1", number: "5125550199" } }]),
+  };
+  const result = await refreshOrg(db, options(both));
+  assertEquals(rpcs.map((args) => args._profile_id), [P1, P4]);
+  assertEquals(result.copied, 2);
+  assertEquals(result.pending, 0);
+  assertEquals((rpcs[1]._expected as { household: unknown }).household, {
+    anniversary_month: 6,
+    anniversary_day: 14,
+    anniversary_year: 2001,
+  });
+  assertEquals(rpcs[1]._profile, { phone_mobile: "+15125550199" });
 });

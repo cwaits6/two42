@@ -40,7 +40,8 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { nameFieldError } from "@/lib/nameField";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { RecordsNote } from "@/components/profile/RecordsNote";
-import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import { agreedAnniversary, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import { type Columns, FIELD_COLUMNS, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
@@ -259,8 +260,7 @@ export function HouseholdsManager() {
     setDialogOpen(true);
   }
 
-  // The anniversary's records state for the household being edited; any
-  // member's will do, the database keeps them alike.
+  // The anniversary's records state for the household being edited.
   const [anniversaryRecords, setAnniversaryRecords] = useState<ProfileRecords | null>(null);
   const [restoringAnniversary, setRestoringAnniversary] = useState(false);
   const anniversaryRequestRef = useRef(0);
@@ -274,18 +274,17 @@ export function HouseholdsManager() {
       .from("records_field_values")
       .select("state, church_value")
       .eq("field", "anniversary")
-      .in("profile_id", ids)
-      .limit(1);
+      .in("profile_id", ids);
     if (anniversaryRequestRef.current !== requestId) return;
     // The anniversary is never locked, so without its state the dialog only loses the label.
     if (error) {
       logError("Failed to load the anniversary's source", error, { route: "/admin/families" });
       return;
     }
-    const row = data?.[0];
-    setAnniversaryRecords(
-      row ? { settings: {}, values: { anniversary: { state: row.state, churchValue: row.church_value } }, noticeDue: false } : null,
+    const agreed = agreedAnniversary(
+      (data ?? []).map((row) => ({ state: row.state as ValueState, churchValue: row.church_value as Columns })),
     );
+    setAnniversaryRecords(agreed ? { settings: {}, values: { anniversary: agreed }, noticeDue: false } : null);
   }
 
   // Writing the church's value back is enough: the database marks the
@@ -297,11 +296,12 @@ export function HouseholdsManager() {
     setRestoringAnniversary(true);
     const { data, error } = await supabase
       .from("family_units")
-      .update({
-        anniversary_month: (church.anniversary_month as number | null) ?? null,
-        anniversary_day: (church.anniversary_day as number | null) ?? null,
-        anniversary_year: (church.anniversary_year as number | null) ?? null,
-      })
+      .update(
+        Object.fromEntries(FIELD_COLUMNS.anniversary.map((column) => [column, church[column] ?? null])) as Pick<
+          FamilyUnit,
+          "anniversary_month" | "anniversary_day" | "anniversary_year"
+        >,
+      )
       .eq("id", editing.id)
       .select("id");
     setRestoringAnniversary(false);
@@ -311,12 +311,7 @@ export function HouseholdsManager() {
       return;
     }
     const text = (column: string) => (church[column] == null ? "" : String(church[column]));
-    setForm((prev) => ({
-      ...prev,
-      anniversary_month: text("anniversary_month"),
-      anniversary_day: text("anniversary_day"),
-      anniversary_year: text("anniversary_year"),
-    }));
+    setForm((prev) => ({ ...prev, ...Object.fromEntries(FIELD_COLUMNS.anniversary.map((column) => [column, text(column)])) }));
     toast.success("Your church's value is back.");
     loadAnniversaryRecords(families.find((f) => f.id === editing.id));
     loadFamilies();

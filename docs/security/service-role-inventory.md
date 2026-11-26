@@ -1000,8 +1000,9 @@ filters on `_org_id`: the settings, the sources they delete when a field is
 turned off, and the person state they reset; and in `records_apply_copy()` the
 profile it locks (`id = _profile_id and org_id = _org_id`, answering `gone`
 for a profile of another church), the link it requires (`unlinked`
-otherwise), the household and household member rows it writes, and the
-sources and person state it upserts. A copy whose `_expected` values no longer
+otherwise), the household and household member rows it writes, the other linked
+people's anniversary sources it compares against (the same household, same
+`_org_id`), and the sources and person state it upserts. A copy whose `_expected` values no longer
 match the rows writes nothing and answers `stale`, so a member's edit that
 landed after the refresh read is never overwritten. `records_save_field_settings()`
 first locks that church's `records_refresh_state` row and answers `busy`,

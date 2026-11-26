@@ -20,6 +20,7 @@ import {
   type RecordsField,
   type StoredValue,
   type ValueField,
+  type ValueRow,
   type ValueState,
 } from "./records-copy.ts";
 import type { RecordsCopyPerson, RecordsCopySource, RecordsCredentials } from "./records-types.ts";
@@ -46,7 +47,10 @@ interface Table<T> {
   upsert(values: Partial<T> | Partial<T>[], options: { onConflict: string; ignoreDuplicates?: boolean }): Write<T>;
 }
 
-interface RefreshStateRow {
+// The row and argument shapes below restate lib/supabase/database.types.ts,
+// which this offline module can't import; refresh.types.test.ts in
+// lib/integrations/records holds them to it.
+export interface RefreshStateRow {
   org_id: string;
   connection_id: string;
   cursor: string | null;
@@ -55,39 +59,43 @@ interface RefreshStateRow {
   running_since: string | null;
 }
 
-interface PersonStateRow {
+export interface PersonStateRow {
   org_id: string;
   profile_id: string;
   copied_at: string | null;
-  review_reason: "inactive" | "missing" | null;
+  review_reason: string | null;
   review_since: string | null;
 }
 
-type ProfileRow = Columns & { id: string; family_id: string | null };
+export type ProfileRow = Columns & { id: string; family_id: string | null };
+export type HouseholdRow = Columns & { id: string };
+export type GradeRow = Columns & { id: string; claimed_profile_id: string | null };
+export type FieldSettingRow = { field: string; mode: string };
+export type PersonLinkRow = { profile_id: string; external_person_id: string };
+export type FieldValueRow = { profile_id: string; field: string; state: string; church_value: Columns };
+
+export type ApplyCopyArgs = {
+  _org_id: string;
+  _profile_id: string;
+  _expected: Record<string, Columns | null>;
+  _profile: Columns;
+  _household: Columns;
+  _grade: Columns;
+  _values: ValueRow[];
+  _filled: boolean;
+};
 
 /** The narrow slice of the Supabase client this module needs. */
 export interface RecordsRefreshClient {
   from(table: "records_refresh_state"): Table<RefreshStateRow>;
   from(table: "records_person_state"): Table<PersonStateRow>;
-  from(table: "records_field_settings"): Table<{ field: string; mode: string }>;
-  from(table: "records_person_links"): Table<{ profile_id: string; external_person_id: string }>;
-  from(table: "records_field_values"): Table<{ profile_id: string; field: string; state: string; church_value: Columns }>;
+  from(table: "records_field_settings"): Table<FieldSettingRow>;
+  from(table: "records_person_links"): Table<PersonLinkRow>;
+  from(table: "records_field_values"): Table<FieldValueRow>;
   from(table: "profiles"): Table<ProfileRow>;
-  from(table: "family_units"): Table<Columns & { id: string }>;
-  from(table: "family_members"): Table<Columns & { id: string; claimed_profile_id: string }>;
-  rpc(
-    fn: "records_apply_copy",
-    args: {
-      _org_id: string;
-      _profile_id: string;
-      _expected: Record<string, Columns | null>;
-      _profile: Columns;
-      _household: Columns;
-      _grade: Columns;
-      _values: unknown[];
-      _filled: boolean;
-    },
-  ): PromiseLike<{ data: string | null; error: QueryError }>;
+  from(table: "family_units"): Table<HouseholdRow>;
+  from(table: "family_members"): Table<GradeRow>;
+  rpc(fn: "records_apply_copy", args: ApplyCopyArgs): PromiseLike<{ data: string | null; error: QueryError }>;
 }
 
 export interface RefreshOptions {
@@ -107,7 +115,7 @@ export interface RefreshResult {
   status: "done" | "busy";
   /** People whose details changed in two42. */
   copied: number;
-  /** People still waiting for their first copy, because the time ran out or a copy failed. */
+  /** People still to copy, because the time ran out before them or their copy failed; the next refresh carries on. */
   pending: number;
   /** People listed under Needs review. */
   review: number;
@@ -120,8 +128,8 @@ export interface RefreshResult {
 
 const PAGE = 1000;
 const BATCH = 50;
-// A run that died without releasing its claim stops blocking after this long.
-const LEASE_MS = 15 * 60_000;
+/** A run that died without releasing its claim stops blocking after this long; records_save_field_settings() waits out the same. */
+export const LEASE_MS = 15 * 60_000;
 const PHOTO_EDGE = 400;
 
 async function allRows<T>(query: () => Rows<T>, what: string): Promise<T[]> {
@@ -204,6 +212,12 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
       })
     );
     throw err;
+  }
+  // Cut short, the run hasn't finished: "Last refreshed" stays on the last
+  // one that did, and the people it didn't reach are in pending.
+  if (result.stoppedAtBudget) {
+    await release({});
+    return result;
   }
   await release({
     cursor,
@@ -309,13 +323,7 @@ async function run(
       "retry mark",
     );
   }
-  const copiedNow = new Set(due.slice(0, done).map((l) => l.profile_id).filter((id) => !retry.includes(id)));
-  result.pending = links.filter(
-    (link) =>
-      presence.get(link.external_person_id) === "active" &&
-      !copiedNow.has(link.profile_id) &&
-      (!states.get(link.profile_id)?.copied_at || retry.includes(link.profile_id)),
-  ).length;
+  result.pending = due.length - done + retry.length;
   // Everyone changed since the mark was handled, or marked to be copied in
   // full next time, so the mark can move on; cut short, it stays.
   return result.stoppedAtBudget ? cursor : changes.cursor;
@@ -368,7 +376,7 @@ async function copyBatch(
         ).map((row) => [row.id, row]),
   );
   // The lowest id is the person's grade row, as records_apply_copy() picks it.
-  const grades = new Map<string, Columns & { id: string; claimed_profile_id: string }>();
+  const grades = new Map<string, GradeRow>();
   for (const row of await allRows(
     () =>
       db
@@ -379,7 +387,7 @@ async function copyBatch(
         .order("id"),
     "household members",
   )) {
-    if (!grades.has(row.claimed_profile_id)) grades.set(row.claimed_profile_id, row);
+    if (row.claimed_profile_id && !grades.has(row.claimed_profile_id)) grades.set(row.claimed_profile_id, row);
   }
   const stored = new Map<string, Map<ValueField, StoredValue>>();
   for (const row of await allRows(
@@ -417,6 +425,23 @@ async function copyBatch(
       if (outcome.copied) result.copied++;
       if (outcome.photoSkipped) result.photosSkipped++;
       if (outcome.stale) retry.push(link.profile_id);
+      // A spouse later in the batch checks the household's anniversary against
+      // what the database holds now, not the batch's first read.
+      const familyId = profile.family_id;
+      if (outcome.householdWritten && familyId) {
+        const [row] = await allRows(
+          () =>
+            db
+              .from("family_units")
+              .select(["id", ...FIELD_COLUMNS.anniversary].join(", "))
+              .eq("org_id", orgId)
+              .eq("id", familyId)
+              .order("id"),
+          "household",
+        );
+        if (row) households.set(row.id, row);
+        else households.delete(familyId);
+      }
     } catch (err) {
       result.failed++;
       retry.push(link.profile_id);
@@ -437,7 +462,7 @@ async function copyPerson(
   person: RecordsCopyPerson,
   current: CurrentValues,
   stored: Map<ValueField, StoredValue> | undefined,
-): Promise<{ copied: boolean; photoSkipped: boolean; stale: boolean }> {
+): Promise<{ copied: boolean; photoSkipped: boolean; stale: boolean; householdWritten: boolean }> {
   const { orgId } = options;
   const input = {
     settings,
@@ -474,7 +499,12 @@ async function copyPerson(
       route: "refresh-church-records",
       ids: { org: orgId, profile: profileId },
     });
-    return { copied: false, photoSkipped, stale: true };
+    return { copied: false, photoSkipped, stale: true, householdWritten: false };
   }
-  return { copied: data === "applied" && planWrites(plan), photoSkipped, stale: false };
+  return {
+    copied: data === "applied" && planWrites(plan),
+    photoSkipped,
+    stale: false,
+    householdWritten: data === "applied" && Object.keys(plan.household).length > 0,
+  };
 }

@@ -40,6 +40,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { RecordsNote } from "@/components/profile/RecordsNote";
 import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import { FIELD_COLUMNS } from "@/supabase/functions/_shared/records-copy";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { householdFieldErrors, type HouseholdFieldErrors } from "@/app/api/household/householdUpdates";
 import { calendarDate, relLabel } from "@/components/directory/utils";
@@ -287,7 +288,7 @@ export function HouseholdClient({
     const label = recordsLabel(anniversaryRecords, "anniversary");
     if (label?.kind !== "changed" || !label.churchValue) return;
     const church = Object.fromEntries(
-      (["anniversary_month", "anniversary_day", "anniversary_year"] as const).map((column) => [
+      FIELD_COLUMNS.anniversary.map((column) => [
         column,
         label.churchValue?.[column] == null ? "" : String(label.churchValue[column]),
       ]),

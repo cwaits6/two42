@@ -316,7 +316,10 @@ and kept up to date.
 - **Settings** (`records_field_settings`): one row per field the church fills,
   `locked` or `member`; no row is *Not from your church's records*. Field names
   are two42's: `name` (first and last), `suffix`, `title`, `gender`,
-  `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's),
+  `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's;
+  each linked person's records hold their own, so while two linked people in
+  a household differ, the first one copied stands and the other's isn't
+  recorded),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   sources, so its values become ordinary two42 data; any change asks the next

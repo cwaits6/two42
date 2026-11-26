@@ -46,6 +46,19 @@ describe("readProfileRecords", () => {
     expect(householdAnniversary(read.byProfile)?.values.anniversary?.state).toBe("changed");
   });
 
+  it("shows no anniversary source while the household's linked people's differ", async () => {
+    answers.records_field_values = {
+      data: [
+        { profile_id: "me", field: "anniversary", state: "records", church_value: { anniversary_month: 6, anniversary_day: 14 } },
+        { profile_id: "spouse", field: "anniversary", state: "records", church_value: { anniversary_month: 7, anniversary_day: 2 } },
+      ],
+      error: null,
+    };
+    const read = await readProfileRecords(["me", "spouse"], "me");
+    if (!read.ok) throw new Error("expected a read");
+    expect(householdAnniversary(read.byProfile)).toBeNull();
+  });
+
   it("fails closed when a read fails, so no form offers a locked field", async () => {
     answers.records_field_values = { data: null, error: { message: "boom" } };
     expect(await readProfileRecords(["me"], "me")).toEqual({ ok: false });

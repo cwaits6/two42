@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(38);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -256,6 +256,24 @@ select public.records_apply_copy(
   '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550102"}},
     {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
   false);
+
+-- Linked spouses whose records hold different anniversaries: the first one copied stands.
+savepoint anniversary_differs;
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+    '{"phone_mobile": "+15125550103"}', '{"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}', '{}',
+    '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550103"}},
+      {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
+    false),
+  'applied', 'non-vacuity: a spouse''s copy with a different anniversary is applied');
+select is(
+  (select (f.anniversary_month, p.phone_mobile,
+           (select count(*) from public.records_field_values v where v.profile_id = p.id and v.field = 'anniversary'))::text
+     from public.profiles p join public.family_units f on f.id = p.family_id where p.id = pg_temp.fx('member2')),
+  '(6,+15125550103,0)',
+  'the household keeps the anniversary already copied, the spouse''s differing one isn''t recorded, and the rest of the copy lands');
+rollback to savepoint anniversary_differs;
 
 select is(
   public.records_apply_copy(

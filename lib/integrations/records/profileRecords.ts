@@ -6,7 +6,7 @@
 // "use client" module.
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/log";
-import type { ProfileRecords } from "./labels";
+import { agreedAnniversary, type ProfileRecords } from "./labels";
 import { recordsIntegrationEnabled } from "./enabled";
 
 /**
@@ -59,7 +59,9 @@ export async function readProfileRecords(profileIds: string[], noticeFor?: strin
   return { ok: true, byProfile };
 }
 
-/** The household's anniversary as it came from the records: anyone's in the household will do, the trigger keeps them alike. */
+/** The household's anniversary as it came from the records, when its linked people's sources agree. */
 export function householdAnniversary(read: Record<string, ProfileRecords>): ProfileRecords | null {
-  return Object.values(read).find((records) => records.values.anniversary) ?? null;
+  const withSource = Object.values(read).filter((records) => records.values.anniversary);
+  const agreed = agreedAnniversary(withSource.map((records) => records.values.anniversary!));
+  return agreed ? { ...withSource[0], values: { anniversary: agreed } } : null;
 }
