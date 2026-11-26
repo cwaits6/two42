@@ -81,11 +81,14 @@ async function credentials(orgId: string, secret: Buffer): Promise<Loaded> {
       step,
       ids: { org: orgId },
     });
-    const error =
+    const response =
       err instanceof RecordsCryptoError
-        ? "The saved key can't be opened. Choose Change key and enter it again; your links stay."
-        : "Couldn't load the connection.";
-    return { ok: false, response: NextResponse.json({ error }, { status: 500 }) };
+        ? NextResponse.json(
+            { error: "The saved key can't be opened. Choose Change key and enter it again; your links stay." },
+            { status: 409 },
+          )
+        : NextResponse.json({ error: "Couldn't load the connection." }, { status: 500 });
+    return { ok: false, response };
   }
 }
 

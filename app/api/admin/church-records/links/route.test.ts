@@ -37,6 +37,7 @@ vi.mock("@/lib/integrations/rock/client", async (original) => ({
   ...rock,
 }));
 
+import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
 import { rockProvider } from "@/lib/integrations/rock/provider";
 import { GET, POST } from "./route";
 
@@ -101,6 +102,14 @@ describe("GET /api/admin/church-records/links", () => {
   it("asks to connect first when there is no connection", async () => {
     store.loadCredentials.mockResolvedValue(null);
     expect((await GET()).status).toBe(409);
+  });
+
+  it("points to Change key, with a status the page shows, when the saved key won't open", async () => {
+    store.loadCredentials.mockRejectedValue(new RecordsCryptoError());
+    for (const res of [await GET(), await post({ links: [{ profileId: PROFILE_A, personId: "100" }] })]) {
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/Choose Change key/);
+    }
   });
 });
 
