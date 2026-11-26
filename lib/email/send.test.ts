@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAX_RETRY_WAIT_MS, MAX_SEND_ATTEMPTS, rateLimitWaitMs, sendEmail } from "@/lib/email/send";
+import { sendEmail } from "@/lib/email/send";
+import { MAX_SEND_ATTEMPTS } from "@/supabase/functions/_shared/rate-limit";
 
 const PAYLOAD = { from: "Hillside <noreply@hillside.example>", to: "ann@example.test", subject: "Hi", html: "<p>Hi</p>" };
 
@@ -65,19 +66,5 @@ describe("sendEmail", () => {
     const r = resendAnswering({ data: null, error: { name: "validation_error", statusCode: 422, message: "Bad" }, headers: null });
     expect((await sendEmail(PAYLOAD, { emails: r.emails, sleep: r.sleep })).error?.name).toBe("validation_error");
     expect(r.send).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("rateLimitWaitMs", () => {
-  const limited = { name: "rate_limit_exceeded" as const, statusCode: 429 };
-
-  it("waits a second when Resend states no time", () => {
-    expect(rateLimitWaitMs(limited, null)).toBe(1000);
-    expect(rateLimitWaitMs(limited, { "retry-after": "soon" })).toBe(1000);
-  });
-
-  it("refuses a stated wait longer than a request can hold", () => {
-    expect(rateLimitWaitMs(limited, { "retry-after": String(MAX_RETRY_WAIT_MS / 1000) })).toBe(MAX_RETRY_WAIT_MS);
-    expect(rateLimitWaitMs(limited, { "retry-after": String(MAX_RETRY_WAIT_MS / 1000 + 1) })).toBeNull();
   });
 });

@@ -6,28 +6,21 @@
 // first is still in flight. Any other refusal, and a request that never
 // left or timed out, is retried by a later firing.
 //
-// A rate limit is waited out here: the same request goes again after the
-// wait Resend states, under the same key, a bounded number of times. A daily
-// or monthly quota is a 429 too, but a wait does not lift it, so it stops the
-// firing like a rate limit that outlasted its tries. lib/email/send.ts does
-// the same for the app.
+// A rate limit is waited out here, as rate-limit.ts decides: the same request
+// goes again under the same key. A quota, or a rate limit that outlasts its
+// tries, stops the firing.
 //
 // Deliberately free of any supabase-js import, and given its fetch, so it
 // can be unit tested offline without a network.
 
 import type { SendOutcome } from "./serving-hourly.ts";
 import { logError } from "./log.ts";
+import { rateLimitWaitMs } from "./rate-limit.ts";
 
 const RESEND_SEND_URL = "https://api.resend.com/emails";
 // Well under the hourly firing's budget, which is only checked between sends,
 // so one stalled request can't outlast the firing and leave its rows claimed.
 const RESEND_TIMEOUT_MS = 15_000;
-/** Tries in all, the first send included. */
-export const MAX_SEND_ATTEMPTS = 3;
-/** The longest wait worth taking inside a firing; a longer stated wait stops it. */
-export const MAX_RETRY_WAIT_MS = 5_000;
-const DEFAULT_RETRY_WAIT_MS = 1_000;
-const QUOTA_ERRORS: ReadonlySet<string> = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
 
 export interface ResendSend {
   apiKey: string;
@@ -70,16 +63,6 @@ function errorName(body: string): string | null {
   }
 }
 
-/** How long to wait before sending again, or null when the refusal is not a rate limit worth waiting out. */
-export function rateLimitWaitMs(status: number, body: string, retryAfter: string | null): number | null {
-  if (status !== 429) return null;
-  const name = errorName(body);
-  if (name && QUOTA_ERRORS.has(name)) return null;
-  const stated = Number(retryAfter ?? undefined);
-  const wait = Number.isFinite(stated) && stated >= 0 ? stated * 1000 : DEFAULT_RETRY_WAIT_MS;
-  return wait <= MAX_RETRY_WAIT_MS ? wait : null;
-}
-
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function sendThroughResend(
@@ -103,7 +86,11 @@ export async function sendThroughResend(
       });
       if (res.ok) return "sent";
       const body = await res.text();
-      const wait = attempt < MAX_SEND_ATTEMPTS ? rateLimitWaitMs(res.status, body, res.headers.get("retry-after")) : null;
+      const wait = rateLimitWaitMs(attempt, {
+        status: res.status,
+        name: errorName(body),
+        retryAfter: res.headers.get("retry-after"),
+      });
       if (wait !== null) {
         await sleep(wait);
         continue;

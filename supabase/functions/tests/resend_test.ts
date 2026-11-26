@@ -4,13 +4,11 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   eventReminderIdempotencyKey,
-  MAX_RETRY_WAIT_MS,
-  MAX_SEND_ATTEMPTS,
-  rateLimitWaitMs,
   resendOutcome,
   sendThroughResend,
   servingReminderIdempotencyKey,
 } from "../_shared/resend.ts";
+import { MAX_SEND_ATTEMPTS } from "../_shared/rate-limit.ts";
 
 const SEND = { apiKey: "re_test", payload: { to: "ann@example.test" }, refId: "ann" };
 
@@ -92,13 +90,6 @@ for (const name of ["daily_quota_exceeded", "monthly_quota_exceeded"]) {
     assertEquals(waits, []);
   });
 }
-
-Deno.test("a rate limit waits a second when Resend states no time, and not at all past the bound", () => {
-  assertEquals(rateLimitWaitMs(429, '{"name":"rate_limit_exceeded"}', null), 1000);
-  assertEquals(rateLimitWaitMs(429, "", String(MAX_RETRY_WAIT_MS / 1000)), MAX_RETRY_WAIT_MS);
-  assertEquals(rateLimitWaitMs(429, "", String(MAX_RETRY_WAIT_MS / 1000 + 1)), null);
-  assertEquals(rateLimitWaitMs(500, "", "1"), null);
-});
 
 Deno.test("a key whose first send went out with a different body counts as sent", async () => {
   const { fetchFn } = answering(409, '{"name":"invalid_idempotent_request"}');
