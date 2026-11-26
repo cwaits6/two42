@@ -3,12 +3,12 @@ title: Edge functions
 description: The four scheduled edge functions, their pg_cron schedules, the Vault secrets they need, and how to check they ran.
 sources:
   - "supabase/functions/send-event-reminders/**"
-  - "supabase/functions/send-dinner-reminders/**"
+  - "supabase/functions/send-supper-reminders/**"
   - "supabase/functions/send-serving-reminders/**"
   - "supabase/functions/clean-up-expired-data/**"
   - "supabase/functions/_shared/event-reminder-due.ts"
   - "supabase/functions/_shared/event-reminder-schedule.ts"
-  - "supabase/functions/_shared/dinner-reminder-due.ts"
+  - "supabase/functions/_shared/supper-reminder-due.ts"
   - "supabase/functions/_shared/serving-hourly.ts"
   - "supabase/functions/_shared/serving-due.ts"
   - "supabase/functions/_shared/cleanup.ts"
@@ -30,7 +30,7 @@ The source lives in `supabase/functions/`. Each function is called by a `pg_cron
 | Job | When (UTC) | Function |
 |---|---|---|
 | `send-event-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-event-reminders` |
-| `send-dinner-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-dinner-reminders` |
+| `send-supper-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-supper-reminders` |
 | `send-serving-reminders-hourly` | Every hour, on the hour | `send-serving-reminders` |
 | `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
 | `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
@@ -41,9 +41,9 @@ Each function works through every active church in turn and filters every query 
 
 Emails the people who replied Yes or Maybe to an event, before each date of the event, as many days ahead as the event chose. It records what it sent, so a rerun never sends twice. The 15:00 firing sends; the 16:00 and 17:00 firings finish what a failed or cut-off firing left.
 
-### send-dinner-reminders
+### send-supper-reminders
 
-Emails the people at each dinner club table the day before their dinner, in the church's time zone: the time, the host, the address and who is coming. It skips anyone who said Not going or turned dinner club emails off, and groups with the dinner club off. It records what it sent, so a rerun never sends twice, and a moved dinner is reminded on its new date. The 15:00 firing sends; the 16:00 and 17:00 firings finish what a failed or cut-off firing left.
+Emails the people at each Supper club table the day before their supper, in the church's time zone: the time, the host, the address and who is coming. It skips anyone who said Not going or turned Supper club emails off, and groups with the Supper club off. It records what it sent, so a rerun never sends twice, and a moved supper is reminded on its new date. The 15:00 firing sends; the 16:00 and 17:00 firings finish what a failed or cut-off firing left.
 
 ### send-serving-reminders
 
@@ -66,7 +66,7 @@ Deletes data that has expired, one church at a time. It never deletes a church.
 | Group invite links | 90 days after they were revoked or expired |
 | Feedback | 12 months after it was sent |
 | Prayer requests | Only when the church admin has chosen a period under **Old prayer requests** in the church settings: 6, 12 or 24 months after posting. Unset, prayer requests are kept. |
-| Serving, event and dinner club reminder records | 35 days after the date they cover |
+| Serving, event and Supper club reminder records | 35 days after the date they cover |
 | Usage counts | 13 months after the day they count |
 
 ## Set the function secrets
@@ -109,7 +109,7 @@ The same check, as one query, is [`scripts/check-scheduled-jobs.sql`](https://gi
 ## Deploy the functions
 
 ```bash
-npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-dinner-reminders
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders
 ```
 
 Deploy them on every update, before applying the migrations. That is the order this repository's CI uses; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).

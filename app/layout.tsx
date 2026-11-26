@@ -82,7 +82,7 @@ export default async function RootLayout({
   let photoUrl: string | null = null;
   let waitingRequests: number | null = null;
   let groupWaitingRequests: Record<string, number> = {};
-  let dinnerClubGroupIds: string[] = [];
+  let supperClubGroupIds: string[] = [];
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
@@ -130,16 +130,16 @@ export default async function RootLayout({
           logError("Layout: failed to load group waiting request counts", e);
           return {};
         });
-    // A failed read hides the Dinner club item; the page itself still opens.
-    const loadDinnerClubGroupIds = () =>
+    // A failed read hides the Supper club item; the page itself still opens.
+    const loadSupperClubGroupIds = () =>
       membershipsLoad.then(async (groups) => {
         if (groups.length === 0) return [];
         const { data: on, error: onError } = await supabase
           .from("group_settings")
           .select("group_id")
-          .eq("dinner_club_enabled", true)
+          .eq("supper_club_enabled", true)
           .in("group_id", groups.map((g) => g.id));
-        if (onError) logError("Layout: failed to load dinner club groups", onError);
+        if (onError) logError("Layout: failed to load Supper club groups", onError);
         return (on ?? []).map((row) => row.group_id);
       });
     [
@@ -150,7 +150,7 @@ export default async function RootLayout({
       photoUrl,
       waitingRequests,
       groupWaitingRequests,
-      dinnerClubGroupIds,
+      supperClubGroupIds,
     ] = await Promise.all([
       loadServingAccess(),
       membershipsLoad,
@@ -160,7 +160,7 @@ export default async function RootLayout({
       mintSignedUrl(profile?.avatar_url),
       loadWaitingRequests(),
       loadGroupWaitingRequests(),
-      loadDinnerClubGroupIds(),
+      loadSupperClubGroupIds(),
     ]);
   }
 
@@ -219,7 +219,7 @@ export default async function RootLayout({
             orgName={b.display_name}
             waitingRequests={waitingRequests}
             groupWaitingRequests={groupWaitingRequests}
-            dinnerClubGroupIds={dinnerClubGroupIds}
+            supperClubGroupIds={supperClubGroupIds}
           >
             <Header />
             <AppShell>{children}</AppShell>

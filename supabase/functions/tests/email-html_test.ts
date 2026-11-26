@@ -4,9 +4,9 @@
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
-  dinnerMovedEmail,
-  dinnerReminderEmail,
-  dinnerTablesEmail,
+  supperMovedEmail,
+  supperReminderEmail,
+  supperTablesEmail,
   emailLayout,
   escapeHtml,
   eventReminderEmail,
@@ -38,28 +38,28 @@ const reminders = [
     location: "Hall <u>B</u>",
     eventUrl: "https://two42.example/g/g1/calendar/e1",
   }),
-  dinnerReminderEmail({
+  supperReminderEmail({
     ...BASE,
-    seasonTitle: "Supper <u>Club</u>",
+    rotationTitle: "Fall <u>2026</u>",
     dateLabel: "Monday, November 9 at 6:00 PM",
     hostNames: "Henry and <b>Chloe</b>",
     address: "12 <i>Fixture</i> Lane",
     coming: ["Isaac", "<u>Ruth</u>"],
     bringing: "<b>Dessert</b>",
-    pageUrl: "https://two42.example/g/g1/dinner-club",
+    pageUrl: "https://two42.example/g/g1/supper-club",
   }),
-  dinnerTablesEmail({
+  supperTablesEmail({
     ...BASE,
-    seasonTitle: "Supper <u>Club</u>",
-    dinners: [{ dateLabel: "Monday, November 9 at 6:00 PM", hostNames: "Henry and <b>Chloe</b>" }],
-    pageUrl: "https://two42.example/g/g1/dinner-club",
+    rotationTitle: "Fall <u>2026</u>",
+    suppers: [{ dateLabel: "Monday, November 9 at 6:00 PM", hostNames: "Henry and <b>Chloe</b>" }],
+    pageUrl: "https://two42.example/g/g1/supper-club",
   }),
-  dinnerMovedEmail({
+  supperMovedEmail({
     ...BASE,
-    seasonTitle: "Supper <u>Club</u>",
+    rotationTitle: "Fall <u>2026</u>",
     oldDateLabel: "Saturday, November 7 at 6:00 PM",
     newDateLabel: "Monday, November 9 at 6:00 PM",
-    pageUrl: "https://two42.example/g/g1/dinner-club",
+    pageUrl: "https://two42.example/g/g1/supper-club",
   }),
 ];
 
@@ -144,47 +144,56 @@ Deno.test("a greeting with no name leaves no dangling comma or double space", ()
   }
 });
 
-Deno.test("the dinner reminder carries the time, host, address and who is coming", () => {
-  const { subject, html } = dinnerReminderEmail({
+Deno.test("the supper reminder carries the time, host, address and who is coming", () => {
+  const { subject, html } = supperReminderEmail({
     ...BASE,
-    seasonTitle: "Supper Club",
+    rotationTitle: "Fall 2026",
     dateLabel: "Saturday, January 9 at 6:00 PM",
     hostNames: "Henry and Chloe",
     address: "12 Fixture Lane",
     coming: ["Isaac", "Ruth"],
     bringing: "Dessert",
-    pageUrl: "https://two42.example/g/g1/dinner-club",
+    pageUrl: "https://two42.example/g/g1/supper-club",
   });
-  assertEquals(subject, "Reminder: Supper Club dinner on Saturday, January 9 at 6:00 PM");
+  assertEquals(subject, "Reminder: Fall 2026 supper on Saturday, January 9 at 6:00 PM");
   for (
     const part of [
       "Henry and Chloe",
       "12 Fixture Lane",
       "Isaac, Ruth",
       "You&#39;re bringing:</strong> Dessert",
-      "https://two42.example/g/g1/dinner-club",
+      "https://two42.example/g/g1/supper-club",
     ]
   ) {
     assertStringIncludes(html, part);
   }
 });
 
-Deno.test("the dinner reminder says nothing about bringing when the party brings nothing", () => {
-  const { html } = dinnerReminderEmail({
+Deno.test("the supper reminder says nothing about bringing when the party brings nothing", () => {
+  const { html } = supperReminderEmail({
     ...BASE,
-    seasonTitle: "Supper Club",
+    rotationTitle: "Fall 2026",
     dateLabel: "Saturday, January 9 at 6:00 PM",
     hostNames: "Henry and Chloe",
     address: "12 Fixture Lane",
     coming: ["Isaac", "Ruth"],
     bringing: null,
-    pageUrl: "https://two42.example/g/g1/dinner-club",
+    pageUrl: "https://two42.example/g/g1/supper-club",
   });
   assert(!html.includes("bringing"));
 });
 
-Deno.test("dinner emails never call a table a group", () => {
+Deno.test("supper emails never call a table a group", () => {
   for (const { subject, html } of reminders.slice(3)) {
     assert(!/group/i.test(`${subject} ${html.replaceAll("/g/g1/", "/")}`), subject);
+  }
+});
+
+Deno.test("supper emails say supper, never dinner, and the reminder names the Supper club", () => {
+  const [remind] = reminders.slice(3);
+  assertStringIncludes(remind.subject, "supper");
+  assertStringIncludes(remind.html, "Supper club");
+  for (const { subject, html } of reminders.slice(3)) {
+    assert(!/dinner/i.test(`${subject} ${html}`), subject);
   }
 });

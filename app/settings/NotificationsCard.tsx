@@ -9,12 +9,12 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 
-type Setting = "email_announcements" | "email_event_reminders" | "email_dinner_club";
+type Setting = "email_announcements" | "email_event_reminders" | "email_supper_club";
 
 const ROWS: { key: Setting; id: string; label: string }[] = [
   { key: "email_announcements", id: "email-announcements", label: "Email me new announcements" },
   { key: "email_event_reminders", id: "email-event-reminders", label: "Email me event reminders" },
-  { key: "email_dinner_club", id: "email-dinner-club", label: "Email me about dinner club dinners" },
+  { key: "email_supper_club", id: "email-supper-club", label: "Email me about Supper club suppers" },
 ];
 
 interface NotificationsCardProps {

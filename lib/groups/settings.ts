@@ -11,7 +11,7 @@ export type GroupSettingsValues = Pick<
   | "calendar_event_location"
   | "event_reminders_enabled"
   | "event_reminder_default_days"
-  | "dinner_club_enabled"
+  | "supper_club_enabled"
 >;
 
 export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
@@ -21,7 +21,7 @@ export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
   calendar_event_location: true,
   event_reminders_enabled: true,
   event_reminder_default_days: 1,
-  dinner_club_enabled: false,
+  supper_club_enabled: false,
 };
 
 /**
@@ -39,7 +39,7 @@ export async function getGroupSettings(
   const { data, error } = await supabase
     .from("group_settings")
     .select(
-      "serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location, event_reminders_enabled, event_reminder_default_days, dinner_club_enabled"
+      "serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location, event_reminders_enabled, event_reminder_default_days, supper_club_enabled"
     )
     .eq("org_id", orgId)
     .eq("group_id", groupId)
@@ -59,7 +59,7 @@ export async function getGroupSettings(
     calendar_event_location: data.calendar_event_location ?? true,
     event_reminders_enabled: data.event_reminders_enabled ?? true,
     event_reminder_default_days: data.event_reminder_default_days ?? 1,
-    dinner_club_enabled: data.dinner_club_enabled ?? false,
+    supper_club_enabled: data.supper_club_enabled ?? false,
   };
 }
 

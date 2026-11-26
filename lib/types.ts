@@ -463,8 +463,8 @@ export interface GroupSettings {
   event_reminders_enabled: boolean;
   /** What Add event starts on: 1, 2 or 7 days before. */
   event_reminder_default_days: number;
-  /** Shows the Dinner club page in the group; off hides it and keeps every season. */
-  dinner_club_enabled: boolean;
+  /** Shows the Supper club page in the group; off hides it and keeps every rotation. */
+  supper_club_enabled: boolean;
   updated_by: string | null;
   updated_at: string;
 }

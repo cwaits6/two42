@@ -55,7 +55,7 @@ of the canonical host.
 Every link the platform mails is built on the canonical host:
 `siteConfig.url` in the app, the `SITE_URL` function secret in the cron edge
 functions (`send-event-reminders`, `send-serving-reminders`,
-`send-dinner-reminders`). `SITE_URL` must be set to the canonical origin; its
+`send-supper-reminders`). `SITE_URL` must be set to the canonical origin; its
 in-code fallback is `https://two42.io`.
 
 ## What was removed

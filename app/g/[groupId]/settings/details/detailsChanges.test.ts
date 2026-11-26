@@ -5,7 +5,7 @@ const saved: DetailsFields = {
   color: "#B85C38",
   calendar: { calendar_meeting_details: true, calendar_event_notes: true, calendar_event_location: false },
   reminders: { enabled: true, defaultDays: 1 },
-  dinnerClub: false,
+  supperClub: false,
 };
 
 describe("detailsChanges", () => {
@@ -27,9 +27,9 @@ describe("detailsChanges", () => {
     ).toEqual({ settings: { calendar_event_notes: false, event_reminder_default_days: 7 } });
   });
 
-  it("names the dinner club switch by its column", () => {
-    expect(detailsChanges(saved, { ...saved, dinnerClub: true })).toEqual({
-      settings: { dinner_club_enabled: true },
+  it("names the Supper club switch by its column", () => {
+    expect(detailsChanges(saved, { ...saved, supperClub: true })).toEqual({
+      settings: { supper_club_enabled: true },
     });
   });
 

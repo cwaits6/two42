@@ -227,28 +227,28 @@ describe("buildSidebar: the Group settings count", () => {
   });
 });
 
-describe("buildSidebar: the dinner club", () => {
+describe("buildSidebar: the Supper club", () => {
   const labels = (items: SidebarItem[]) => outline(items);
 
-  it("shows no Dinner club page until the group turns it on", () => {
+  it("shows no Supper club page until the group turns it on", () => {
     const items = buildSidebar(input({ memberships: [A], activeGroup: A, hasServingAccess: true }));
-    expect(labels(items).some((line) => line.startsWith("Dinner club"))).toBe(false);
+    expect(labels(items).some((line) => line.startsWith("Supper club"))).toBe(false);
   });
 
   it("lists it after Serving in a group that turned it on", () => {
     const items = labels(
-      buildSidebar(input({ memberships: [A], activeGroup: A, hasServingAccess: true, dinnerClubGroupIds: [A_ID] }))
+      buildSidebar(input({ memberships: [A], activeGroup: A, hasServingAccess: true, supperClubGroupIds: [A_ID] }))
     );
-    expect(items[items.indexOf(`Serving /g/${A_ID}/serving`) + 1]).toBe(`Dinner club /g/${A_ID}/dinner-club`);
+    expect(items[items.indexOf(`Serving /g/${A_ID}/serving`) + 1]).toBe(`Supper club /g/${A_ID}/supper-club`);
   });
 
   it("shows it only inside the group that turned it on", () => {
-    const two = { memberships: [A, B], dinnerClubGroupIds: [A_ID] };
-    expect(labels(buildSidebar(input({ ...two, activeGroup: A })))).toContain(`Dinner club /g/${A_ID}/dinner-club`);
-    expect(labels(buildSidebar(input({ ...two, activeGroup: B }))).some((line) => line.startsWith("Dinner club"))).toBe(
+    const two = { memberships: [A, B], supperClubGroupIds: [A_ID] };
+    expect(labels(buildSidebar(input({ ...two, activeGroup: A })))).toContain(`Supper club /g/${A_ID}/supper-club`);
+    expect(labels(buildSidebar(input({ ...two, activeGroup: B }))).some((line) => line.startsWith("Supper club"))).toBe(
       false
     );
-    expect(labels(buildSidebar(input({ ...two, activeGroup: null }))).some((line) => line.startsWith("Dinner club"))).toBe(
+    expect(labels(buildSidebar(input({ ...two, activeGroup: null }))).some((line) => line.startsWith("Supper club"))).toBe(
       false
     );
   });

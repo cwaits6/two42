@@ -58,7 +58,7 @@ export default async function GroupDetailsSettingsPage({
               calendar_event_location: settings.calendar_event_location,
             },
             reminders: groupReminders(settings),
-            dinnerClub: settings.dinner_club_enabled,
+            supperClub: settings.supper_club_enabled,
           }}
         />
       ) : (

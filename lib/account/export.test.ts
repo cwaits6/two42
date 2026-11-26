@@ -82,27 +82,27 @@ function setup() {
       { org_id: ORG, email: "ben@example.test", message: "Bens note", status: "approved", created_at: "t" },
       { org_id: OTHER_ORG, email: "ada_o@example.test", message: "Far note", status: "approved", created_at: "t" },
     ],
-    dinner_party_members: [
+    supper_party_members: [
       {
         org_id: ORG,
         profile_id: "ada",
-        dinner_parties: {
+        supper_parties: {
           status: "signed_up",
           can_host: true,
           seats: 6,
           kids_welcome: true,
           access_notes: null,
           pets: "A dog",
-          dinner_seasons: { title: "Spring suppers" },
-          dinner_party_addresses: [{ address_line1: "1 Elm Street", address_line2: null, city: "Springfield", state: null, postal_code: null }],
-          dinner_party_notes: [{ food_notes: "No nuts" }],
+          supper_rotations: { title: "Spring suppers" },
+          supper_party_addresses: [{ address_line1: "1 Elm Street", address_line2: null, city: "Springfield", state: null, postal_code: null }],
+          supper_party_notes: [{ food_notes: "No nuts" }],
         },
       },
-      { org_id: ORG, profile_id: "ben", dinner_parties: { status: "signed_up", dinner_seasons: { title: "Bens season" }, dinner_party_addresses: [], dinner_party_notes: [{ food_notes: "Bens notes" }] } },
+      { org_id: ORG, profile_id: "ben", supper_parties: { status: "signed_up", supper_rotations: { title: "Bens rotation" }, supper_party_addresses: [], supper_party_notes: [{ food_notes: "Bens notes" }] } },
     ],
-    dinner_replies: [
-      { org_id: ORG, profile_id: "ada", status: "going", updated_at: "t", dinners: { starts_at: "2027-01-09T00:00:00Z" } },
-      { org_id: ORG, profile_id: "ben", status: "not_going", updated_at: "t", dinners: { starts_at: "2027-02-06T00:00:00Z" } },
+    supper_replies: [
+      { org_id: ORG, profile_id: "ada", status: "going", updated_at: "t", suppers: { starts_at: "2027-01-09T00:00:00Z" } },
+      { org_id: ORG, profile_id: "ben", status: "not_going", updated_at: "t", suppers: { starts_at: "2027-02-06T00:00:00Z" } },
     ],
     prayer_requests: [
       { id: "p1", org_id: ORG, author_id: "ada", body: "By name", is_anonymous: false, is_answered: false, created_at: "t4", groups: { name: "Grace" } },
@@ -218,12 +218,12 @@ describe("buildAccountExport", () => {
     expect(text).not.toContain("Far fund");
   });
 
-  it("includes their dinner club sign-up with its address and food needs, and their replies", async () => {
+  it("includes their Supper club sign-up with its address and food needs, and their replies", async () => {
     setup();
     const data = await buildAccountExport(ORG, "ada");
-    expect(data?.dinner_club_sign_ups).toEqual([
+    expect(data?.supper_club_sign_ups).toEqual([
       {
-        season: "Spring suppers",
+        rotation: "Spring suppers",
         status: "signed_up",
         can_host: true,
         seats: 6,
@@ -234,12 +234,12 @@ describe("buildAccountExport", () => {
         food_notes: "No nuts",
       },
     ]);
-    expect(data?.dinner_club_replies).toEqual([
-      { dinner_starts_at: "2027-01-09T00:00:00Z", status: "going", answered_at: "t" },
+    expect(data?.supper_club_replies).toEqual([
+      { supper_starts_at: "2027-01-09T00:00:00Z", status: "going", answered_at: "t" },
     ]);
     const text = JSON.stringify(data);
     expect(text).not.toContain("Bens notes");
-    expect(text).not.toContain("Bens season");
+    expect(text).not.toContain("Bens rotation");
   });
 
   it("includes their own feedback and no one else's", async () => {

@@ -67,7 +67,7 @@ export function photosNotRemovedMessage(count: number, subject: DeletionSubject)
 }
 
 export const DOWNLOAD_COVERS =
-  "The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, dinner club sign-ups with their address and food notes, dinner club replies, prayer requests, comments on prayer requests, the funds you receive, your feedback, your requests for a new group, and the message you sent with your request for access.";
+  "The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, Supper club sign-ups with their address and food notes, Supper club replies, prayer requests, comments on prayer requests, the funds you receive, your feedback, your requests for a new group, and the message you sent with your request for access.";
 
 export const DOWNLOAD_LEAVES_OUT =
   "It doesn't include your photo, prayers you responded to, funds you're second on, requests to join a group, your teacher listing, your calendar links, or anything you added for a group, like events and announcements.";
@@ -133,13 +133,13 @@ export function deletionCopy(summary: DeletionSummary, subject: DeletionSubject)
     ? [
         "Your profile, photo and sign-in",
         "Your group and team memberships, RSVPs and serving turns",
-        "Your dinner club replies, and your dinner club sign-ups unless someone else signed up with you",
+        "Your Supper club replies, and your Supper club sign-ups unless someone else signed up with you",
         "Your prayer requests and comments, including anonymous ones",
       ]
     : [
         "Their profile, photo and sign-in",
         "Their group and team memberships, RSVPs and serving turns",
-        "Their dinner club replies, and their dinner club sign-ups unless someone else signed up with them",
+        "Their Supper club replies, and their Supper club sign-ups unless someone else signed up with them",
         "Their prayer requests and comments, including anonymous ones",
       ];
   if (household && !household.shared) goes.push(householdGoes(household));
@@ -147,7 +147,7 @@ export function deletionCopy(summary: DeletionSummary, subject: DeletionSubject)
   const stays = [
     "Announcements, events and lessons, without the author's name",
     "Serving dates shared with someone else, which stay with that person",
-    "Dinner club sign-ups shared with someone else, with their address and food notes, which stay with that person",
+    "Supper club sign-ups shared with someone else, with their address and food notes, which stay with that person",
     "Feedback already sent, without a name",
     ...fundsAndGroups(groupContent),
   ];

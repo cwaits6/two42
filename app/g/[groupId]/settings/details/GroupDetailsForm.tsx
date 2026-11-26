@@ -17,7 +17,7 @@ import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
 import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
 import { colorError, detailsChanges, type DetailsFields } from "./detailsChanges";
-import { DinnerClubCard } from "./DinnerClubCard";
+import { SupperClubCard } from "./SupperClubCard";
 import { EventRemindersCard } from "./EventRemindersCard";
 
 type FieldErrors = { name?: string; color?: string };
@@ -134,7 +134,7 @@ export function GroupDetailsForm({
         ...prev,
         calendar: sent.calendar,
         reminders: sent.reminders,
-        dinnerClub: sent.dinnerClub,
+        supperClub: sent.supperClub,
       }));
     }
 
@@ -218,7 +218,7 @@ export function GroupDetailsForm({
 
       <EventRemindersCard values={draft.reminders} onChange={(next) => setField("reminders", next)} />
 
-      <DinnerClubCard enabled={draft.dinnerClub} onChange={(next) => setField("dinnerClub", next)} />
+      <SupperClubCard enabled={draft.supperClub} onChange={(next) => setField("supperClub", next)} />
 
       <div className="space-y-3">
         <p aria-live="polite" className="min-h-6 text-base text-muted-foreground">

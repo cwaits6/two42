@@ -31,7 +31,7 @@ const PROFILE_COLUMNS =
   "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
   "address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, " +
   "anniversary, occupation, employer, bio, relationship, role, is_unlisted, hide_email, " +
-  "email_announcements, email_event_reminders, email_dinner_club, created_at";
+  "email_announcements, email_event_reminders, email_supper_club, created_at";
 
 const HOUSEHOLD_COLUMNS =
   "family_name, address_line1, address_line2, city, state, postal_code, phone_home, " +
@@ -57,7 +57,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   if (!profile) return null;
   const { family_id: familyId, ...ownProfile } = profile;
 
-  const [groups, teams, rsvps, serving, namedPrayers, hashedPrayers, namedComments, hiddenComments, funds, feedback, households, entries, groupRequests, accessRequests, dinnerParties, dinnerReplies] = await Promise.all([
+  const [groups, teams, rsvps, serving, namedPrayers, hashedPrayers, namedComments, hiddenComments, funds, feedback, households, entries, groupRequests, accessRequests, supperParties, supperReplies] = await Promise.all([
     service
       .from("group_members")
       .select("role, joined_at, groups(name)")
@@ -142,9 +142,9 @@ export async function buildAccountExport(orgId: string, personId: string) {
     // Their own party's answers; a partner's name is theirs, not this person's.
     fetchAll((from, to) =>
       service
-        .from("dinner_party_members")
+        .from("supper_party_members")
         .select(
-          "dinner_parties(status, can_host, seats, kids_welcome, access_notes, pets, dinner_seasons(title), dinner_party_addresses(address_line1, address_line2, city, state, postal_code), dinner_party_notes(food_notes))",
+          "supper_parties(status, can_host, seats, kids_welcome, access_notes, pets, supper_rotations(title), supper_party_addresses(address_line1, address_line2, city, state, postal_code), supper_party_notes(food_notes))",
         )
         .eq("org_id", orgId)
         .eq("profile_id", personId)
@@ -153,11 +153,11 @@ export async function buildAccountExport(orgId: string, personId: string) {
     ),
     fetchAll((from, to) =>
       service
-        .from("dinner_replies")
-        .select("status, updated_at, dinners(starts_at)")
+        .from("supper_replies")
+        .select("status, updated_at, suppers(starts_at)")
         .eq("org_id", orgId)
         .eq("profile_id", personId)
-        .order("dinner_id")
+        .order("supper_id")
         .range(from, to),
     ),
   ]);
@@ -196,35 +196,35 @@ export async function buildAccountExport(orgId: string, personId: string) {
       status: r.status,
       answered_at: r.created_at,
     })),
-    dinner_club_sign_ups: rowsOf<{
-      dinner_parties: {
+    supper_club_sign_ups: rowsOf<{
+      supper_parties: {
         status: string;
         can_host: boolean;
         seats: number | null;
         kids_welcome: boolean | null;
         access_notes: string | null;
         pets: string | null;
-        dinner_seasons: { title: string } | null;
-        // Arrays: their key to the party is (party_id, season_id, org_id),
+        supper_rotations: { title: string } | null;
+        // Arrays: their key to the party is (party_id, rotation_id, org_id),
         // which no unique constraint matches, so the embed is to-many.
-        dinner_party_addresses: Record<string, unknown>[];
-        dinner_party_notes: { food_notes: string }[];
+        supper_party_addresses: Record<string, unknown>[];
+        supper_party_notes: { food_notes: string }[];
       } | null;
-    }>(dinnerParties, "dinner club sign-ups").map(({ dinner_parties: p }) => ({
-      season: p?.dinner_seasons?.title ?? null,
+    }>(supperParties, "Supper club sign-ups").map(({ supper_parties: p }) => ({
+      rotation: p?.supper_rotations?.title ?? null,
       status: p?.status ?? null,
       can_host: p?.can_host ?? null,
       seats: p?.seats ?? null,
       kids_welcome: p?.kids_welcome ?? null,
       access_notes: p?.access_notes ?? null,
       pets: p?.pets ?? null,
-      address: p?.dinner_party_addresses[0] ?? null,
-      food_notes: p?.dinner_party_notes[0]?.food_notes ?? null,
+      address: p?.supper_party_addresses[0] ?? null,
+      food_notes: p?.supper_party_notes[0]?.food_notes ?? null,
     })),
-    dinner_club_replies: rowsOf<{ status: string; updated_at: string; dinners: { starts_at: string } | null }>(
-      dinnerReplies,
-      "dinner club replies",
-    ).map((r) => ({ dinner_starts_at: r.dinners?.starts_at ?? null, status: r.status, answered_at: r.updated_at })),
+    supper_club_replies: rowsOf<{ status: string; updated_at: string; suppers: { starts_at: string } | null }>(
+      supperReplies,
+      "Supper club replies",
+    ).map((r) => ({ supper_starts_at: r.suppers?.starts_at ?? null, status: r.status, answered_at: r.updated_at })),
     serving_turns: rowsOf<{
       serving_signups: { service_date: string; teams: { name: string } | null } | null;
     }>(serving, "serving turns").map((s) => ({

@@ -7,8 +7,8 @@ interface SidebarContextValue {
   /** Null when signed out. */
   account: Account | null;
   hasServingAccess: boolean;
-  /** The viewer's groups with the dinner club on. */
-  dinnerClubGroupIds: readonly string[];
+  /** The viewer's groups with the Supper club on. */
+  supperClubGroupIds: readonly string[];
   orgName: string;
   /** Requests waiting on a church admin; null for anyone else, or when they could not be counted. */
   waitingRequests: number | null;
@@ -29,10 +29,10 @@ export function SidebarProvider({
   orgName,
   waitingRequests = null,
   groupWaitingRequests = NO_GROUP_COUNTS,
-  dinnerClubGroupIds = NO_GROUPS,
+  supperClubGroupIds = NO_GROUPS,
   children,
 }: Pick<SidebarContextValue, "account" | "hasServingAccess" | "orgName"> &
-  Partial<Pick<SidebarContextValue, "waitingRequests" | "groupWaitingRequests" | "dinnerClubGroupIds">> & {
+  Partial<Pick<SidebarContextValue, "waitingRequests" | "groupWaitingRequests" | "supperClubGroupIds">> & {
     children: React.ReactNode;
   }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -41,7 +41,7 @@ export function SidebarProvider({
       value={{
         account,
         hasServingAccess,
-        dinnerClubGroupIds,
+        supperClubGroupIds,
         orgName,
         waitingRequests,
         groupWaitingRequests,

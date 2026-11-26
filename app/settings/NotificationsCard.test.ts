@@ -52,7 +52,7 @@ async function mount() {
     root.render(
       createElement(NotificationsCard, {
         userId: "u1",
-        initial: { email_announcements: true, email_event_reminders: true, email_dinner_club: true },
+        initial: { email_announcements: true, email_event_reminders: true, email_supper_club: true },
       })
     )
   );
@@ -62,11 +62,11 @@ async function mount() {
 }
 
 describe("NotificationsCard", () => {
-  it("turns dinner club emails off on the person's own row only", async () => {
+  it("turns Supper club emails off on the person's own row only", async () => {
     update.mockResolvedValue({ data: [{ id: "u1" }], error: null });
     const { control, isOn } = await mount();
-    await act(async () => control("email-dinner-club").click());
-    expect(update.mock.calls[0][0]).toEqual({ email_dinner_club: false });
+    await act(async () => control("email-supper-club").click());
+    expect(update.mock.calls[0][0]).toEqual({ email_supper_club: false });
     expect(filters).toEqual([["id", "u1"]]);
     expect(isOn("email-event-reminders")).toBe(true);
   });
