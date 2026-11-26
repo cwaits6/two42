@@ -15,12 +15,12 @@
 // Pinned exactly, in lockstep with the reminder functions and package-lock.json.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
 import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
-import { forEachOrg, listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
+import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
 import { openKey, parseRecordsSecret, RECORDS_SECRET_ENV } from "../_shared/records-crypto.ts";
 import { assertAddressGuard } from "../_shared/records-fetch.ts";
 import { type RecordsPhotoStorage, storeRecordsPhoto } from "../_shared/records-photo.ts";
 import { copySourceFor } from "../_shared/records-providers.ts";
-import { type RecordsRefreshClient, refreshOrg } from "../_shared/records-refresh.ts";
+import { type RecordsRefreshClient, refreshAllOrgs, refreshOrg } from "../_shared/records-refresh.ts";
 import { normalizePhone } from "../_shared/phone.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { logError, logInfo, logWarn } from "../_shared/log.ts";
@@ -62,50 +62,37 @@ Deno.serve(serviceKeyCallerOnly(async () => {
     const db = supabase as unknown as RecordsRefreshClient & ConnectionClient;
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
     const startedAt = Date.now();
-    let connected = 0;
-    let copied = 0;
-    let review = 0;
-    let pending = 0;
-    const cutShort: string[] = [];
-    const notStarted: string[] = [];
+    const elapsed = () => Date.now() - startedAt;
 
-    const results = await forEachOrg(orgs, async (org) => {
-      // Every church shares the invocation's time; one reached after it is
-      // spent waits for the next run rather than starting reads it can't finish.
-      if (Date.now() - startedAt >= BUDGET_MS) {
-        notStarted.push(org.id);
-        return { sent: 0, sendFailures: 0 };
-      }
-      const { data: connection, error } = await db
-        .from("records_connections")
-        .select("provider, base_url, key_ciphertext, connection_id")
-        .eq("org_id", org.id)
-        .maybeSingle();
-      if (error) throw new Error("records connection read failed");
-      if (!connection) return { sent: 0, sendFailures: 0 };
-      const source = copySourceFor(connection.provider);
-      if (!source) throw new Error("records connection has a provider with no copy source");
-      connected++;
-      const result = await refreshOrg(db, {
-        orgId: org.id,
-        connectionId: connection.connection_id,
-        creds: { baseUrl: connection.base_url, key: openKey(secret, org.id, connection.provider, connection.key_ciphertext) },
-        source,
-        normalizePhone,
-        storePhoto: (orgId, profileId, bytes) =>
-          storeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId, bytes),
-        now: () => new Date(),
-        elapsed: () => Date.now() - startedAt,
-        budgetMs: BUDGET_MS,
-      });
-      copied += result.copied;
-      review += result.review;
-      pending += result.pending;
-      if (result.stoppedAtBudget) cutShort.push(org.id);
-      return { sent: result.copied, sendFailures: result.failed };
+    const all = await refreshAllOrgs(orgs, {
+      elapsed,
+      budgetMs: BUDGET_MS,
+      refreshOne: async (org) => {
+        const { data: connection, error } = await db
+          .from("records_connections")
+          .select("provider, base_url, key_ciphertext, connection_id")
+          .eq("org_id", org.id)
+          .maybeSingle();
+        if (error) throw new Error("records connection read failed");
+        if (!connection) return null;
+        const source = copySourceFor(connection.provider);
+        if (!source) throw new Error("records connection has a provider with no copy source");
+        return await refreshOrg(db, {
+          orgId: org.id,
+          connectionId: connection.connection_id,
+          creds: { baseUrl: connection.base_url, key: openKey(secret, org.id, connection.provider, connection.key_ciphertext) },
+          source,
+          normalizePhone,
+          storePhoto: (orgId, profileId, bytes) =>
+            storeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId, bytes),
+          now: () => new Date(),
+          elapsed,
+          budgetMs: BUDGET_MS,
+        });
+      },
     });
 
-    const failed = results.filter((r) => r.error).map((r) => r.orgId);
+    const { connected, copied, review, pending, failed, cutShort, notStarted } = all;
     const summary = {
       route: "refresh-church-records",
       ids: {
@@ -121,8 +108,10 @@ Deno.serve(serviceKeyCallerOnly(async () => {
     if (cutShort.length || notStarted.length) logWarn("church records refresh ran out of time", undefined, summary);
     else logInfo("church records refresh run", summary);
     // The org failures carry ids only: an error's text could hold a database message.
-    const unfinished = failed.length + cutShort.length + notStarted.length;
-    return json({ orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted }, unfinished ? 500 : 200);
+    return json(
+      { orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted },
+      all.finished ? 200 : 500,
+    );
   } catch (err) {
     logError("church records refresh aborted before completion", err, { route: "refresh-church-records" });
     return json({ error: "The church records refresh stopped before it finished." }, 500);

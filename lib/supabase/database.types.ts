@@ -2610,7 +2610,7 @@ isOneToOne: false
 { Args: { "_name": string,"_owner_email": string }; Returns: string
                            },
 "records_apply_copy":
-{ Args: { "_expected": Json,"_filled": boolean,"_grade": Json,"_household": Json,"_org_id": string,"_profile": Json,"_profile_id": string,"_values": Json }; Returns: string
+{ Args: { "_expected": Json,"_filled": (string)[],"_grade": Json,"_household": Json,"_org_id": string,"_profile": Json,"_profile_id": string,"_values": Json }; Returns: string
                            },
 "records_edit_state":
 { Args: { "_church_value": Json,"_columns": (string)[],"_new": Json }; Returns: string

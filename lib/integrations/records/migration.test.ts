@@ -71,6 +71,27 @@ describe("the copy migration agrees with the copy rules", () => {
     expect(sorted(excluded)).toEqual(sorted(elsewhere));
   });
 
+  it("writes and watches the same household and grade columns a copy plans", () => {
+    const apply = between("create function public.records_apply_copy(", "$$;");
+    for (const [kind, table, arg] of [
+      ["household", "family_units", "_household"],
+      ["grade", "family_members", "_grade"],
+    ] as const) {
+      const fields = (Object.keys(FIELD_TABLE) as ValueField[]).filter((f) => FIELD_TABLE[f] === kind);
+      const columns = sorted(fields.flatMap((f) => FIELD_COLUMNS[f]));
+      const set = apply.slice(apply.indexOf(`update public.${table} set`), apply.indexOf("where", apply.indexOf(`update public.${table} set`)));
+      expect(sorted([...set.matchAll(/([a-z_]+) = \(/g)].map((m) => m[1])), `${table} set`).toEqual(columns);
+      expect(sorted([...set.matchAll(new RegExp(`${arg} ->> '([a-z_]+)'`, "g"))].map((m) => m[1])), `${arg} keys`).toEqual(columns);
+
+      const watched = sql.match(new RegExp(`before update of ([a-z_, ]+) on public\\.${table}`))?.[1];
+      expect(sorted(watched?.split(", ") ?? []), `${table} trigger columns`).toEqual(columns);
+
+      const trigger = between(`create function public.records_${kind}_member_edit()`, "$$;");
+      const named = [...trigger.matchAll(/(?:field = |records_field_columns\()'([a-z_]+)'/g)].map((m) => m[1]);
+      expect(sorted([...new Set(named)]), `${kind} trigger fields`).toEqual(sorted(fields));
+    }
+  });
+
   it("holds a settings save back for as long as a refresh's claim lasts", () => {
     const body = between("create function public.records_save_field_settings(", "$$;");
     const minutes = Number(body.match(/interval '(\d+) minutes'/)?.[1]);

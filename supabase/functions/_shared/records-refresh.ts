@@ -7,6 +7,7 @@
 // Nothing read from the records is logged: log lines carry two42's own ids and
 // counts only. Free of any supabase-js import so it can be unit tested offline.
 import { logError, logWarn } from "./log.ts";
+import { forEachOrg, type Org } from "./orgs.ts";
 import {
   type Columns,
   type CurrentValues,
@@ -82,7 +83,7 @@ export type ApplyCopyArgs = {
   _household: Columns;
   _grade: Columns;
   _values: ValueRow[];
-  _filled: boolean;
+  _filled: ValueField[];
 };
 
 /** The narrow slice of the Supabase client this module needs. */
@@ -216,7 +217,7 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
   // Cut short, the run hasn't finished: "Last refreshed" stays on the last
   // one that did, and the people it didn't reach are in pending.
   if (result.stoppedAtBudget) {
-    await release({});
+    await release({ cursor });
     return result;
   }
   await release({
@@ -231,6 +232,60 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
     },
   });
   return result;
+}
+
+export interface AllOrgsResult {
+  /** Churches with a connection that were refreshed. */
+  connected: number;
+  copied: number;
+  review: number;
+  pending: number;
+  failed: string[];
+  /** Churches whose refresh ran out of time partway. */
+  cutShort: string[];
+  /** Churches reached after the time was spent, left for the next run. */
+  notStarted: string[];
+  /** Every church was refreshed to the end. */
+  finished: boolean;
+}
+
+/**
+ * Refreshes every church in turn on one shared time budget. refreshOne answers
+ * null for a church with no connection.
+ */
+export async function refreshAllOrgs(
+  orgs: Org[],
+  options: { elapsed: () => number; budgetMs: number; refreshOne: (org: Org) => Promise<RefreshResult | null> },
+): Promise<AllOrgsResult> {
+  const all: AllOrgsResult = {
+    connected: 0,
+    copied: 0,
+    review: 0,
+    pending: 0,
+    failed: [],
+    cutShort: [],
+    notStarted: [],
+    finished: true,
+  };
+  const results = await forEachOrg(orgs, async (org) => {
+    // A church reached after the time is spent waits for the next run rather
+    // than starting reads it can't finish.
+    if (options.elapsed() >= options.budgetMs) {
+      all.notStarted.push(org.id);
+      return { sent: 0, sendFailures: 0 };
+    }
+    const result = await options.refreshOne(org);
+    if (!result) return { sent: 0, sendFailures: 0 };
+    all.connected++;
+    all.copied += result.copied;
+    all.review += result.review;
+    all.pending += result.pending;
+    if (result.stoppedAtBudget) all.cutShort.push(org.id);
+    return { sent: result.copied, sendFailures: result.failed };
+  });
+  all.failed = results.filter((r) => r.error).map((r) => r.orgId);
+  all.finished = all.failed.length + all.cutShort.length + all.notStarted.length === 0;
+  return all;
 }
 
 /** Runs the refresh and returns the mark to keep for next time. */
@@ -314,19 +369,23 @@ async function run(
     }
   }
 
-  if (retry.length > 0) {
+  // Whoever the time ran out before is marked to be copied in full next time,
+  // like a failed copy, so the next run starts where this one stopped.
+  const unreached = due.slice(done).map((link) => link.profile_id);
+  result.pending = unreached.length + retry.length;
+  const marked = [...retry, ...unreached];
+  for (let i = 0; i < marked.length; i += PAGE) {
     await must(
       db.from("records_person_state").upsert(
-        retry.map((profileId) => ({ org_id: orgId, profile_id: profileId, copied_at: null })),
+        marked.slice(i, i + PAGE).map((profileId) => ({ org_id: orgId, profile_id: profileId, copied_at: null })),
         { onConflict: "org_id,profile_id" },
       ),
       "retry mark",
     );
   }
-  result.pending = due.length - done + retry.length;
   // Everyone changed since the mark was handled, or marked to be copied in
-  // full next time, so the mark can move on; cut short, it stays.
-  return result.stoppedAtBudget ? cursor : changes.cursor;
+  // full next time, so the mark can move on.
+  return changes.cursor;
 }
 
 /** Copies one batch, returning how many of its people were handled before the time ran out. */
@@ -501,8 +560,11 @@ async function copyPerson(
     });
     return { copied: false, photoSkipped, stale: true, householdWritten: false };
   }
+  // "held": the anniversary was left out because another linked person in the
+  // household holds a different one; everything else landed.
+  const written = data === "held" ? { ...plan, household: {} } : plan;
   return {
-    copied: data === "applied" && planWrites(plan),
+    copied: (data === "applied" || data === "held") && planWrites(written),
     photoSkipped,
     stale: false,
     householdWritten: data === "applied" && Object.keys(plan.household).length > 0,

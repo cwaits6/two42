@@ -3,7 +3,7 @@
 // structurally and record every call.
 
 import { assert, assertEquals, assertFalse, assertRejects } from "jsr:@std/assert@1";
-import { refreshOrg, type RecordsRefreshClient, type RefreshOptions } from "../_shared/records-refresh.ts";
+import { refreshAllOrgs, refreshOrg, type RecordsRefreshClient, type RefreshOptions } from "../_shared/records-refresh.ts";
 import type { RecordsCopyPerson, RecordsCopySource, RecordsPresence } from "../_shared/records-types.ts";
 import { normalizePhone } from "../_shared/phone.ts";
 import { logged } from "./logged.ts";
@@ -176,7 +176,7 @@ Deno.test("details are read only for people changed since the last run, and for 
   assertEquals(rpcs.length, 1);
   assertEquals(rpcs[0]._profile_id, P1);
   assertEquals(rpcs[0]._profile, { phone_mobile: "+15125550123" });
-  assertEquals(rpcs[0]._filled, true);
+  assertEquals(rpcs[0]._filled, ["phone_mobile"]);
   assertEquals(result, { status: "done", copied: 1, pending: 0, review: 2, photosSkipped: 0, failed: 0, stoppedAtBudget: false });
   const release = calls.at(-1)!;
   assertEquals((release.values as { cursor: string }).cursor, "2026-11-25T00:00:00");
@@ -211,14 +211,56 @@ Deno.test("a refresh already running stops this one before it reads anything", a
   assertEquals(rpcs, []);
 });
 
-Deno.test("a run cut short by its time keeps the mark and the last refresh time, and counts who it didn't reach", async () => {
+Deno.test("a run cut short by its time keeps the last refresh time, counts who it didn't reach and marks them to copy next", async () => {
   const { db, calls, rpcs } = fakeDb({ ...FIXTURE, states: [] });
   const result = await refreshOrg(db, options(fakeSource().source, { elapsed: () => 60_000 }));
   assertEquals(rpcs, []);
   assertEquals(result.stoppedAtBudget, true);
   // P1 changed and P4 never copied: both due, neither reached.
   assertEquals(result.pending, 2);
-  assertEquals(calls.at(-1)!.values, { running_since: null });
+  const marked = calls.filter((c) => c.table === "records_person_state" && c.op === "upsert").at(-1)!;
+  assertEquals(marked.values, [P1, P4].map((id) => ({ org_id: ORG, profile_id: id, copied_at: null })));
+  assertEquals(calls.at(-1)!.values, { cursor: "2026-11-25T00:00:00", running_since: null });
+});
+
+Deno.test("runs cut short carry on where the last one stopped until the whole change set is copied", async () => {
+  const copied = (id: string) => ({ profile_id: id, copied_at: "2026-11-21T00:00:00Z", review_reason: null, review_since: null });
+  const marks = ["2026-11-25T00:00:00", "2026-11-26T00:00:00"];
+  const sourceFor = (changed: string[], cursor: string) => {
+    const { source, asked } = fakeSource();
+    const run: RecordsCopySource = {
+      ...source,
+      changedSince: (_creds, since) => (asked.changedSince.push(since), Promise.resolve({ ids: changed, cursor })),
+      peopleForCopy: (_creds, ids) => Promise.resolve(ids.map((id) => ({ ...CHURCH, id }))),
+    };
+    return { run, asked };
+  };
+  // The time runs out after the first person: the batch's check and P1's pass, P4's doesn't.
+  let checks = 0;
+  const first = fakeDb({ ...FIXTURE, states: [copied(P1), copied(P4)] });
+  const one = sourceFor(["100", "103"], marks[0]);
+  const cut = await refreshOrg(first.db, options(one.run, { elapsed: () => (++checks > 2 ? 60_000 : 0) }));
+  assertEquals(first.rpcs.map((args) => args._profile_id), [P1]);
+  assertEquals(cut.stoppedAtBudget, true);
+  const marked = first.calls.filter((c) => c.table === "records_person_state" && c.op === "upsert").at(-1)!;
+  const release = first.calls.at(-1)!.values as Record<string, unknown>;
+  assertEquals(release, { cursor: marks[0], running_since: null });
+
+  // Nothing else changed since; the second run copies only who the first didn't reach, and finishes.
+  const second = fakeDb({
+    ...FIXTURE,
+    claim: [{ cursor: release.cursor as string }],
+    states: [copied(P1), ...(marked.values as Record<string, unknown>[]).map((row) => ({ ...copied(row.profile_id as string), ...row }))],
+  });
+  const two = sourceFor([], marks[1]);
+  const done = await refreshOrg(second.db, options(two.run));
+  assertEquals(two.asked.changedSince, [marks[0]]);
+  assertEquals(second.rpcs.map((args) => args._profile_id), [P4]);
+  assertEquals(done.stoppedAtBudget, false);
+  assertEquals(done.pending, 0);
+  const finished = second.calls.at(-1)!.values as Record<string, unknown>;
+  assertEquals(finished.cursor, marks[1]);
+  assert(finished.last_refreshed_at);
 });
 
 Deno.test("someone copied before who changed and wasn't reached in time is still to copy", async () => {
@@ -255,7 +297,7 @@ Deno.test("a value the member cleared is handed to the copy and stays cleared", 
   await refreshOrg(db, options(fakeSource().source));
   assertEquals(rpcs.length, 1);
   assertEquals(rpcs[0]._profile, {});
-  assertEquals(rpcs[0]._filled, false);
+  assertEquals(rpcs[0]._filled, []);
   assertEquals(
     (rpcs[0]._values as { field: string; state: string }[]).find((v) => v.field === "phone_mobile")?.state,
     "cleared",
@@ -343,4 +385,71 @@ Deno.test("two linked spouses copied in one batch both get their copy, the secon
     anniversary_year: 2001,
   });
   assertEquals(rpcs[1]._profile, { phone_mobile: "+15125550199" });
+});
+
+Deno.test("a copy whose anniversary was held for the household counts only what it wrote", async () => {
+  const HOME = "00000000-0000-0000-0000-0000000000f1";
+  const empty = { anniversary_month: null, anniversary_day: null, anniversary_year: null };
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    settings: [{ field: "anniversary", mode: "member" }],
+    states: [],
+    profiles: [{ id: P1, family_id: HOME, first_name: "Kept", last_name: "Name", phone_mobile: null }],
+    familyUnits: [{ id: HOME, ...empty }],
+    apply: () => ({ data: "held", error: null }),
+  });
+  const { source } = fakeSource();
+  const married = { ...CHURCH, anniversary: { month: 6, day: 14, year: 2001 } };
+  const result = await refreshOrg(db, { ...options({ ...source, peopleForCopy: () => Promise.resolve([married]) }) });
+  assertEquals(rpcs.length, 1);
+  assertEquals(rpcs[0]._filled, ["anniversary"]);
+  assertEquals(result.copied, 0);
+  assertEquals(result.failed, 0);
+  assertEquals(result.pending, 0);
+});
+
+Deno.test("the nightly run shares one budget: a church reached after it is spent isn't started, and any unfinished church fails the run", async () => {
+  const org = (n: number) => ({ id: `org-${n}`, name: "", timezone: "UTC", branding: null, org_email_domains: [] });
+  const done = (over: Partial<Awaited<ReturnType<typeof refreshOrg>>> = {}) => ({
+    status: "done" as const, copied: 1, pending: 0, review: 0, photosSkipped: 0, failed: 0, stoppedAtBudget: false, ...over,
+  });
+  let clock = 0;
+  const started: string[] = [];
+  const all = await refreshAllOrgs([org(1), org(2), org(3)], {
+    elapsed: () => clock,
+    budgetMs: 60_000,
+    refreshOne: (o) => {
+      started.push(o.id);
+      // The second church spends the rest of the time and is cut short.
+      if (o.id === "org-2") {
+        clock = 60_000;
+        return Promise.resolve(done({ copied: 2, pending: 3, stoppedAtBudget: true }));
+      }
+      return Promise.resolve(done());
+    },
+  });
+  assertEquals(started, ["org-1", "org-2"]);
+  assertEquals(all.cutShort, ["org-2"]);
+  assertEquals(all.notStarted, ["org-3"]);
+  assertEquals([all.connected, all.copied, all.pending], [2, 3, 3]);
+  assertFalse(all.finished);
+
+  const clean = await refreshAllOrgs([org(1), org(2)], {
+    elapsed: () => 0,
+    budgetMs: 60_000,
+    refreshOne: (o) => Promise.resolve(o.id === "org-1" ? null : done()),
+  });
+  assertEquals(clean.connected, 1);
+  assert(clean.finished);
+
+  const lines = await logged(async () => {
+    const broken = await refreshAllOrgs([org(1)], {
+      elapsed: () => 0,
+      budgetMs: 60_000,
+      refreshOne: () => Promise.reject(new Error("records connection read failed")),
+    });
+    assertEquals(broken.failed, ["org-1"]);
+    assertFalse(broken.finished);
+  });
+  assert(lines.length > 0);
 });

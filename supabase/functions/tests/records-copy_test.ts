@@ -67,14 +67,14 @@ function input(
 
 Deno.test("with every field not from the records, nothing is planned", () => {
   const plan = planPersonCopy(input({}, { current: { profile: profile({ phone_mobile: "+15125550999" }), household: null, grade: null } }));
-  assertEquals(plan, { profile: {}, household: {}, grade: {}, values: [], filled: false, photoWanted: null });
+  assertEquals(plan, { profile: {}, household: {}, grade: {}, values: [], filled: [], photoWanted: null });
 });
 
 Deno.test("a member-changeable phone fills an empty one and tells the member", () => {
   const plan = planPersonCopy(input({ phone_mobile: "member" }));
   assertEquals(plan.profile, { phone_mobile: "+15125550123" });
   assertEquals(plan.values, [{ field: "phone_mobile", state: "records", church_value: { phone_mobile: "+15125550123" } }]);
-  assertEquals(plan.filled, true);
+  assertEquals(plan.filled, ["phone_mobile"]);
 });
 
 Deno.test("turning a field on never replaces what the member entered; it offers the church's value", () => {
@@ -83,7 +83,7 @@ Deno.test("turning a field on never replaces what the member entered; it offers 
   );
   assertEquals(plan.profile, {});
   assertEquals(plan.values, [{ field: "phone_mobile", state: "changed", church_value: { phone_mobile: "+15125550123" } }]);
-  assertEquals(plan.filled, false);
+  assertEquals(plan.filled, []);
 });
 
 Deno.test("a value from the records follows the records, a removal included", () => {
@@ -125,7 +125,7 @@ Deno.test("a cleared birthday stays empty when the records still hold one", () =
 Deno.test("an unlisted phone arrives as no phone and fills nothing", () => {
   // The Rock source drops unlisted numbers when it reads them (rock-copy_test.ts).
   const plan = planPersonCopy(input({ phone_mobile: "member" }, { person: person({ mobile: null }) }));
-  assertEquals(plan, { profile: {}, household: {}, grade: {}, values: [], filled: false, photoWanted: null });
+  assertEquals(plan, { profile: {}, household: {}, grade: {}, values: [], filled: [], photoWanted: null });
 });
 
 Deno.test("a phone two42 can't save counts as none", () => {
@@ -166,7 +166,7 @@ Deno.test("the nick name fills the preferred name only while the member hasn't s
   const nick = person({ nickName: "Peggy" });
   const empty = planPersonCopy(input({ name: "member" }, { person: nick }));
   assertEquals(empty.profile, { preferred_name: "Peggy" });
-  assertEquals(empty.filled, true);
+  assertEquals(empty.filled, ["preferred_name"]);
 
   const own = planPersonCopy(
     input({ name: "member" }, { person: nick, current: { profile: profile({ preferred_name: "Meg" }), household: null, grade: null } }),

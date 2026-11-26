@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(40);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -189,9 +189,9 @@ select is(
     has_function_privilege('anon', 'public.records_save_field_settings(uuid, jsonb, uuid)', 'execute'),
     has_function_privilege('authenticated', 'public.records_save_field_settings(uuid, jsonb, uuid)', 'execute'),
     has_function_privilege('service_role', 'public.records_save_field_settings(uuid, jsonb, uuid)', 'execute'),
-    has_function_privilege('anon', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, boolean)', 'execute'),
-    has_function_privilege('authenticated', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, boolean)', 'execute'),
-    has_function_privilege('service_role', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, boolean)', 'execute')
+    has_function_privilege('anon', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, text[])', 'execute'),
+    has_function_privilege('authenticated', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, text[])', 'execute'),
+    has_function_privilege('service_role', 'public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, text[])', 'execute')
   ],
   array[false, false, true, false, false, true],
   'only the service role saves settings or applies a copy');
@@ -237,7 +237,7 @@ select is(
       {"field": "birthday", "state": "records", "church_value": {"birth_month": 3, "birth_day": 4, "birth_year": null}},
       {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}},
       {"field": "grade", "state": "records", "church_value": {"graduation_year": 2032}}]',
-    true),
+    '{phone_mobile,birthday,anniversary,grade}'),
   'applied', 'a copy is applied');
 
 select is(
@@ -255,7 +255,7 @@ select public.records_apply_copy(
   '{"phone_mobile": "+15125550102"}', '{}', '{}',
   '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550102"}},
     {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
-  false);
+  '{}');
 
 -- Linked spouses whose records hold different anniversaries: the first one copied stands.
 savepoint anniversary_differs;
@@ -265,21 +265,40 @@ select is(
     '{"phone_mobile": "+15125550103"}', '{"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}', '{}',
     '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550103"}},
       {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
-    false),
-  'applied', 'non-vacuity: a spouse''s copy with a different anniversary is applied');
+    '{anniversary}'),
+  'held', 'a spouse''s copy with a different anniversary is applied without it');
 select is(
   (select (f.anniversary_month, p.phone_mobile,
-           (select count(*) from public.records_field_values v where v.profile_id = p.id and v.field = 'anniversary'))::text
-     from public.profiles p join public.family_units f on f.id = p.family_id where p.id = pg_temp.fx('member2')),
-  '(6,+15125550103,0)',
-  'the household keeps the anniversary already copied, the spouse''s differing one isn''t recorded, and the rest of the copy lands');
+           (select count(*) from public.records_field_values v where v.profile_id = p.id and v.field = 'anniversary'),
+           s.notice_filled_at is not null)::text
+     from public.profiles p
+     join public.family_units f on f.id = p.family_id
+     join public.records_person_state s on s.profile_id = p.id
+    where p.id = pg_temp.fx('member2')),
+  '(6,+15125550103,0,f)',
+  'the household keeps the anniversary already copied, the spouse''s differing one isn''t recorded or announced, and the rest of the copy lands');
 rollback to savepoint anniversary_differs;
+
+-- Both spouses cleared the anniversary, then the church corrected both records.
+savepoint anniversary_cleared;
+update public.records_field_values set state = 'cleared' where org_id = pg_temp.fx('org') and field = 'anniversary';
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+    '{}', '{}', '{}',
+    '[{"field": "anniversary", "state": "cleared", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
+    '{}'),
+  'held', 'non-vacuity: a cleared anniversary that differs from the spouse''s records is held');
+select is(
+  (select state from public.records_field_values where profile_id = pg_temp.fx('member2') and field = 'anniversary'),
+  'cleared', 'a member''s cleared anniversary is kept while their records differ from their spouse''s');
+rollback to savepoint anniversary_cleared;
 
 select is(
   public.records_apply_copy(
     pg_temp.fx('org'), pg_temp.fx('member'),
     jsonb_set(pg_temp.expected(pg_temp.fx('member')), '{profile,phone_mobile}', '"+15125550000"'),
-    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', false),
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
   'stale', 'a copy worked out from values that have changed since is refused');
 select is(
   (select phone_mobile from public.profiles where id = pg_temp.fx('member')),
@@ -287,11 +306,11 @@ select is(
 
 select is(
   public.records_apply_copy(pg_temp.fx('org'), pg_temp.fx('admin'), pg_temp.expected(pg_temp.fx('admin')),
-    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', false),
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
   'unlinked', 'a profile without a link gets no copy');
 select is(
   public.records_apply_copy(pg_temp.fx('org'), pg_temp.fx('other_admin'), pg_temp.expected(pg_temp.fx('other_admin')),
-    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', false),
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
   'gone', 'a profile from another church is not this church''s to copy into');
 
 -- ── Who reads the sources ───────────────────────────────────────────────────

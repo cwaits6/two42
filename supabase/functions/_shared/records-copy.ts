@@ -108,8 +108,8 @@ export interface CopyPlan {
   household: Columns;
   grade: Columns;
   values: ValueRow[];
-  /** A value went from empty to filled, so the member is told once. */
-  filled: boolean;
+  /** Fields that went from empty to filled, so the member is told once. */
+  filled: ValueField[];
   /** The photo token to download, when the plan wants the church's photo and none was passed in. */
   photoWanted: string | null;
 }
@@ -203,7 +203,7 @@ function settingOf(settings: CopyInput["settings"], field: ValueField): FieldMod
 
 export function planPersonCopy(input: CopyInput): CopyPlan {
   const { settings, current, stored, person } = input;
-  const plan: CopyPlan = { profile: {}, household: {}, grade: {}, values: [], filled: false, photoWanted: null };
+  const plan: CopyPlan = { profile: {}, household: {}, grade: {}, values: [], filled: [], photoWanted: null };
   const church = churchValues(person, input.normalizePhone, input.today);
 
   const rowFor = (field: ValueField): Columns | null => {
@@ -235,7 +235,7 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
 
     if (mode === "locked") {
       if (!equal) write(field, value);
-      if (!equal && isEmptyValue(now) && !prior) plan.filled = true;
+      if (!equal && isEmptyValue(now) && !prior) plan.filled.push(field);
       record(field, "records", value);
       continue;
     }
@@ -247,7 +247,7 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
       } else if (isEmptyValue(now)) {
         write(field, value);
         record(field, "records", value);
-        plan.filled = true;
+        plan.filled.push(field);
       } else if (field !== "preferred_name") {
         // Turning a field on never replaces what a member already entered; it offers the church's value instead.
         record(field, "changed", value);
@@ -285,7 +285,7 @@ function planPhoto(input: CopyInput, plan: CopyPlan) {
     }
     plan.profile.avatar_url = stored.url;
     plan.values.push({ field: "photo", state: "records", church_value: { photo: token, avatar_url: stored.url } });
-    plan.filled = true;
+    plan.filled.push("photo");
     return;
   }
 

@@ -291,8 +291,9 @@ grant execute on function public.records_save_field_settings(uuid, jsonb, uuid) 
 -- _values, all or nothing. _expected holds the values the copy was worked out
 -- from; if a member saved anything since, nothing is written and the answer
 -- is 'stale', so a member's edit is never overwritten by an older read.
--- Answers 'gone' for a profile not in this church and 'unlinked' for one no
--- longer linked.
+-- _filled names the fields that went from empty to filled, for the one-time
+-- notice. Answers 'gone' for a profile not in this church and 'unlinked' for
+-- one no longer linked.
 --
 -- SECURITY INVOKER and executable by the service role only, like
 -- records_save_field_settings(). Running as the service role is also what
@@ -306,7 +307,7 @@ create function public.records_apply_copy(
   _household jsonb,
   _grade jsonb,
   _values jsonb,
-  _filled boolean
+  _filled text[]
 ) returns text
   language plpgsql
   security invoker
@@ -317,6 +318,7 @@ declare
   _family public.family_units%rowtype;
   _member public.family_members%rowtype;
   _key text;
+  _held boolean := false;
   _anniversary jsonb := (
     select v -> 'church_value' from jsonb_array_elements(coalesce(_values, '[]'::jsonb)) as v
      where v ->> 'field' = 'anniversary'
@@ -365,8 +367,8 @@ begin
      for update;
   if jsonb_typeof(_expected -> 'grade') = 'object' then
     if _member.id is null
-       or public.records_pick(to_jsonb(_member), array['graduation_year'])
-          <> public.records_pick(_expected -> 'grade', array['graduation_year']) then
+       or public.records_pick(to_jsonb(_member), public.records_field_columns('grade'))
+          <> public.records_pick(_expected -> 'grade', public.records_field_columns('grade')) then
       return 'stale';
     end if;
   elsif _member.id is not null then
@@ -392,8 +394,9 @@ begin
 
   -- The anniversary is one value for the household but each linked person's
   -- records hold their own. While another linked person's differs, the first
-  -- one copied stands and this person's is not recorded, so every source in
-  -- the household agrees with the household's value.
+  -- one copied stands: this person's is left out as though never planned, and
+  -- an older church value is forgotten, though a member's change or clear is
+  -- kept. The answer is 'held' so the caller doesn't count the household.
   if _anniversary is not null and _family.id is not null and exists (
     select 1
       from public.records_field_values v
@@ -410,8 +413,10 @@ begin
       select coalesce(jsonb_agg(v), '[]'::jsonb) from jsonb_array_elements(_values) as v
        where v ->> 'field' <> 'anniversary'
     );
+    _filled := array_remove(_filled, 'anniversary');
+    _held := true;
     delete from public.records_field_values
-     where org_id = _org_id and profile_id = _profile_id and field = 'anniversary';
+     where org_id = _org_id and profile_id = _profile_id and field = 'anniversary' and state = 'records';
   end if;
 
   if _household <> '{}'::jsonb and _family.id is not null then
@@ -436,22 +441,22 @@ begin
           is distinct from (excluded.state, excluded.church_value);
 
   insert into public.records_person_state (org_id, profile_id, copied_at, notice_filled_at)
-  values (_org_id, _profile_id, now(), case when _filled then now() end)
+  values (_org_id, _profile_id, now(), case when cardinality(_filled) > 0 then now() end)
   on conflict (org_id, profile_id) do update
     set copied_at = excluded.copied_at,
         notice_filled_at = case
-          when _filled and public.records_person_state.notice_seen_at is null
+          when cardinality(_filled) > 0 and public.records_person_state.notice_seen_at is null
             then coalesce(public.records_person_state.notice_filled_at, excluded.notice_filled_at)
           else public.records_person_state.notice_filled_at
         end;
 
-  return 'applied';
+  return case when _held then 'held' else 'applied' end;
 end;
 $$;
 
-revoke execute on function public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, boolean)
+revoke execute on function public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, text[])
   from public, anon, authenticated;
-grant execute on function public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, boolean)
+grant execute on function public.records_apply_copy(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, text[])
   to service_role;
 
 -- A member's edit of a value from the records, on any screen that saves a
@@ -552,7 +557,7 @@ declare
 begin
   if coalesce(current_setting('role', true), '') not in ('anon', 'authenticated')
      or old.claimed_profile_id is null
-     or new.graduation_year is not distinct from old.graduation_year then
+     or public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns) then
     return new;
   end if;
   select v.church_value, s.mode into _value
@@ -563,7 +568,7 @@ begin
     return new;
   end if;
   if _value.mode = 'locked' then
-    new.graduation_year := old.graduation_year;
+    new := jsonb_populate_record(new, public.records_pick(to_jsonb(old), _columns));
     return new;
   end if;
   update public.records_field_values
