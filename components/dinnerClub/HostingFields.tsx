@@ -66,6 +66,7 @@ export function SeatsField({
         id={id}
         type="number"
         inputMode="numeric"
+        aria-required="true"
         min={MIN_SEATS}
         max={MAX_SEATS}
         value={value}
@@ -98,7 +99,7 @@ export function AddressFieldset({
     <fieldset className="space-y-3">
       <legend className="text-lg font-medium">Address for the dinners</legend>
       {hint && <p className="text-base text-muted-foreground">{hint}</p>}
-      <Input aria-label="Street address" placeholder="Street address" maxLength={200} value={address.address_line1} className={FIELD} onChange={line("address_line1")} {...invalidFieldProps(line1Id, line1Error)} />
+      <Input aria-label="Street address" aria-required="true" placeholder="Street address" maxLength={200} value={address.address_line1} className={FIELD} onChange={line("address_line1")} {...invalidFieldProps(line1Id, line1Error)} />
       <FieldError fieldId={line1Id} message={line1Error} />
       <Input aria-label="Apartment or unit" placeholder="Apartment or unit" maxLength={200} value={address.address_line2} className={FIELD} onChange={line("address_line2")} />
       <div className="grid gap-3 sm:grid-cols-3">

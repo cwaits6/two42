@@ -6,6 +6,7 @@ import {
   draftFromPublished,
   draftWarnings,
   fitDraft,
+  freeSeats,
   hostsNeeded,
   moveGuests,
   moveParty,
@@ -709,6 +710,34 @@ describe("when plans change after publishing", () => {
     expect(blocksPublish(draftWarnings(fitted, settings, new Set([dinnerKey("A", "d1")])))).toBe(true);
     const picked = setTableHost(fitted, "A", "h2");
     expect(blocksPublish(draftWarnings(picked, settings, new Set([dinnerKey("A", "d1")])))).toBe(false);
+  });
+
+  it("leaves the dates of a one-host table's withdrawn host open, not given to a one-dinner stand-in", () => {
+    const parties = [party("h2", 2, { seats: 8 }), party("c1", 2)];
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2", "c1"], hosts: [["d1", "h1"], ["d2", "h2"], ["d3", "h1"]] }]),
+      "same_table_one_host",
+      ["d1", "d2", "d3"],
+      0
+    );
+    const fitted = fitDraft(draft, "same_table_one_host", ["d1", "d2", "d3"], ["h2", "c1"])!;
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual([null, "h2", null]);
+    expect(blocksPublish(draftWarnings(fitted, input(parties, { dateIds: ["d1", "d2", "d3"] })))).toBe(true);
+  });
+
+  it("counts a table's free seats from the hosts of its dinners still to come", () => {
+    // h1 (4 seats) hosted the held first dinner; h2 (8 seats) hosts the next.
+    const parties = [party("h1", 2, { seats: 4 }), party("h2", 2, { seats: 8 }), party("w", 2)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2"], hosts: [["d1", "h1"], ["d2", "h2"]] }]),
+      "same_table_rotating",
+      ["d1", "d2"],
+      0
+    );
+    expect(freeSeats(draft.tables[0], byId, 8)).toBe(0);
+    expect(freeSeats(draft.tables[0], byId, 8, new Set(["d2"]))).toBe(4);
+    expect(tablesWithRoom(draft, byId.get("w")!, byId, 8, ["d1", "d2"], new Set(["d2"])).map((t) => t.key)).toEqual(["A"]);
   });
 
   it("swaps two dates' hosts at a table where hosts take turns", () => {

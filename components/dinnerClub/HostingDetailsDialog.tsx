@@ -37,17 +37,19 @@ export function HostingDetailsDialog({
     if (found.seats || found.line1) return;
     setSaving(true);
     const supabase = createClient();
-    const [updated, written] = await Promise.all([
-      supabase.from("dinner_parties").update({ can_host: true, seats: Number(seats) }).eq("id", party.id).select("id"),
-      supabase
-        .from("dinner_party_addresses")
-        .upsert(addressRow({ party_id: party.id, season_id: seasonId, group_id: groupId }, address), {
-          onConflict: "party_id",
-        })
-        .select("party_id"),
-    ]);
+    // The address first: a party marked as a host must never be left without one.
+    const written = await supabase
+      .from("dinner_party_addresses")
+      .upsert(addressRow({ party_id: party.id, season_id: seasonId, group_id: groupId }, address), {
+        onConflict: "party_id",
+      })
+      .select("party_id");
+    const updated =
+      written.error || !written.data?.length
+        ? null
+        : await supabase.from("dinner_parties").update({ can_host: true, seats: Number(seats) }).eq("id", party.id).select("id");
     setSaving(false);
-    if (updated.error || !updated.data?.length || written.error || !written.data?.length) {
+    if (!updated || updated.error || !updated.data?.length) {
       toast.error(failureMessage("save the hosting details"));
       return;
     }

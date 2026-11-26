@@ -103,7 +103,8 @@ function hostPicks(
   if (hosts.size > 1) return perDate(regular);
   if (regular.length === 0) return [];
   const partyId = [...hosts][0] ?? null;
-  const dateIds = open.filter((h) => h.partyId === partyId || h.partyId === null).map((h) => h.seasonDateId);
+  // A date the host can't host stays with its own stand-in picker.
+  const dateIds = regular.filter((h) => h.partyId === partyId || h.partyId === null).map((h) => h.seasonDateId);
   return [{ id: `host-${t.key}`, label: "Host", partyId, dateIds }];
 }
 
@@ -303,7 +304,7 @@ export function TablesEditor({
                         label="Seat at"
                         items={room.map((t) => ({
                           value: t.key,
-                          label: `Table ${tableNumber(t)} (${freeSeats(t, byId, tableSize.max)} free)`,
+                          label: `Table ${tableNumber(t)} (${freeSeats(t, byId, tableSize.max, future)} free)`,
                         }))}
                         value={null}
                         placeholder="Choose a table"

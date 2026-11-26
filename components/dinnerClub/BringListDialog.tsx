@@ -70,14 +70,16 @@ export function BringListDialog({
   }
 
   async function save() {
-    const changed = guests.filter((g) => itemOf(choices[g.partyId]) !== g.item);
+    // A guest seated since the dialog opened has no choice yet; they keep their item.
+    const choice = (g: (typeof guests)[number]) => choices[g.partyId] ?? choiceOf(g.item);
+    const changed = guests.filter((g) => itemOf(choice(g)) !== g.item);
     const upserts = changed.flatMap((g) => {
-      const item = itemOf(choices[g.partyId]);
+      const item = itemOf(choice(g));
       return item
         ? [{ dinner_id: dinner.id, party_id: g.partyId, season_id: dinner.seasonId, group_id: dinner.groupId, table_id: dinner.tableId, item }]
         : [];
     });
-    const cleared = changed.filter((g) => itemOf(choices[g.partyId]) === null).map((g) => g.partyId);
+    const cleared = changed.filter((g) => itemOf(choice(g)) === null).map((g) => g.partyId);
     setSaving(true);
     const supabase = createClient();
     const [written, removed] = await Promise.all([

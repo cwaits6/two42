@@ -596,9 +596,19 @@ function tableDates(t: DraftTable, dateIds: readonly string[]): string[] {
   return t.seasonDateId ? [t.seasonDateId] : [...dateIds];
 }
 
-/** Free seats at a table: its host's seats, or the table size when it has no host yet. */
-export function freeSeats(t: DraftTable, parties: Map<string, ShuffleParty>, tableSizeMax: number): number {
-  return (tableSeats(t, parties) ?? tableSizeMax) - partyPeople(t, parties);
+/**
+ * Free seats at a table: the fewest seats of the hosts of its dinners still
+ * to come (all its dinners when `futureDateIds` is not given), or the table
+ * size when none has a host yet. A held dinner's host no longer limits it.
+ */
+export function freeSeats(
+  t: DraftTable,
+  parties: Map<string, ShuffleParty>,
+  tableSizeMax: number,
+  futureDateIds?: ReadonlySet<string>
+): number {
+  const hosts = futureDateIds ? t.hosts.filter((h) => futureDateIds.has(h.seasonDateId)) : t.hosts;
+  return (tableSeats({ ...t, hosts }, parties) ?? tableSizeMax) - partyPeople(t, parties);
 }
 
 /**
@@ -616,7 +626,7 @@ export function tablesWithRoom(
   return draft.tables.filter(
     (t) =>
       tableDates(t, dateIds).some((d) => futureDateIds.has(d)) &&
-      freeSeats(t, parties, tableSizeMax) >= party.size &&
+      freeSeats(t, parties, tableSizeMax, futureDateIds) >= party.size &&
       !draft.tables.some((o) => o.seasonDateId === t.seasonDateId && o.partyIds.includes(party.id))
   );
 }
@@ -794,7 +804,17 @@ export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], 
         partyIds: seated,
         hosts: kept.map((d) => ({
           seasonDateId: d,
-          partyId: tableHost === undefined ? hostOn(d) : tableHost.perDate ? (hostOn(d) ?? tableHost.host) : tableHost.host,
+          // On a published table a date with no host yet (one added since)
+          // takes the table's host; a date whose host withdrew waits for the
+          // leader to pick, rather than going to a one-dinner stand-in.
+          partyId:
+            tableHost === undefined
+              ? hostOn(d)
+              : tableHost.perDate
+                ? t.hosts.find((h) => h.seasonDateId === d)?.partyId
+                  ? hostOn(d)
+                  : tableHost.host
+                : tableHost.host,
         })),
       };
     })

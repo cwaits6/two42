@@ -112,6 +112,15 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     ),
   });
 
+  // A date is still to come while any of its dinners is: a host may have
+  // moved their table's dinner past the date it was set on.
+  const futureDateIds = data.dates
+    .filter((sd) => {
+      const onDate = data.dinners.filter((d) => d.season_date_id === sd.id);
+      return onDate.length > 0 ? onDate.some((d) => new Date(d.starts_at) > now) : new Date(sd.starts_at) > now;
+    })
+    .map((sd) => sd.id);
+
   return (
     <PageContainer size="wide">
       <PageHeader {...header} />
@@ -132,7 +141,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             names={names}
             initialDraft={initialDraft}
             heldDinners={heldDinners}
-            futureDateIds={data.dates.filter((d) => new Date(d.starts_at) > now).map((d) => d.id)}
+            futureDateIds={futureDateIds}
             cantHost={Object.fromEntries(
               cantHost.map((d) => [dinnerKey(d.table_id, d.season_date_id), d.host_party_id])
             )}
