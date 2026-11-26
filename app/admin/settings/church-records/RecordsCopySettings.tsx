@@ -9,7 +9,7 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 import type { RecordsField } from "@/supabase/functions/_shared/records-copy";
-import { choicesFor, FIELD_LABELS, type FieldChoice, RECORDS_FIELDS, settingsBody } from "./copyFields";
+import { choicesFor, FIELD_LABELS, type FieldChoice, RECORDS_FIELDS, refreshMessage, settingsBody } from "./copyFields";
 import { count, page, people } from "./linkLists";
 import { OpenLink, Pager } from "./PersonLinks";
 import { call, errorText } from "./requests";
@@ -95,8 +95,15 @@ export function RecordsCopySettings({ label }: { label: string }) {
         toast.error(errorText("refresh", res.status, res.data));
         return;
       }
-      const copied = Number(res.data?.copied ?? 0);
-      toast.success(copied === 0 ? "Refreshed. Nothing needed updating." : `Refreshed. Updated ${people(copied)}.`);
+      const counted = (key: string) => Number(res.data?.[key] ?? 0);
+      const message = refreshMessage({
+        copied: counted("copied"),
+        pending: counted("pending"),
+        failed: counted("failed"),
+        photosSkipped: counted("photosSkipped"),
+      });
+      if (message.tone === "success") toast.success(message.text);
+      else toast.warning(message.text);
       await load();
     } catch (err) {
       logError("Church records refresh request failed", err, { route: "/admin/settings/church-records" });
@@ -179,7 +186,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
           <p className="text-base text-muted-foreground">
             The sign-in email is never changed. Unlisted phone numbers are never copied.
           </p>
-          <Button size="lg" className="py-6 text-lg" disabled={saving || !changed} onClick={save}>
+          <Button size="lg" className="py-6 text-lg" disabled={saving || refreshing || !changed} onClick={save}>
             {saving ? "Saving…" : "Save what two42 copies"}
           </Button>
         </CardContent>
@@ -197,7 +204,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
           {data.pending > 0 && (
             <p className="text-lg">{people(data.pending)} still to copy for the first time.</p>
           )}
-          <Button size="lg" variant="outline" className="py-6 text-lg" disabled={refreshing} onClick={refresh}>
+          <Button size="lg" variant="outline" className="py-6 text-lg" disabled={refreshing || saving} onClick={refresh}>
             {refreshing ? "Refreshing…" : "Refresh now"}
           </Button>
         </CardContent>

@@ -40,3 +40,27 @@ export function settingsBody(choices: Partial<Record<RecordsField, FieldChoice>>
     Object.entries(choices).filter((entry): entry is [RecordsField, FieldMode] => entry[1] === "locked" || entry[1] === "member"),
   );
 }
+
+export interface RefreshCounts {
+  copied: number;
+  pending: number;
+  failed: number;
+  photosSkipped: number;
+}
+
+const people = (n: number) => (n === 1 ? "1 person" : `${n.toLocaleString("en-US")} people`);
+
+/** What Refresh now tells the admin: a warning whenever someone wasn't copied or a photo wasn't available. */
+export function refreshMessage({ copied, pending, failed, photosSkipped }: RefreshCounts): {
+  tone: "success" | "warning";
+  text: string;
+} {
+  const updated = copied === 0 ? "Nothing needed updating." : `Updated ${people(copied)}.`;
+  const problems = [
+    failed > 0 && `${people(failed)} couldn't be copied.`,
+    pending > 0 && `${people(pending)} still to copy; the next refresh carries on.`,
+    photosSkipped > 0 && `${photosSkipped === 1 ? "1 photo" : `${photosSkipped.toLocaleString("en-US")} photos`} couldn't be used.`,
+  ].filter((line): line is string => !!line);
+  if (problems.length === 0) return { tone: "success", text: `Refreshed. ${updated}` };
+  return { tone: "warning", text: [`Refreshed with problems. ${updated}`, ...problems].join(" ") };
+}
