@@ -9,7 +9,15 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 import type { RecordsField } from "@/supabase/functions/_shared/records-copy";
-import { choicesFor, FIELD_LABELS, type FieldChoice, RECORDS_FIELDS, refreshMessage, settingsBody } from "./copyFields";
+import {
+  choicesFor,
+  FIELD_LABELS,
+  type FieldChoice,
+  RECORDS_FIELDS,
+  type RefreshCounts,
+  refreshMessage,
+  settingsBody,
+} from "./copyFields";
 import { count, page, people } from "./linkLists";
 import { OpenLink, Pager } from "./PersonLinks";
 import { call, errorText } from "./requests";
@@ -95,7 +103,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
         toast.error(errorText("refresh", res.status, res.data));
         return;
       }
-      const counted = (key: string) => Number(res.data?.[key] ?? 0);
+      const counted = (key: keyof RefreshCounts) => Number(res.data?.[key] ?? 0);
       const message = refreshMessage({
         copied: counted("copied"),
         pending: counted("pending"),
@@ -202,7 +210,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
             refreshes every night, reading only people changed in {label} since the last refresh.
           </p>
           {data.pending > 0 && (
-            <p className="text-lg">{people(data.pending)} still to copy for the first time.</p>
+            <p className="text-lg">{people(data.pending)} still to copy on the next refresh.</p>
           )}
           <Button size="lg" variant="outline" className="py-6 text-lg" disabled={refreshing || saving} onClick={refresh}>
             {refreshing ? "Refreshing…" : "Refresh now"}

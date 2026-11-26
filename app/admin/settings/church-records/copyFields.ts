@@ -4,6 +4,7 @@ import {
   RECORDS_FIELDS,
   type RecordsField,
 } from "@/supabase/functions/_shared/records-copy";
+import type { RefreshResult } from "@/supabase/functions/_shared/records-refresh";
 
 export type FieldChoice = "off" | FieldMode;
 
@@ -41,17 +42,13 @@ export function settingsBody(choices: Partial<Record<RecordsField, FieldChoice>>
   );
 }
 
-export interface RefreshCounts {
-  copied: number;
-  pending: number;
-  failed: number;
-  photosSkipped: number;
-}
+/** The counts Refresh now answers with. */
+export type RefreshCounts = Pick<RefreshResult, "copied" | "pending" | "review" | "failed" | "photosSkipped">;
 
 const people = (n: number) => (n === 1 ? "1 person" : `${n.toLocaleString("en-US")} people`);
 
 /** What Refresh now tells the admin: a warning whenever someone wasn't copied or a photo wasn't available. */
-export function refreshMessage({ copied, pending, failed, photosSkipped }: RefreshCounts): {
+export function refreshMessage({ copied, pending, failed, photosSkipped }: Omit<RefreshCounts, "review">): {
   tone: "success" | "warning";
   text: string;
 } {

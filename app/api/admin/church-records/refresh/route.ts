@@ -6,6 +6,7 @@ import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { refreshNow } from "@/lib/integrations/records/refresh";
 import { loadCredentials } from "@/lib/integrations/records/store";
+import type { RefreshCounts } from "@/app/admin/settings/church-records/copyFields";
 
 /**
  * POST /api/admin/church-records/refresh — Refresh now: copies the people
@@ -49,7 +50,7 @@ export async function POST() {
       review: result.review,
       photosSkipped: result.photosSkipped,
       failed: result.failed,
-    });
+    } satisfies RefreshCounts);
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, loaded.provider.label);
     logError("Church records refresh failed", err, { route: "/api/admin/church-records/refresh", ids: { org: orgId } });

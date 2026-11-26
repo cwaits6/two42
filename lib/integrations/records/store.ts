@@ -196,7 +196,7 @@ export interface ReviewPerson {
 
 export interface CopyStatus {
   lastRefreshedAt: string | null;
-  /** Linked people still waiting for their first copy. */
+  /** Linked people the next refresh copies in full: never copied, or asked to again by a settings change or a failed copy. */
   pending: number;
   review: ReviewPerson[];
 }

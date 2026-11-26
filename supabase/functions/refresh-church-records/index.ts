@@ -23,7 +23,7 @@ import { copySourceFor } from "../_shared/records-providers.ts";
 import { type RecordsRefreshClient, refreshOrg } from "../_shared/records-refresh.ts";
 import { normalizePhone } from "../_shared/phone.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
-import { logError, logInfo } from "../_shared/log.ts";
+import { logError, logInfo, logWarn } from "../_shared/log.ts";
 
 // Inside the edge runtime's 150 s request limit; what is left waits for the next night.
 const BUDGET_MS = 90_000;
@@ -66,8 +66,16 @@ Deno.serve(serviceKeyCallerOnly(async () => {
     let copied = 0;
     let review = 0;
     let pending = 0;
+    const cutShort: string[] = [];
+    const notStarted: string[] = [];
 
     const results = await forEachOrg(orgs, async (org) => {
+      // Every church shares the invocation's time; one reached after it is
+      // spent waits for the next run rather than starting reads it can't finish.
+      if (Date.now() - startedAt >= BUDGET_MS) {
+        notStarted.push(org.id);
+        return { sent: 0, sendFailures: 0 };
+      }
       const { data: connection, error } = await db
         .from("records_connections")
         .select("provider, base_url, key_ciphertext, connection_id")
@@ -93,16 +101,28 @@ Deno.serve(serviceKeyCallerOnly(async () => {
       copied += result.copied;
       review += result.review;
       pending += result.pending;
+      if (result.stoppedAtBudget) cutShort.push(org.id);
       return { sent: result.copied, sendFailures: result.failed };
     });
 
     const failed = results.filter((r) => r.error).map((r) => r.orgId);
-    logInfo("church records refresh run", {
+    const summary = {
       route: "refresh-church-records",
-      ids: { connected, copied, review, pending, orgsFailed: failed.length },
-    });
+      ids: {
+        connected,
+        copied,
+        review,
+        pending,
+        orgsFailed: failed.length,
+        orgsCutShort: cutShort.length,
+        orgsNotStarted: notStarted.length,
+      },
+    };
+    if (cutShort.length || notStarted.length) logWarn("church records refresh ran out of time", undefined, summary);
+    else logInfo("church records refresh run", summary);
     // The org failures carry ids only: an error's text could hold a database message.
-    return json({ orgs: orgs.length, connected, copied, review, pending, failed }, failed.length ? 500 : 200);
+    const unfinished = failed.length + cutShort.length + notStarted.length;
+    return json({ orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted }, unfinished ? 500 : 200);
   } catch (err) {
     logError("church records refresh aborted before completion", err, { route: "refresh-church-records" });
     return json({ error: "The church records refresh stopped before it finished." }, 500);

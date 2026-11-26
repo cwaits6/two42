@@ -45,11 +45,12 @@ Check, in order:
 
 ## Church records never refresh at night
 
-**Refresh** on the church records page shows when the last refresh finished; a refresh that failed leaves it as it was. If only **Refresh now** ever updates it:
+**Refresh** on the church records page shows when the last refresh finished; a refresh that failed or ran out of time leaves it as it was. If only **Refresh now** ever updates it:
 
 1. **The schedule.** No migration schedules `refresh-church-records`; add the job as in [refresh-church-records](/docs/run/edge-functions#refresh-church-records).
 2. **The function secret.** `RECORDS_KEY_SECRET` must be set in the edge function secrets, with the same value as the app's. Without it the function answers 200 and does nothing. With a different value it answers 500 and lists, under `failed`, the id of every church whose key it couldn't open; **Refresh now** on the church records page works with the app's value, so it keeps working meanwhile.
-3. **A `500` in `net._http_response`** before any church ran means the runtime didn't refuse a request to a loopback address, so the function stopped before opening any church's key.
+3. **Time.** A church listed under `cutShort` or `notStarted` in the function's response had more to copy than the run's 90 seconds allowed. The next run carries on; a church's first copy can take a few nights, or a few presses of **Refresh now**.
+4. **A `500` in `net._http_response`** before any church ran means the runtime didn't refuse a request to a loopback address, so the function stopped before opening any church's key.
 
 ## Links in reminder emails point to the wrong site
 

@@ -13,6 +13,7 @@ sources:
   - "lib/members/apply.ts"
   - "lib/integrations/records/enabled.ts"
   - "lib/integrations/records/crypto.ts"
+  - "lib/integrations/records/locks.ts"
   - "app/admin/settings/church-records/**"
   - "app/api/admin/church-records/**"
 ---
@@ -43,7 +44,7 @@ If the file can't be read, the page says why and lists the columns it found. Fix
 two42 also has a full member file: one row per person with their contact details, household, role, groups and directory settings. It has no page in the app.
 
 - **Export.** A church admin who is signed in can download it by opening `/api/admin/members/export` on the church's two42 address. The file is named for the church and the date.
-- **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
+- **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. A name that comes locked from your church's records is left as it is, and that row's report says `Name is managed by your church's records; left as it is.` It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
 - **An import that stops partway.** Checking first doesn't make the write all-or-nothing. If writing fails, the response says `Import partially applied`, with the line it stopped at in `failedAtLine` and the lines already written in `appliedLines`. Keep that response; it is the only record of what was written. Delete the `appliedLines` rows from your file and import the rest. Importing the written lines again can create duplicate households. The `failedAtLine` row may be partly written: a new household it names can already exist even though the line isn't in `appliedLines`, and the response doesn't say so. Importing that row again reuses the household, because the import matches an existing household by name; if two households have that name, the row is an error and nothing is written. Check **Households** for what that row already created before importing it again.
 
 The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
@@ -70,7 +71,7 @@ Each member who gets a detail filled in sees a one-time notice on **My profile**
 
 ### Refresh
 
-two42 refreshes every night, reading only people changed in Rock since the last refresh. **Refresh** shows when the last refresh finished and how many linked people still wait for their first copy. A refresh that fails doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh.
+two42 refreshes every night, reading only people changed in Rock since the last refresh. **Refresh** shows when the last refresh finished and how many linked people are still to copy on the next refresh: people not yet copied, and everyone after you save a change to what two42 copies. A refresh that fails or runs out of time doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh.
 
 ### Needs review
 
