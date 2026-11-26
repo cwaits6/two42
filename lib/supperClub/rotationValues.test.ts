@@ -79,4 +79,11 @@ describe("changeRotation", () => {
   it("has no end yet while the start is empty", () => {
     expect(endsOnOf(NEW_ROTATION)).toBe("");
   });
+
+  it("has no end for a month count past the longest rotation, rather than throwing", () => {
+    const months: RotationDraft = { values: NEW_ROTATION, titleFollowsDates: true };
+    const draft = apply(months, ["startsOn", "2026-09-07"], ["lengthMonths", "9999999"]);
+    expect(endsOnOf(draft.values)).toBe("");
+    expect(endsOnOf({ ...draft.values, lengthMonths: "24" })).toBe("2028-09-06");
+  });
 });

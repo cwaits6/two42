@@ -100,11 +100,16 @@ export function nextRotationValues(previous: RotationRow): RotationValues {
   };
 }
 
-/** The rotation's last day; empty until the start and length are set. */
+/** The longest rotation in months; the database holds the same bound. */
+export const MAX_LENGTH_MONTHS = 24;
+
+/** The rotation's last day; empty until the start and a length in range are set. */
 export function endsOnOf(v: RotationValues): string {
   if (v.lengthMode === "end") return v.endsOn;
   const months = Number(v.lengthMonths);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.startsOn) || !Number.isInteger(months) || months < 1) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.startsOn) || !Number.isInteger(months) || months < 1 || months > MAX_LENGTH_MONTHS) {
+    return "";
+  }
   return endFromMonths(v.startsOn, months);
 }
 

@@ -50,6 +50,8 @@ interface Recorded {
 interface FakeOptions {
   /** Per org, the groups with the Supper club on. */
   on?: Record<string, string[]>;
+  /** Per org, groups with a published rotation but the Supper club off. */
+  off?: Record<string, string[]>;
   suppers?: Record<string, ReminderSupperRow[]>;
   claims?: Record<string, SupperClaimRow[]>;
   notGoing?: string[];
@@ -88,19 +90,26 @@ function fakeClient(options: FakeOptions = {}) {
       then(resolve: (v: unknown) => unknown) {
         const org = recorded.filters.find((f) => f.startsWith("org_id="))?.slice("org_id=".length) ?? "";
         const ok = (data: unknown) => resolve({ data, error: null });
+        const inList = (column: string) => {
+          const f = recorded.filters.find((x) => x.startsWith(`${column} in `));
+          return f ? (JSON.parse(f.slice(`${column} in `.length)) as string[]) : null;
+        };
+        const on = options.on?.[org] ?? [];
+        const all = [...on, ...(options.off?.[org] ?? [])];
         switch (table) {
           case "group_settings":
-            return ok((options.on?.[org] ?? []).map((group_id) => ({ group_id })));
+            return ok((recorded.filters.includes("supper_club_enabled=true") ? on : all).map((group_id) => ({ group_id })));
           case "supper_rotations":
             return ok(
-              (options.on?.[org] ?? [])
+              all
+                .filter((g) => inList("group_id")?.includes(g) ?? true)
                 .filter((g) => !(recorded.filters.includes("status=published") && options.ended?.[org]?.includes(g)))
                 .map((g) => ({ id: `rotation-${g}`, title: "Supper Club", bring_list_enabled: !options.bringListOff })),
             );
           case "supper_contributions":
             return ok(Object.entries(options.bringing ?? {}).map(([party_id, item]) => ({ party_id, item })));
           case "suppers":
-            return ok(options.suppers?.[org] ?? []);
+            return ok((options.suppers?.[org] ?? []).filter((d) => inList("rotation_id")?.includes(d.rotation_id) ?? true));
           case "supper_seats":
             return ok([{ party_id: "host" }, { party_id: "guests" }]);
           case "supper_party_members":
@@ -192,8 +201,15 @@ Deno.test("every chain and every call carries the church being run", async () =>
 Deno.test("only the due supper is claimed, and only in groups with the Supper club on", async () => {
   const { client, queries } = fakeClient({
     on: { o: ["g1"] },
-    suppers: { o: [supper("due", "2027-01-10T00:00:00Z"), supper("later", "2027-01-11T00:00:00Z")] },
-    claims: { due: [claim("isaac")] },
+    off: { o: ["g2"] },
+    suppers: {
+      o: [
+        supper("due", "2027-01-10T00:00:00Z"),
+        supper("later", "2027-01-11T00:00:00Z"),
+        supper("due-off", "2027-01-10T00:00:00Z", "g2"),
+      ],
+    },
+    claims: { due: [claim("isaac")], "due-off": [claim("ruth")] },
   });
   await runSupperReminders(client, [church("o")], deps().deps);
   assertEquals(queries.filter((q) => q.rpc === "supper_reminder_claim").map((q) => q.args!._supper_id), ["due"]);

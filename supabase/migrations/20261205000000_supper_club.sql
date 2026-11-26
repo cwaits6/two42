@@ -1184,6 +1184,12 @@ begin
     and st.party_id = old.party_id
     and st.org_id = old.org_id;
 
+  -- Two partners leaving at once would each still see the other's row; the
+  -- lock makes the second wait and see the party empty.
+  perform 1 from public.supper_parties p
+   where p.id = old.party_id and p.org_id = old.org_id
+   for update;
+
   delete from public.supper_parties p
   where p.id = old.party_id
     and p.org_id = old.org_id

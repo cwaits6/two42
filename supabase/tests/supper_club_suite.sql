@@ -488,7 +488,7 @@ begin
     (pg_temp.id('org_a'), old_party, pg_temp.id('g1'), old_rotation, pg_temp.id('grp'));
 end $$;
 select is(pg_temp.wrote('h', format(
-    'insert into public.supper_replies (supper_id, profile_id, status) values (%L, %L, ''not_going'')', pg_temp.id('t1d1'), pg_temp.id('g2'))), 'SC001',
+    'insert into public.supper_replies (supper_id, profile_id, status) values (%L, %L, ''not_going'')', pg_temp.id('t1d2'), pg_temp.id('g1'))), 'SC001',
   'a former partner now in another party at the same table cannot answer for them');
 select is(pg_temp.wrote('h', format(
     'update public.supper_replies set status = ''not_going'' where supper_id = %L and profile_id = %L', pg_temp.id('t1d1'), pg_temp.id('g1'))), 'SC001',
@@ -668,7 +668,11 @@ select is((select count(*)::int from public.supper_reminder_sends where supper_i
   'its sends go with it and the later pass keeps its own');
 update public.group_settings set supper_club_enabled = false where group_id = pg_temp.id('grp');
 select is(
-  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t2d1'), '2031-01-05')), 0,
+  (select count(*)::int
+   from public.suppers d
+   join public.organizations o on o.id = d.org_id,
+   pg_temp.claim(d.org_id, d.id, (d.starts_at at time zone o.timezone)::date) c
+   where d.id = pg_temp.id('t2d1')), 0,
   'with the Supper club off nobody is reminded');
 update public.supper_reminder_sends set claimed_at = null
  where supper_id = pg_temp.id('t1d1') and supper_date = '2031-01-12';
@@ -709,6 +713,9 @@ select is(pg_temp.wrote('u', format('update public.supper_parties set status = '
 select pg_temp.keep('g2_future_replies', (
   select count(*)::text from public.supper_replies r join public.suppers d on d.id = r.supper_id
   where r.profile_id = pg_temp.id('g2') and d.starts_at > now()));
+insert into public.supper_replies (org_id, supper_id, profile_id, status)
+values (pg_temp.id('org_a'), pg_temp.id('t1d1'), pg_temp.id('g1'), 'going')
+on conflict do nothing;
 select pg_temp.keep('g1_replies', (select count(*)::text from public.supper_replies where profile_id = pg_temp.id('g1')));
 delete from public.group_members where group_id = pg_temp.id('grp') and profile_id = pg_temp.id('g2');
 select is((select count(*)::int from public.supper_party_members where party_id = pg_temp.id('pg')), 1,
@@ -717,7 +724,8 @@ select ok(current_setting('sc.g2_future_replies')::int > 0
   and (select count(*)::int from public.supper_replies r join public.suppers d on d.id = r.supper_id
        where r.profile_id = pg_temp.id('g2') and d.starts_at > now()) = 0,
   'and their replies to the party''s suppers still to come');
-select is((select count(*)::text from public.supper_replies where profile_id = pg_temp.id('g1')), current_setting('sc.g1_replies'),
+select ok(current_setting('sc.g1_replies')::int > 0
+  and (select count(*)::text from public.supper_replies where profile_id = pg_temp.id('g1')) = current_setting('sc.g1_replies'),
   'while their partner''s replies stay');
 delete from public.group_members where group_id = pg_temp.id('grp') and profile_id = pg_temp.id('g1');
 select is((select count(*)::int from public.supper_parties where id = pg_temp.id('pg')), 0,

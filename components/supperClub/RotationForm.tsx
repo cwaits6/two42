@@ -23,7 +23,7 @@ import {
   WEEK_OF_MONTH_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@/lib/supperClub/labels";
-import { changeRotation, endsOnOf, type RotationValues } from "@/lib/supperClub/rotationValues";
+import { changeRotation, endsOnOf, MAX_LENGTH_MONTHS, type RotationValues } from "@/lib/supperClub/rotationValues";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
@@ -39,7 +39,7 @@ function check(v: RotationValues): Errors {
   const errors: Errors = {};
   if (!v.title.trim()) errors.title = "Enter a title.";
   if (!v.startsOn) errors.startsOn = "Choose a start date.";
-  if (v.lengthMode === "months" && whole(v.lengthMonths, 1, 24) === null) errors.lengthMonths = "Enter 1 to 24 months.";
+  if (v.lengthMode === "months" && whole(v.lengthMonths, 1, MAX_LENGTH_MONTHS) === null) errors.lengthMonths = `Enter 1 to ${MAX_LENGTH_MONTHS} months.`;
   if (v.lengthMode === "end" && (!v.endsOn || v.endsOn < v.startsOn)) errors.endsOn = "Choose an end date after the start.";
   if (v.repeatKind === "weeks" && whole(v.repeatWeeks, 1, 12) === null) errors.repeatWeeks = "Enter 1 to 12 weeks.";
   if (!v.startTime) errors.startTime = "Choose a start time.";
@@ -232,7 +232,7 @@ export function RotationForm({
           {values.lengthMode === "months" ? (
             <div className="space-y-2">
               <Label htmlFor="rotation-lengthMonths" className="text-lg">Number of months</Label>
-              <Input {...field("lengthMonths")} type="number" inputMode="numeric" min={1} max={24} disabled={locked} value={values.lengthMonths} className={`${FIELD} sm:w-40`} onChange={(e) => set("lengthMonths", e.target.value)} />
+              <Input {...field("lengthMonths")} type="number" inputMode="numeric" min={1} max={MAX_LENGTH_MONTHS} disabled={locked} value={values.lengthMonths} className={`${FIELD} sm:w-40`} onChange={(e) => set("lengthMonths", e.target.value)} />
               <FieldError fieldId="rotation-lengthMonths" message={errors.lengthMonths} />
             </div>
           ) : (

@@ -111,7 +111,7 @@ export function currentRotation(rotations: RotationRow[]): RotationRow | null {
 
 /** Everything about one rotation the caller may read. Null when a read failed. */
 export async function loadRotationData(supabase: Client, rotationId: string): Promise<RotationData | null> {
-  const [dates, parties, members, addresses, notes, unavailable, tables, seats, suppers] = await Promise.all([
+  const [dates, parties, members, addresses, notes, tables, unavailable, seats, suppers] = await Promise.all([
     supabase.from("supper_rotation_dates").select("id, starts_at").eq("rotation_id", rotationId).order("starts_at"),
     supabase.from("supper_parties").select("*").eq("rotation_id", rotationId).order("created_at"),
     supabase.from("supper_party_members").select("party_id, profile_id").eq("rotation_id", rotationId).order("created_at"),
@@ -120,9 +120,17 @@ export async function loadRotationData(supabase: Client, rotationId: string): Pr
       .select("party_id, address_line1, address_line2, city, state, postal_code")
       .eq("rotation_id", rotationId),
     supabase.from("supper_party_notes").select("party_id, food_notes").eq("rotation_id", rotationId),
-    supabase.from("supper_party_unavailable_dates").select("party_id, rotation_date_id").eq("rotation_id", rotationId),
     supabase.from("supper_tables").select("id, rotation_date_id, position").eq("rotation_id", rotationId).order("position"),
-    // Seats, suppers and replies grow with parties times dates, so they page.
+    // Unavailable dates, seats, suppers and replies grow with parties times dates, so they page.
+    fetchAll((from, to) =>
+      supabase
+        .from("supper_party_unavailable_dates")
+        .select("party_id, rotation_date_id")
+        .eq("rotation_id", rotationId)
+        .order("party_id")
+        .order("rotation_date_id")
+        .range(from, to)
+    ),
     fetchAll((from, to) =>
       supabase
         .from("supper_seats")
