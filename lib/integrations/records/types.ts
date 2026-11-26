@@ -1,11 +1,13 @@
 // What two42 needs from a church's records, whichever software keeps them.
 
-/** The address and key two42 reaches a church's records with. */
-export interface RecordsCredentials {
-  /** An origin accepted by parseRecordsAddress(). */
-  baseUrl: string;
-  key: string;
-}
+import type { RecordsCopySource, RecordsCredentials } from "@/supabase/functions/_shared/records-types";
+
+export type {
+  RecordsCopyPerson,
+  RecordsCopySource,
+  RecordsCredentials,
+  RecordsPresence,
+} from "@/supabase/functions/_shared/records-types";
 
 /** A person in the church's records, holding only what matching needs. */
 export interface RecordsPerson {
@@ -31,11 +33,23 @@ export interface PeopleFound {
   incompleteLastNames: Set<string>;
 }
 
+/** How a provider asks a church admin to connect it, in that provider's own words. */
+export interface RecordsConnectStep {
+  addressLabel: string;
+  addressPlaceholder: string;
+  keyLabel: string;
+  /** Where to make the key, and the least it may be allowed to do. */
+  keyHelp: string;
+}
+
 /** One kind of church records two42 can read. Every call only reads. */
 export interface RecordsProvider {
   id: RecordsProviderId;
   /** The product's name, shown to church admins only. */
   label: string;
+  connect: RecordsConnectStep;
+  /** Copying people's details into two42, for a provider that offers it. */
+  copy?: RecordsCopySource;
   /** Proves the address is this provider and the key can read people. */
   checkConnection(creds: RecordsCredentials): Promise<void>;
   /** People who are linkable and have one of these last names. */

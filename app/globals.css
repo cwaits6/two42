@@ -180,6 +180,10 @@ html[data-textsize="larger"] {
   html {
     scroll-behavior: smooth;
   }
+  /* Clears the sticky header when a link jumps to a field. */
+  :target {
+    scroll-margin-top: 6rem;
+  }
   h1, h2, h3 {
     font-family: var(--font-serif);
     line-height: 1.2;

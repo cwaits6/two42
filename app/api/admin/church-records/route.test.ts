@@ -24,8 +24,9 @@ import { DELETE, GET, PUT } from "./route";
 const SECRET = randomBytes(32);
 const SUMMARY = { provider: "rock", baseUrl: "https://rock.example.org", keyHint: "9012", connectedAt: "2026-11-20T00:00:00Z" };
 
-function put(body: unknown) {
-  return PUT(new Request("http://test/api/admin/church-records", { method: "PUT", body: JSON.stringify(body) }));
+function put(body: Record<string, unknown>) {
+  const withProvider = "provider" in body ? body : { provider: "rock", ...body };
+  return PUT(new Request("http://test/api/admin/church-records", { method: "PUT", body: JSON.stringify(withProvider) }));
 }
 
 beforeEach(() => {
@@ -54,7 +55,7 @@ describe("/api/admin/church-records", () => {
 
   it("shows the connection without the key", async () => {
     const res = await GET();
-    expect(await res.json()).toEqual({ connection: { ...SUMMARY, providerLabel: "Rock RMS" } });
+    expect(await res.json()).toEqual({ connection: { ...SUMMARY, providerLabel: "Rock RMS", canCopy: true } });
     expect(store.readConnection).toHaveBeenCalledWith("org-1");
   });
 
@@ -84,9 +85,11 @@ describe("/api/admin/church-records", () => {
     expect(store.saveConnection).not.toHaveBeenCalled();
   });
 
-  it("refuses a provider two42 doesn't know", async () => {
-    const res = await put({ provider: "other", address: "rock.example.org", key: "abcdefgh1234" });
-    expect(res.status).toBe(400);
+  it.each([["other"], [undefined], [null]])("refuses a provider that is unknown or missing: %j", async (provider) => {
+    const body = provider === undefined ? { address: "rock.example.org", key: "abcdefgh1234" } : { provider, address: "rock.example.org", key: "abcdefgh1234" };
+    const res = PUT(new Request("http://test/api/admin/church-records", { method: "PUT", body: JSON.stringify(body) }));
+    expect((await res).status).toBe(400);
+    expect((await (await res).json()).error).toBe("Choose which church software to connect.");
     expect(checkConnection).not.toHaveBeenCalled();
   });
 

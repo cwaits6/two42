@@ -8,6 +8,8 @@ import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
+import { ErrorState } from "@/components/states/ErrorState";
+import { readProfileRecords } from "@/lib/integrations/records/profileRecords";
 
 export const generateMetadata = () => pageTitle("Set up your profile");
 
@@ -39,7 +41,7 @@ export default async function ProfileSetupPage() {
 
   // Private buckets: the wizard's avatar preview renders this
   // value; the wizard itself persists only fresh raw upload URLs.
-  const [avatarUrl, household] = await Promise.all([
+  const [avatarUrl, household, records] = await Promise.all([
     mintSignedUrl(profile.avatar_url),
     profile.family_id
       ? supabase
@@ -48,8 +50,17 @@ export default async function ProfileSetupPage() {
           .eq("id", profile.family_id)
           .maybeSingle()
       : null,
+    readProfileRecords([user.id]),
   ]);
   profile.avatar_url = avatarUrl;
+  if (!records.ok) {
+    return (
+      <PageContainer size="reading">
+        <PageHeader title="Set up your profile" />
+        <ErrorState thing="your profile" />
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer size="reading">
@@ -61,6 +72,7 @@ export default async function ProfileSetupPage() {
         profile={profile}
         userEmail={user.email ?? ""}
         householdName={household?.data?.family_name ?? null}
+        records={records.byProfile[user.id]}
       />
     </PageContainer>
   );

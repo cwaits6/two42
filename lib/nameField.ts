@@ -3,10 +3,9 @@
  * name field shows. Kept free of server imports so forms and routes share it.
  */
 import { titleCaseName } from "@/lib/sanitize";
+import { MAX_NAME_LENGTH, MAX_SUFFIX_LENGTH, MAX_TITLE_LENGTH } from "@/supabase/functions/_shared/name-case";
 
-export const MAX_NAME_LENGTH = 100;
-export const MAX_TITLE_LENGTH = 40;
-export const MAX_SUFFIX_LENGTH = 20;
+export { MAX_NAME_LENGTH, MAX_SUFFIX_LENGTH, MAX_TITLE_LENGTH };
 
 /** Title (Dr., Pastor) and suffix (Jr., III) are optional and only length-checked. */
 export function nameAffixError(value: string | null, field: "title" | "suffix"): string | undefined {

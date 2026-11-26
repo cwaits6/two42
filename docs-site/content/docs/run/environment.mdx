@@ -5,6 +5,8 @@ sources:
   - ".env.example"
   - "lib/config.ts"
   - "lib/prayer/crypto.ts"
+  - "lib/integrations/records/crypto.ts"
+  - "supabase/functions/_shared/records-crypto.ts"
   - "lib/serving/links.ts"
   - "lib/serving/config.ts"
   - "lib/email/domainCap.ts"
@@ -55,6 +57,12 @@ Set them in `.env.local` locally and in the host's environment in production. Th
 | `PRAYER_BODY_KEY_PREVIOUS`, `PRAYER_AUTHOR_KEY_PREVIOUS` | secret | no | The old key, set only while rotating a key. A value that is set but malformed fails every prayer page, the same as a missing key. |
 
 Keep two copies of each prayer key outside the host. Text sealed with a lost body key cannot be recovered. Rotation and recovery are described in [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md).
+
+### Church records
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. Changing it makes every saved key unreadable, and each church admin connects again; the links stay. Set the same value in the edge function secrets. |
 
 ### Serving
 
@@ -109,6 +117,7 @@ Set once per Supabase project with `npx supabase secrets set NAME=value`, or und
 | `EMAIL_FROM` | in production | The `From:` address, same rule as the app's `NEXT_PUBLIC_EMAIL_FROM`. Defaults to `two42 <noreply@two42.io>`. |
 | `SERVING_LINK_MODE` | no | Same meaning as the app's. |
 | `APP_NAME`, `BRAND_COLOR` | no | Fallbacks for the email branding when a church's branding is empty. |
+| `RECORDS_KEY_SECRET` | no | The same value as the app's. `refresh-church-records` opens each church's key with it; unset, that function does nothing. |
 
 Supabase injects `SUPABASE_URL` and the service key (`SUPABASE_SECRET_KEYS` on hosted projects, `SUPABASE_SERVICE_ROLE_KEY` on the local stack). Do not set them.
 

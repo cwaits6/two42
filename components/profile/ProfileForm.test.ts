@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AvatarCropStepProps } from "@/components/profile/AvatarCropStep";
 import type { FamilyUnit, Profile } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -130,7 +131,13 @@ afterEach(async () => {
 
 async function mount(
   overrides: Partial<Profile> = {},
-  props: { isAdmin?: boolean; editingOther?: boolean; family?: FamilyUnit; onSaved?: () => void } = {},
+  props: {
+    isAdmin?: boolean;
+    editingOther?: boolean;
+    family?: FamilyUnit;
+    onSaved?: () => void;
+    records?: ProfileRecords | null;
+  } = {},
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -580,5 +587,46 @@ describe("ProfileForm copy about the person", () => {
       "Sharing what they do helps people in their groups find help from someone they know.",
     );
     expect(document.body.textContent).not.toMatch(/\b(you|your|my)\b/i);
+  });
+});
+
+describe("ProfileForm with details from the church's records", () => {
+  const records: ProfileRecords = {
+    settings: { name: "locked", phone_mobile: "member", birthday: "member" },
+    values: {
+      name: { state: "records", churchValue: { first_name: "Ada", last_name: "Lovelace" } },
+      phone_mobile: { state: "changed", churchValue: { phone_mobile: "+15125550199" } },
+      birthday: { state: "records", churchValue: { birth_month: 12, birth_day: 10, birth_year: null } },
+    },
+    noticeDue: false,
+  };
+
+  it("shows a locked name as text, managed by the church, and never sends it", async () => {
+    const form = await mount({}, { records });
+    expect(form.field("first_name").tagName).toBe("P");
+    expect(document.body.textContent).toContain("Managed by your church");
+    expect(document.querySelector("input#first_name")).toBeNull();
+    await form.submit();
+    const sent = update.mock.calls[0][0] as Record<string, unknown>;
+    expect(sent).not.toHaveProperty("first_name");
+    expect(sent).not.toHaveProperty("last_name");
+    expect(sent).toHaveProperty("phone_mobile");
+  });
+
+  it("labels a value from the records, and offers the church's value back for one the member changed", async () => {
+    await mount({ phone_mobile: "+15125550123" }, { records });
+    expect(document.body.textContent).toContain("From your church's records");
+    expect(document.body.textContent).toContain("Changed in two42");
+    const button = [...document.querySelectorAll("button")].find((b) => b.textContent === "Use your church's value")!;
+    await act(async () => button.click());
+    expect(update).toHaveBeenCalledWith({ phone_mobile: "+15125550199" });
+    expect((document.getElementById("phone_mobile") as HTMLInputElement).value).toBe("(512) 555-0199");
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows nothing about the records for a person with none", async () => {
+    await mount();
+    expect(document.body.textContent).not.toContain("church's records");
+    expect(document.body.textContent).not.toContain("Managed by your church");
   });
 });

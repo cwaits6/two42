@@ -2249,3 +2249,34 @@ describe("a child without an account", () => {
     });
   });
 });
+
+describe("planImport with names locked by the church's records", () => {
+  const snapshot: OrgSnapshot = {
+    ...emptySnapshot,
+    profiles: [profile({ id: "p1", email: "ada@example.org", first_name: "Ada", last_name: "Okafor" })],
+  };
+  const row = makeRow({
+    email: "ada@example.org",
+    has_login: true,
+    first_name: "Adaeze",
+    last_name: "Okafor",
+    phone_mobile: "555-0100",
+  });
+
+  it("leaves a locked name alone and says so, and still writes the rest", () => {
+    const plan = planImport([row], snapshot, { lockedNames: new Set(["p1"]) });
+    expect(plan.rows[0].warnings).toContain("Name is managed by your church's records; left as it is.");
+    expect(plan.rows[0].changes).not.toHaveProperty("first_name");
+    expect(plan.writes.find((w) => w.kind === "update_profile")).toMatchObject({
+      values: { phone_mobile: "555-0100" },
+    });
+    expect(
+      plan.writes.some((w) => w.kind === "update_profile" && "first_name" in w.values)
+    ).toBe(false);
+  });
+
+  it("changes the name when it isn't locked", () => {
+    const plan = planImport([row], snapshot);
+    expect(plan.rows[0].changes?.first_name).toEqual(["Ada", "Adaeze"]);
+  });
+});

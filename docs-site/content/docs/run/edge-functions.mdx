@@ -1,11 +1,13 @@
 ---
 title: Edge functions
-description: The four scheduled edge functions, their pg_cron schedules, the Vault secrets they need, and how to check they ran.
+description: The scheduled edge functions, their pg_cron schedules, the Vault secrets they need, and how to check they ran.
 sources:
   - "supabase/functions/send-event-reminders/**"
   - "supabase/functions/send-supper-reminders/**"
   - "supabase/functions/send-serving-reminders/**"
   - "supabase/functions/clean-up-expired-data/**"
+  - "supabase/functions/refresh-church-records/**"
+  - "supabase/functions/_shared/records-refresh.ts"
   - "supabase/functions/_shared/event-reminder-due.ts"
   - "supabase/functions/_shared/event-reminder-schedule.ts"
   - "supabase/functions/_shared/supper-reminder-due.ts"
@@ -37,6 +39,8 @@ The source lives in `supabase/functions/`. Each function is called by a `pg_cron
 | `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
 | `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
 
+`refresh-church-records` is the exception: no migration schedules it. See [refresh-church-records](#refresh-church-records).
+
 Each function works through every active church in turn and filters every query on that church. A church an operator has suspended gets no reminders and no clean-up; see [Add a church](/docs/run/add-a-church#suspend-a-church).
 
 ### send-event-reminders
@@ -55,6 +59,26 @@ Runs in two modes, one per job:
 - **Monthly**, on the 1st. Emails each team the service dates that still need people. A team whose dates are all covered gets nothing.
 
 Serving emails carry links that act without signing in when `SERVING_LINK_SECRET` is set and the link mode is `signed`. See [Environment variables](/docs/run/environment#edge-function-secrets).
+
+### refresh-church-records
+
+For every church connected to its church records, copies the details of people changed there since the last run, and of linked people not copied yet, into two42, following the church admin's settings. It lists linked people who became inactive or can't be found under **Needs review**, and changes nothing else about them. It stops starting people after 90 seconds, shared by every church in the run; the rest wait for the next run, which carries on where this one stopped and copies people still waiting first. Each day's run starts one church further down the list, so a church that uses up the time doesn't keep the others waiting. A run that ran out of time answers 500 and lists, under `cutShort`, each church it stopped partway through and, under `notStarted`, each it never reached. A church whose refresh was already running, a **Refresh now** for example, is skipped and listed under `busy`, and the run answers 500 too. A church where some people's copy failed is listed under `copyFailed`, and the run answers 500; the next run copies those people again. Each listed church's **Last refreshed** stays on its last finished refresh. A church admin's **Refresh now** runs the same code. See [Imports](/docs/administer/imports#copy-details-from-your-churchs-records).
+
+It needs `RECORDS_KEY_SECRET` in the edge function secrets, the same value as the app's; without it the function answers 200 and does nothing, and with a value that isn't a 32-byte base64 key it answers 500 and does nothing. Before it opens any church's key it checks that the runtime refuses a request to a loopback address, and stops with a 500 if it doesn't, saying so in the response.
+
+No migration schedules it. To run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:30 UTC:
+
+```sql
+select private.schedule_edge_reminder(
+  'refresh-church-records-nightly',
+  '30 8 * * *',
+  '/functions/v1/refresh-church-records',
+  '{}'::jsonb,
+  120000
+);
+```
+
+The scheduled-jobs check doesn't know this job: it counts every response in the first 15 minutes of each hour against the jobs it expects. Scheduled at half past, the job's responses fall outside those windows; scheduled on the hour, the check reports an extra response that night, and a non-200 when the run was cut short. Read this job's results in `net._http_response` instead.
 
 ### clean-up-expired-data
 
@@ -115,7 +139,7 @@ The same check, as one query, is [`scripts/check-scheduled-jobs.sql`](https://gi
 ## Deploy the functions
 
 ```bash
-npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders refresh-church-records
 ```
 
 Deploy them on every update, before applying the migrations. That is the order this repository's CI uses; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).

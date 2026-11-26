@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FamilyUnit, Profile } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -30,7 +31,11 @@ const FAMILY = {
 let root: Root;
 const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
 
-async function mount(family = FAMILY, householdProfiles: Profile[] = []) {
+async function mount(
+  family = FAMILY,
+  householdProfiles: Profile[] = [],
+  records: { householdRecords?: Record<string, ProfileRecords>; anniversaryRecords?: ProfileRecords | null } = {},
+) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -43,6 +48,7 @@ async function mount(family = FAMILY, householdProfiles: Profile[] = []) {
         householdProfiles,
         today: "2026-11-26",
         onEditSelf: () => {},
+        ...records,
       }),
     );
   });
@@ -207,5 +213,53 @@ describe("saving household details", () => {
       "Couldn't save the household. Check your connection and try again.",
     );
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("details from the church's records", () => {
+  const SPOUSE = {
+    id: "spouse",
+    first_name: "Ben",
+    last_name: "Okafor",
+    relationship: "spouse",
+    role: "member",
+    family_id: "f1",
+  } as Profile;
+
+  it("shows a spouse's locked name as managed by the church, with no field to edit it", async () => {
+    await mount(FAMILY, [SPOUSE], {
+      householdRecords: {
+        spouse: {
+          settings: { name: "locked" },
+          values: { name: { state: "records", churchValue: { first_name: "Ben", last_name: "Okafor" } } },
+          noticeDue: false,
+        },
+      },
+    });
+    const edit = document.querySelector('[aria-label="Edit Ben Okafor"]') as HTMLButtonElement;
+    await act(async () => edit.click());
+    expect(document.body.textContent).toContain("Managed by your church");
+    expect(document.querySelector("input#first_name")).toBeNull();
+  });
+
+  it("puts a changed anniversary back to the church's value", async () => {
+    await mount(FAMILY, [], {
+      anniversaryRecords: {
+        settings: { anniversary: "member" },
+        values: {
+          anniversary: {
+            state: "changed",
+            churchValue: { anniversary_month: 6, anniversary_day: 1, anniversary_year: 1985 },
+          },
+        },
+        noticeDue: false,
+      },
+    });
+    expect(document.body.textContent).toContain("Changed in two42");
+    const back = [...document.querySelectorAll("button")].find((b) => b.textContent === "Use your church's value")!;
+    await act(async () => back.click());
+    expect(savedBody()).toEqual({ anniversary_month: "6", anniversary_day: "1", anniversary_year: "1985" });
+    expect(toast.success).toHaveBeenCalledWith("Your church's value is back.");
+    expect(field("anniversary_day").value).toBe("1");
   });
 });

@@ -6,16 +6,18 @@ import { DirectoryPreview } from "@/components/profile/DirectoryPreview";
 import { displayName, initials } from "@/lib/names";
 import { formatPhone } from "@/lib/sanitize";
 import type { FamilyUnit, Profile } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 interface MyProfileViewProps {
   profile: Profile;
   family: FamilyUnit | null;
+  records?: ProfileRecords | null;
 }
 
 const eyebrow =
   "text-base font-bold uppercase tracking-wider text-muted-foreground";
 
-export function MyProfileView({ profile, family }: MyProfileViewProps) {
+export function MyProfileView({ profile, family, records = null }: MyProfileViewProps) {
   const city = profile.city
     ? `${profile.city}${profile.state ? `, ${profile.state}` : ""}`
     : family?.city
@@ -69,6 +71,7 @@ export function MyProfileView({ profile, family }: MyProfileViewProps) {
         families={[]}
         family={family}
         isAdmin={false}
+        records={records}
       />
     </div>
   );

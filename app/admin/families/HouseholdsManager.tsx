@@ -39,6 +39,9 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { nameFieldError } from "@/lib/nameField";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
+import { RecordsNote } from "@/components/profile/RecordsNote";
+import { agreedAnniversary, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import { type Columns, FIELD_COLUMNS, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
@@ -242,6 +245,9 @@ export function HouseholdsManager() {
 
   function openCreate() {
     setEditing(null);
+    anniversaryRequestRef.current++;
+    setAnniversaryRecords(null);
+    setRestoringAnniversary(false);
     setForm(EMPTY_FORM);
     setFormErrors({});
     photoRequestRef.current++; // invalidate any in-flight mint
@@ -255,8 +261,74 @@ export function HouseholdsManager() {
     setDialogOpen(true);
   }
 
+  // The anniversary's records state for the household being edited.
+  const [anniversaryRecords, setAnniversaryRecords] = useState<ProfileRecords | null>(null);
+  const [restoringAnniversary, setRestoringAnniversary] = useState(false);
+  const anniversaryRequestRef = useRef(0);
+
+  async function loadAnniversaryRecords(family: FamilyWithMembers | undefined) {
+    const requestId = ++anniversaryRequestRef.current;
+    setAnniversaryRecords(null);
+    const ids = family?.members.map((m) => m.id) ?? [];
+    if (ids.length === 0) return;
+    const { data, error } = await supabase
+      .from("records_field_values")
+      .select("state, church_value")
+      .eq("field", "anniversary")
+      .in("profile_id", ids);
+    if (anniversaryRequestRef.current !== requestId) return;
+    // The anniversary is never locked, so without its state the dialog only loses the label.
+    if (error) {
+      logError("Failed to load the anniversary's source", error, { route: "/admin/families" });
+      return;
+    }
+    const agreed = agreedAnniversary(
+      (data ?? []).map((row) => ({ state: row.state as ValueState, churchValue: row.church_value as Columns })),
+    );
+    setAnniversaryRecords(agreed ? { settings: {}, values: { anniversary: agreed }, noticeDue: false } : null);
+  }
+
+  // Writing the church's value back is enough: the database marks the
+  // anniversary as from the church's records again.
+  async function restoreChurchAnniversary() {
+    const label = recordsLabel(anniversaryRecords, "anniversary");
+    if (!editing || label?.kind !== "changed" || !label.churchValue) return;
+    const church = label.churchValue;
+    const family = editing;
+    // Opening another household bumps this, so a late answer can't reach its form.
+    const session = anniversaryRequestRef.current;
+    setRestoringAnniversary(true);
+    const { data, error } = await supabase
+      .from("family_units")
+      .update(
+        Object.fromEntries(FIELD_COLUMNS.anniversary.map((column) => [column, church[column] ?? null])) as Pick<
+          FamilyUnit,
+          "anniversary_month" | "anniversary_day" | "anniversary_year"
+        >,
+      )
+      .eq("id", family.id)
+      .select("id");
+    if (anniversaryRequestRef.current !== session) {
+      loadFamilies();
+      return;
+    }
+    setRestoringAnniversary(false);
+    if (error || !data?.length) {
+      if (error) logError("Failed to use the church's anniversary", error, { route: "/admin/families" });
+      toast.error(failureMessage("use your church's value"));
+      return;
+    }
+    const text = (column: string) => (church[column] == null ? "" : String(church[column]));
+    setForm((prev) => ({ ...prev, ...Object.fromEntries(FIELD_COLUMNS.anniversary.map((column) => [column, text(column)])) }));
+    toast.success("Your church's value is back.");
+    loadAnniversaryRecords(families.find((f) => f.id === family.id));
+    loadFamilies();
+  }
+
   function openEdit(family: FamilyUnit) {
     setEditing(family);
+    setRestoringAnniversary(false);
+    loadAnniversaryRecords(families.find((f) => f.id === family.id));
     setForm(fromFamily(family));
     setFormErrors({});
     // The stored value is a private-bucket public URL — exchange it
@@ -891,6 +963,12 @@ export function HouseholdsManager() {
                 year={form.anniversary_year}
                 onChange={(changes) => setForm({ ...form, ...changes })}
                 errors={formErrors}
+              />
+              <RecordsNote
+                records={anniversaryRecords}
+                field="anniversary"
+                onUseChurchValue={restoreChurchAnniversary}
+                busy={restoringAnniversary}
               />
               <p className="text-base text-muted-foreground">
                 Shown on the household&apos;s directory card only when a spouse is listed.

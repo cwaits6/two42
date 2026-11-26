@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -55,7 +56,7 @@ const PROFILE = {
 
 let root: Root;
 
-async function mount(profile: Profile = PROFILE) {
+async function mount(profile: Profile = PROFILE, records: ProfileRecords | null = null) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -65,6 +66,7 @@ async function mount(profile: Profile = PROFILE) {
         profile,
         userEmail: "ada@example.test",
         householdName: "Lovelace Family",
+        records,
       }),
     );
   });
@@ -263,5 +265,32 @@ describe("the Gender step", () => {
     await click("Finish setup");
 
     expect(writes.find((w) => w.table === "profiles")!.values).toMatchObject({ gender: "female" });
+  });
+});
+
+describe("details locked by the church's records", () => {
+  const LOCKED: ProfileRecords = {
+    settings: { name: "locked", gender: "locked" },
+    values: {
+      name: { state: "records", churchValue: { first_name: "Ada", last_name: "Lovelace" } },
+      gender: { state: "records", churchValue: { gender: "female" } },
+    },
+    noticeDue: false,
+  };
+
+  it("shows the name and gender as managed by the church and leaves them out of the save", async () => {
+    await mount({ ...PROFILE, gender: "female" }, LOCKED);
+    expect(document.querySelector("input#first_name")).toBeNull();
+    expect(document.body.textContent).toContain("Managed by your church");
+    await click("Continue");
+    expect(document.body.textContent).toContain("Managed by your church");
+    expect([...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Female")).toBe(false);
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    const values = writes.find((w) => w.table === "profiles")!.values;
+    for (const key of ["first_name", "last_name", "gender"]) expect(values).not.toHaveProperty(key);
   });
 });

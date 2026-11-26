@@ -13,6 +13,9 @@ sources:
   - "lib/members/apply.ts"
   - "lib/integrations/records/enabled.ts"
   - "lib/integrations/records/crypto.ts"
+  - "lib/integrations/records/locks.ts"
+  - "app/admin/settings/church-records/**"
+  - "app/api/admin/church-records/**"
 ---
 
 ## Invite people from a CSV file
@@ -41,11 +44,41 @@ If the file can't be read, the page says why and lists the columns it found. Fix
 two42 also has a full member file: one row per person with their contact details, household, role, groups and directory settings. It has no page in the app.
 
 - **Export.** A church admin who is signed in can download it by opening `/api/admin/members/export` on the church's two42 address. The file is named for the church and the date.
-- **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
+- **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. A name that comes locked from your church's records is left as it is, and that row's report says `Name is managed by your church's records; left as it is.` It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
 - **An import that stops partway.** Checking first doesn't make the write all-or-nothing. If writing fails, the response says `Import partially applied`, with the line it stopped at in `failedAtLine` and the lines already written in `appliedLines`. Keep that response; it is the only record of what was written. Delete the `appliedLines` rows from your file and import the rest. Importing the written lines again can create duplicate households. The `failedAtLine` row may be partly written: a new household it names can already exist even though the line isn't in `appliedLines`, and the response doesn't say so. Importing that row again reuses the household, because the import matches an existing household by name; if two households have that name, the row is an error and nothing is written. Check **Households** for what that row already created before importing it again.
 
 The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
 
-<Callout type="info">
-There is no sync with a church management system yet. two42 can connect to a church's Rock RMS and link people to their records there, but it copies nothing from it, and it stays off unless the operator sets `RECORDS_KEY_SECRET`. The design for the rest is in [`docs/integrations/church-records.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md).
-</Callout>
+## Copy details from your church's records
+
+When the operator has set `RECORDS_KEY_SECRET`, **Church settings → Church records** lets a church admin connect the church's records (Rock RMS) and link people to them. Once connected, the same page chooses what two42 copies into linked people's profiles.
+
+### Connect
+
+The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers** and **DefinedValues** REST controllers, with no edit rights. two42 checks the key can view all three before it saves it. two42 never writes to Rock.
+
+### What two42 copies
+
+For each of **Name**, **Suffix**, **Title**, **Gender**, **Mobile phone**, **Work phone**, **Birthday**, **Anniversary**, **Photo** and **A child's grade**, choose:
+
+- **Not from your church's records**: two42 doesn't touch it.
+- **From them, locked**: members see **Managed by your church** and can't change it. Only name, suffix, title, gender and a child's grade can be locked.
+- **From them, member can change**: filled in, and a member who changes or clears it keeps their own from then on. They can go back with **Use your church's value**.
+
+Select **Save what two42 copies**. The next refresh fills in what you turned on. While a refresh is running the save is refused, because that refresh works from the settings it started with; save again once it finishes. A detail a member can change that two42 already holds a different value for is left as the member's, with your church's value offered to them. A locked detail always takes your church's value. The preferred name comes from the nick name, only while a member hasn't set one. The sign-in email, unlisted phone numbers, the texting flag, connection status and your church's own fields are never copied. Addresses and home phones come with households, which aren't copied yet.
+
+Each member who gets a detail filled in sees a one-time notice on **My profile**. What they see is in [Profile](/docs/use/profile#details-from-your-churchs-records).
+
+### Refresh
+
+two42 refreshes every night, reading people changed in Rock since the last refresh and anyone not copied yet. **Refresh** shows when the last refresh finished and how many linked people are still to copy on the next refresh: people not yet copied, and everyone after you save a change to what two42 copies. A refresh that fails or runs out of time doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh.
+
+### Needs review
+
+**Needs review** lists linked people who became inactive in Rock or can't be found there any more, with **Open in Rock RMS** for an inactive person and **Unlink**. Nothing happens to them automatically.
+
+### Disconnecting or unlinking
+
+Unlinking a person, or disconnecting, keeps everything already copied in their profile as ordinary two42 details they can change. Only the link and further updates stop.
+
+The design is in [`docs/integrations/church-records.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md).

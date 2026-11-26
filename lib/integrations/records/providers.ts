@@ -7,3 +7,8 @@ const PROVIDERS: Record<RecordsProviderId, RecordsProvider> = { rock: rockProvid
 export function providerFor(id: unknown): RecordsProvider | null {
   return typeof id === "string" && Object.hasOwn(PROVIDERS, id) ? PROVIDERS[id as RecordsProviderId] : null;
 }
+
+/** Every provider a church admin can connect, in the order the connect form offers them. */
+export function listProviders(): RecordsProvider[] {
+  return Object.values(PROVIDERS);
+}
