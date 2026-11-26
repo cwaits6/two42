@@ -247,7 +247,7 @@ as $$
 $$;
 
 revoke execute on function public.pending_group_join_requests(uuid) from public, anon;
-grant  execute on function public.pending_group_join_requests(uuid) to authenticated, service_role;
+grant  execute on function public.pending_group_join_requests(uuid) to authenticated;
 
 comment on function public.pending_group_join_requests(uuid) is
   'Pending requests for a group with each requester''s name and email (NULL when hide_email), for the leader''s review list. Tenant anchor: the caller''s own profiles row; rows only when the caller leads the group or is an org admin, else empty.';
