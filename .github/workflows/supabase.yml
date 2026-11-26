@@ -196,7 +196,8 @@ jobs:
           deno check --lock=deno.lock --frozen supabase/functions/send-event-reminders/index.ts \
                               supabase/functions/send-serving-reminders/index.ts \
                               supabase/functions/clean-up-expired-data/index.ts \
-                              supabase/functions/send-supper-reminders/index.ts
+                              supabase/functions/send-supper-reminders/index.ts \
+                              supabase/functions/refresh-church-records/index.ts
 
   migrate:
     name: Push migrations & dump schema

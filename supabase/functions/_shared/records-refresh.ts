@@ -245,7 +245,7 @@ async function run(
   // merged or deleted in the records leaves no change to find, so this can't
   // wait for one. Nothing else happens to them.
   const presence = await source.presence(creds, links.map((l) => l.external_person_id));
-  const reviewed: Partial<PersonStateRow>[] = [];
+  const reviewed: Pick<PersonStateRow, "profile_id" | "review_reason" | "review_since">[] = [];
   const now = options.now().toISOString();
   for (const link of links) {
     const status = presence.get(link.external_person_id);
@@ -253,11 +253,13 @@ async function run(
     const state = states.get(link.profile_id);
     if (reason) result.review++;
     if ((state?.review_reason ?? null) === reason) continue;
-    reviewed.push({ org_id: orgId, profile_id: link.profile_id, review_reason: reason, review_since: reason ? now : null });
+    reviewed.push({ profile_id: link.profile_id, review_reason: reason, review_since: reason ? now : null });
   }
   for (let i = 0; i < reviewed.length; i += PAGE) {
     await must(
-      db.from("records_person_state").upsert(reviewed.slice(i, i + PAGE), { onConflict: "org_id,profile_id" }),
+      db
+        .from("records_person_state")
+        .upsert(reviewed.slice(i, i + PAGE).map((row) => ({ ...row, org_id: orgId })), { onConflict: "org_id,profile_id" }),
       "review write",
     );
   }
