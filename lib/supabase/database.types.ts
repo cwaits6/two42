@@ -1257,6 +1257,58 @@ isOneToOne: true
       referencedColumns: ["id"]
     }
                   ]
+                },"records_field_settings": {
+                  Row: {
+                    "field": string,"mode": string,"org_id": string,"updated_at": string,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "field": string,"mode": string,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "field"?: string,"mode"?: string,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_field_settings_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "records_field_settings_updated_by_fkey"
+      columns: ["updated_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_field_settings_updated_by_fkey"
+      columns: ["updated_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_field_values": {
+                  Row: {
+                    "church_value": NonNullable<Json>,"field": string,"org_id": string,"profile_id": string,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "church_value"?: NonNullable<Json>,"field": string,"org_id"?: string,"profile_id": string,"state": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "church_value"?: NonNullable<Json>,"field"?: string,"org_id"?: string,"profile_id"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_field_values_link_fkey"
+      columns: ["org_id","profile_id"]
+isOneToOne: false
+      referencedRelation: "records_person_links"
+      referencedColumns: ["org_id","profile_id"]
+    }
+                  ]
                 },"records_person_links": {
                   Row: {
                     "connection_id": string,"external_person_id": string,"linked_at": string,"linked_by": string | null,"org_id": string,"profile_id": string
@@ -1299,6 +1351,52 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_person_state": {
+                  Row: {
+                    "copied_at": string | null,"notice_filled_at": string | null,"notice_seen_at": string | null,"org_id": string,"profile_id": string,"review_reason": string | null,"review_since": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "copied_at"?: string | null,"notice_filled_at"?: string | null,"notice_seen_at"?: string | null,"org_id"?: string,"profile_id": string,"review_reason"?: string | null,"review_since"?: string | null
+                  }
+                  Update: {
+                    "copied_at"?: string | null,"notice_filled_at"?: string | null,"notice_seen_at"?: string | null,"org_id"?: string,"profile_id"?: string,"review_reason"?: string | null,"review_since"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_person_state_link_fkey"
+      columns: ["org_id","profile_id"]
+isOneToOne: true
+      referencedRelation: "records_person_links"
+      referencedColumns: ["org_id","profile_id"]
+    }
+                  ]
+                },"records_refresh_state": {
+                  Row: {
+                    "connection_id": string,"cursor": string | null,"last_counts": NonNullable<Json>,"last_refreshed_at": string | null,"org_id": string,"running_since": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "connection_id": string,"cursor"?: string | null,"last_counts"?: NonNullable<Json>,"last_refreshed_at"?: string | null,"org_id"?: string,"running_since"?: string | null
+                  }
+                  Update: {
+                    "connection_id"?: string,"cursor"?: string | null,"last_counts"?: NonNullable<Json>,"last_refreshed_at"?: string | null,"org_id"?: string,"running_since"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_refresh_state_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_refresh_state_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
     }
                   ]
                 },"rsvps": {
@@ -2511,8 +2609,26 @@ isOneToOne: false
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string }; Returns: string
                            },
+"records_apply_copy":
+{ Args: { "_expected": Json,"_filled": boolean,"_grade": Json,"_household": Json,"_org_id": string,"_profile": Json,"_profile_id": string,"_values": Json }; Returns: string
+                           },
+"records_edit_state":
+{ Args: { "_church_value": Json,"_columns": (string)[],"_new": Json }; Returns: string
+                           },
+"records_field_columns":
+{ Args: { "_field": string }; Returns: (string)[]
+                           },
+"records_is_empty":
+{ Args: { "_value": Json }; Returns: boolean
+                           },
+"records_pick":
+{ Args: { "_columns": (string)[],"_row": Json }; Returns: Json
+                           },
 "records_save_connection":
 { Args: { "_base_url": string,"_connected_by": string,"_key_ciphertext": string,"_key_hint": string,"_org_id": string,"_provider": string }; Returns: undefined
+                           },
+"records_save_field_settings":
+{ Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: undefined
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string
