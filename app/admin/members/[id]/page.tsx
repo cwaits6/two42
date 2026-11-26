@@ -14,6 +14,7 @@ import { toUserRole } from "@/lib/roles";
 import { roleLockReason } from "../memberRoles";
 import { MemberRole } from "./MemberRole";
 import { logError } from "@/lib/log";
+import { readProfileRecords } from "@/lib/integrations/records/profileRecords";
 
 export const generateMetadata = () => pageTitle("Edit member");
 
@@ -73,6 +74,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
     });
   }
   const adminCount = admins.count ?? 1;
+  const records = await readProfileRecords(profile.id);
 
   return (
     <PageContainer size="reading">
@@ -102,6 +104,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
           family_id: currentProfile.family_id,
           relationship: currentProfile.relationship,
         }}
+        records={records}
       />
     </PageContainer>
   );

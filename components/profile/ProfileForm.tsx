@@ -51,6 +51,8 @@ import {
 } from "@/lib/members/avatar-eligibility";
 import type { Profile, FamilyUnit, Gender } from "@/lib/types";
 import { logError } from "@/lib/log";
+import { isLocked, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import type { ValueField } from "@/supabase/functions/_shared/records-copy";
 
 interface ProfileFormProps {
   profile: Profile;
@@ -83,6 +85,8 @@ interface ProfileFormProps {
   editingOther?: boolean;
   /** Called after successful save so parent can refresh/redirect */
   onSaved?: () => void;
+  /** Which details came from the church's records, for their labels and locks. */
+  records?: ProfileRecords | null;
 }
 
 /** Form state — strings for all inputs (conversion happens on save) */
@@ -167,6 +171,55 @@ function Optional() {
   return <span className="font-normal text-muted-foreground">(optional)</span>;
 }
 
+/** Under a detail from the church's records: where it came from, and the way back to the church's value. */
+function RecordsNote({
+  records,
+  field,
+  onUseChurchValue,
+  busy,
+}: {
+  records: ProfileRecords | null;
+  field: ValueField;
+  onUseChurchValue: (field: ValueField) => void;
+  busy: boolean;
+}) {
+  const label = recordsLabel(records, field);
+  if (!label) return null;
+  if (label.kind === "locked") return <p className="text-base font-medium text-muted-foreground">Managed by your church</p>;
+  if (label.kind === "records") return <p className="text-base text-muted-foreground">From your church&apos;s records</p>;
+  return (
+    <p className="flex flex-wrap items-center gap-x-1 text-base text-muted-foreground">
+      Changed in two42
+      {label.churchValue && (
+        <>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 disabled:opacity-50"
+            onClick={() => onUseChurchValue(field)}
+            disabled={busy}
+          >
+            Use your church&apos;s value
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
+/** A locked detail, shown as text: the church manages it and there is nothing to edit. */
+function LockedValue({ id, label, value }: { id: string; label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p id={id} className="text-base font-medium">
+        {label}
+      </p>
+      <p className="text-lg">{value || "Not given"}</p>
+      <p className="text-base font-medium text-muted-foreground">Managed by your church</p>
+    </div>
+  );
+}
+
 export function ProfileForm({
   profile,
   families,
@@ -175,6 +228,7 @@ export function ProfileForm({
   editingOther = false,
   avatarCaller = null,
   onSaved,
+  records = null,
 }: ProfileFormProps) {
   const router = useRouter();
   const [state, setState] = useState<FormState>(initialState(profile));
@@ -205,6 +259,11 @@ export function ProfileForm({
   // An object, so a second submit with the same first error still refocuses.
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const nameLocked = isLocked(records, "name");
+  const titleLocked = isLocked(records, "title");
+  const suffixLocked = isLocked(records, "suffix");
+  const genderLocked = isLocked(records, "gender");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
@@ -261,6 +320,61 @@ export function ProfileForm({
     cropStep: avatarCropStep,
   } = useAvatarCrop(uploadAvatar);
 
+  // Writing the church's value back is enough: the database marks the detail
+  // as from the church's records again.
+  const useChurchValue = async (field: ValueField) => {
+    const label = recordsLabel(records, field);
+    if (label?.kind !== "changed" || !label.churchValue) return;
+    const value = label.churchValue;
+    setRestoring(true);
+    const { data: saved, error } = await supabase
+      .from("profiles")
+      .update(value)
+      .eq("id", profile.id)
+      .select("id");
+    setRestoring(false);
+    if (error || !saved?.length) {
+      if (error) logError("Failed to use the church's value", error);
+      toast.error(failureMessage("use your church's value"));
+      return;
+    }
+    const text = (key: string) => (value[key] === null || value[key] === undefined ? "" : String(value[key]));
+    setState((prev) => ({
+      ...prev,
+      ...(field === "name" ? { first_name: text("first_name"), last_name: text("last_name") } : {}),
+      ...(field === "preferred_name" ? { preferred_name: text("preferred_name") } : {}),
+      ...(field === "title" ? { title: text("title") } : {}),
+      ...(field === "suffix" ? { suffix: text("suffix") } : {}),
+      ...(field === "gender" ? { gender: (value.gender as Gender | null) ?? null } : {}),
+      ...(field === "phone_mobile" ? { phone_mobile: formatPhone(text("phone_mobile")) } : {}),
+      ...(field === "phone_work" ? { phone_work: formatPhone(text("phone_work")) } : {}),
+      ...(field === "birthday"
+        ? { birth_month: text("birth_month"), birth_day: text("birth_day"), birth_year: text("birth_year") }
+        : {}),
+    }));
+    if (field === "photo") setAvatarUrl(await mintSignedUrl(text("avatar_url")));
+    toast.success("Your church's value is back.");
+    router.refresh();
+  };
+
+  const removePhoto = async () => {
+    setUploadingAvatar(true);
+    const { data: saved, error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: null })
+      .eq("id", profile.id)
+      .select("id");
+    setUploadingAvatar(false);
+    if (error || !saved?.length) {
+      if (error) logError("Failed to remove the photo", error);
+      toast.error(failureMessage("remove the photo"));
+      return;
+    }
+    setAvatarUrl(null);
+    toast.success("Photo removed.");
+    router.refresh();
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
@@ -303,15 +417,15 @@ export function ProfileForm({
     // Collected in the order the fields appear, so the first key is the
     // field focus moves to.
     const found: FieldErrors = {};
-    const firstNameError = nameFieldError(firstName, "first name", true);
+    const firstNameError = nameLocked ? undefined : nameFieldError(firstName, "first name", true);
     if (firstNameError) found.first_name = firstNameError;
-    const lastNameError = nameFieldError(lastName, "last name", true);
+    const lastNameError = nameLocked ? undefined : nameFieldError(lastName, "last name", true);
     if (lastNameError) found.last_name = lastNameError;
     const preferredNameError = nameFieldError(preferredName, "preferred name", false);
     if (preferredNameError) found.preferred_name = preferredNameError;
-    const titleError = nameAffixError(title, "title");
+    const titleError = titleLocked ? undefined : nameAffixError(title, "title");
     if (titleError) found.title = titleError;
-    const suffixError = nameAffixError(suffix, "suffix");
+    const suffixError = suffixLocked ? undefined : nameAffixError(suffix, "suffix");
     if (suffixError) found.suffix = suffixError;
     // Only admins can edit the email; a member's own is managed in Settings.
     const email = state.email.trim();
@@ -354,13 +468,13 @@ export function ProfileForm({
       return;
     }
 
+    // A locked detail is the church's: it isn't sent, and the database would keep it anyway.
     const updates = {
-      first_name: firstName,
-      last_name: lastName,
+      ...(nameLocked ? {} : { first_name: firstName, last_name: lastName }),
       preferred_name: preferredName,
-      title,
-      suffix,
-      gender: state.gender,
+      ...(titleLocked ? {} : { title }),
+      ...(suffixLocked ? {} : { suffix }),
+      ...(genderLocked ? {} : { gender: state.gender }),
       // The email field is disabled for non-admins (changed via Settings),
       // and the database refuses profiles.email on non-admin updates (RLS pins
       // your own, a trigger refuses anyone else's) — don't send it.
@@ -441,7 +555,7 @@ export function ProfileForm({
               Follows the last saved family assignment, so reassigning
               the family in this form updates it on save. */}
           {avatarWritable && (
-            <div className="flex items-center gap-5">
+            <div id="profile-photo" className="flex flex-wrap items-center gap-5">
               <Avatar className="h-20 w-20 shrink-0">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile photo" />}
                 <AvatarFallback className="bg-brand-primary text-2xl text-white">
@@ -466,10 +580,24 @@ export function ProfileForm({
                 className="hidden"
               />
               {avatarCropStep}
+              {recordsLabel(records, "photo")?.kind === "records" && avatarUrl && (
+                <Button type="button" variant="outline" onClick={removePhoto} disabled={uploadingAvatar}>
+                  Remove photo
+                </Button>
+              )}
+              <div className="basis-full">
+                <RecordsNote records={records} field="photo" onUseChurchValue={useChurchValue} busy={restoring} />
+              </div>
             </div>
           )}
 
           {/* Name */}
+          {nameLocked ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LockedValue id="first_name" label="First name" value={state.first_name} />
+              <LockedValue id="last_name" label="Last name" value={state.last_name} />
+            </div>
+          ) : (
           <div className={familySurname ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
             <div className="space-y-2">
               <Label htmlFor="first_name" className="text-base">
@@ -523,7 +651,11 @@ export function ProfileForm({
                 <FieldError fieldId="last_name" message={errors.last_name} />
               </div>
             )}
+            <div className="sm:col-span-2">
+              <RecordsNote records={records} field="name" onUseChurchValue={useChurchValue} busy={restoring} />
+            </div>
           </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="preferred_name" className="text-base">
@@ -540,9 +672,13 @@ export function ProfileForm({
               {...invalidFieldProps("preferred_name", errors.preferred_name)}
             />
             <FieldError fieldId="preferred_name" message={errors.preferred_name} />
+            <RecordsNote records={records} field="preferred_name" onUseChurchValue={useChurchValue} busy={restoring} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {titleLocked ? (
+              <LockedValue id="title" label="Title" value={state.title} />
+            ) : (
             <div className="space-y-2">
               <Label htmlFor="title" className="text-base">
                 Title <Optional />
@@ -556,7 +692,12 @@ export function ProfileForm({
                 {...invalidFieldProps("title", errors.title)}
               />
               <FieldError fieldId="title" message={errors.title} />
+              <RecordsNote records={records} field="title" onUseChurchValue={useChurchValue} busy={restoring} />
             </div>
+            )}
+            {suffixLocked ? (
+              <LockedValue id="suffix" label="Suffix" value={state.suffix} />
+            ) : (
             <div className="space-y-2">
               <Label htmlFor="suffix" className="text-base">
                 Suffix <Optional />
@@ -570,7 +711,9 @@ export function ProfileForm({
                 {...invalidFieldProps("suffix", errors.suffix)}
               />
               <FieldError fieldId="suffix" message={errors.suffix} />
+              <RecordsNote records={records} field="suffix" onUseChurchValue={useChurchValue} busy={restoring} />
             </div>
+            )}
           </div>
           <p className="text-base text-muted-foreground">
             A suffix shows after the name everywhere. A title shows only on this profile and a
@@ -625,6 +768,7 @@ export function ProfileForm({
               {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
             />
             <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
+            <RecordsNote records={records} field="phone_mobile" onUseChurchValue={useChurchValue} busy={restoring} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone_home" className="text-base">
@@ -661,6 +805,7 @@ export function ProfileForm({
               {...invalidFieldProps("phone_work", errors.phone_work)}
             />
             <FieldError fieldId="phone_work" message={errors.phone_work} />
+            <RecordsNote records={records} field="phone_work" onUseChurchValue={useChurchValue} busy={restoring} />
           </div>
 
           <Separator />
@@ -722,8 +867,16 @@ export function ProfileForm({
             <p className="text-base text-muted-foreground">
               The year is optional.
             </p>
+            <RecordsNote records={records} field="birthday" onUseChurchValue={useChurchValue} busy={restoring} />
           </div>
 
+          {genderLocked ? (
+            <LockedValue
+              id="gender-label"
+              label="Gender"
+              value={state.gender === "male" ? "Male" : state.gender === "female" ? "Female" : ""}
+            />
+          ) : (
           <div className="space-y-2">
             <p id="gender-label" className="text-base font-medium">
               Gender
@@ -733,11 +886,13 @@ export function ProfileForm({
               value={state.gender}
               onChange={(v) => update("gender", v)}
             />
+            <RecordsNote records={records} field="gender" onUseChurchValue={useChurchValue} busy={restoring} />
             <p className="text-base text-muted-foreground">
               Lets people filter the directory by Male or Female. It isn&apos;t shown on the
               entry.
             </p>
           </div>
+          )}
 
           <Separator />
 

@@ -8,6 +8,7 @@ import { HouseholdClient } from "@/components/household/HouseholdClient";
 import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
 import type { HouseholdSummary } from "@/lib/household";
 import type { FamilyMember, FamilyUnit, Profile } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 interface ProfileHouseholdTabsProps {
   profile: Profile;
@@ -16,6 +17,7 @@ interface ProfileHouseholdTabsProps {
   familyMembers: FamilyMember[];
   /** The church's calendar date, YYYY-MM-DD, for working out a child's grade. */
   today: string;
+  records?: ProfileRecords | null;
 }
 
 function ProfileHouseholdTabsInner({
@@ -24,6 +26,7 @@ function ProfileHouseholdTabsInner({
   householdProfiles,
   familyMembers,
   today,
+  records = null,
 }: ProfileHouseholdTabsProps) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>(
@@ -32,7 +35,7 @@ function ProfileHouseholdTabsInner({
 
   // Without a family there is no household to manage — just the self-edit view.
   if (!family) {
-    return <MyProfileView profile={profile} family={null} />;
+    return <MyProfileView profile={profile} family={null} records={records} />;
   }
 
   return (
@@ -47,7 +50,7 @@ function ProfileHouseholdTabsInner({
       </TabsList>
 
       <TabsContent value="me">
-        <MyProfileView profile={profile} family={family} />
+        <MyProfileView profile={profile} family={family} records={records} />
       </TabsContent>
       <TabsContent value={HOUSEHOLD_TAB}>
         <HouseholdClient
