@@ -148,6 +148,20 @@ export function DinnerCard(props: DinnerCardProps) {
             <p className="text-lg">
               {notGoing.length} not going · {noReply} no reply yet
             </p>
+            {props.bringList?.guests.some((g) => g.item) && (
+              <div className="space-y-1">
+                <p className="text-lg font-medium">What guests bring</p>
+                <ul className="space-y-1 text-lg">
+                  {props.bringList.guests
+                    .filter((g) => g.item)
+                    .map((g) => (
+                      <li key={g.partyId}>
+                        {g.names}: {g.item}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
             {props.foodNotes.length > 0 && (
               <div className="space-y-1">
                 <p className="text-lg font-medium">Food needs</p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BRING_OPTIONS, bringItem, suggestBringList } from "./bringList";
+import { BRING_OPTIONS, bringItem, bringListFor, suggestBringList } from "./bringList";
 
 describe("suggestBringList", () => {
   it("gives three guests three different things", () => {
@@ -51,5 +51,41 @@ describe("bringItem", () => {
     expect(bringItem("   ")).toBeNull();
     expect(bringItem("x".repeat(60))).toBe("x".repeat(60));
     expect(bringItem("x".repeat(61))).toBeNull();
+    expect(bringItem("🥧".repeat(60))).toBe("🥧".repeat(60));
+  });
+});
+
+describe("bringListFor", () => {
+  const dinner = { id: "d3", table_id: "T", season_date_id: "s3", starts_at: "2027-03-01T18:00:00Z", host_party_id: "h" };
+  const season = {
+    dates: [{ id: "s1" }, { id: "s2" }, { id: "s3" }, { id: "s4" }],
+    dinners: [
+      { id: "d1", starts_at: "2027-01-01T18:00:00Z" },
+      { id: "d2", starts_at: "2027-02-01T18:00:00Z" },
+      dinner,
+      { id: "d4", starts_at: "2027-04-01T18:00:00Z" },
+    ],
+    seats: [
+      { table_id: "T", party_id: "h", left_at: null },
+      { table_id: "T", party_id: "a", left_at: null },
+      { table_id: "T", party_id: "gone", left_at: "2027-02-15T00:00:00Z" },
+      { table_id: "U", party_id: "b", left_at: null },
+    ],
+    contributions: [
+      { dinner_id: "d4", party_id: "a", item: "Bread" },
+      { dinner_id: "d2", party_id: "a", item: "Salad" },
+      { dinner_id: "d3", party_id: "a", item: "Drinks" },
+      { dinner_id: "d1", party_id: "a", item: "Dessert" },
+    ],
+  };
+
+  it("lists the guests seated now, host left out, with their items here", () => {
+    const list = bringListFor(dinner, season, (id) => `party ${id}`);
+    expect(list.guests).toEqual([{ partyId: "a", names: "party a", item: "Drinks" }]);
+    expect(list.dinnerIndex).toBe(2);
+  });
+
+  it("gives Suggest only items from strictly earlier dinners, oldest first", () => {
+    expect(bringListFor(dinner, season, (id) => id).earlier).toEqual({ a: ["Dessert", "Salad"] });
   });
 });

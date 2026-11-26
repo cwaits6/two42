@@ -18,6 +18,7 @@ import {
 import { WaitlistForm } from "@/components/dinnerClub/WaitlistForm";
 import { WithdrawButton } from "@/components/dinnerClub/WithdrawButton";
 import { seasonAttention } from "@/lib/dinnerClub/attention";
+import { bringListFor } from "@/lib/dinnerClub/bringList";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import {
   dinnerOpen,
@@ -344,8 +345,6 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     );
   }
 
-  const dateIndex = new Map(data.dates.map((d, i) => [d.id, i]));
-  const startsOf = new Map(data.dinners.map((d) => [d.id, d.starts_at]));
   const bringOn = season.bring_list_enabled;
 
   const card = (d: SeasonData["dinners"][number], heading: string) => {
@@ -369,27 +368,13 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
           })
       : [];
     const open = dinnerOpen(status, d.starts_at, new Date(now));
-    const items = data.contributions.filter((c) => c.dinner_id === d.id);
-    const guests = seated.filter((partyId) => partyId !== d.host_party_id);
     const bringList =
       isHost && open && bringOn
         ? {
             dinner: { id: d.id, seasonId: season.id, groupId: group.id, tableId: d.table_id, label: dinnerWhen(d.starts_at, zone) },
-            guests: guests.map((partyId) => ({
-              partyId,
-              names: partyName(peopleOf(data, partyId).map((id) => firstNameOf.get(id) ?? UNNAMED)),
-              item: items.find((c) => c.party_id === partyId)?.item ?? null,
-            })),
-            earlier: Object.fromEntries(
-              guests.map((partyId) => [
-                partyId,
-                data.contributions
-                  .filter((c) => c.party_id === partyId && (startsOf.get(c.dinner_id) ?? "") < d.starts_at)
-                  .sort((a, b) => (startsOf.get(a.dinner_id) ?? "").localeCompare(startsOf.get(b.dinner_id) ?? ""))
-                  .map((c) => c.item),
-              ])
+            ...bringListFor(d, data, (partyId) =>
+              partyName(peopleOf(data, partyId).map((id) => firstNameOf.get(id) ?? UNNAMED))
             ),
-            dinnerIndex: dateIndex.get(d.season_date_id) ?? 0,
           }
         : null;
     return (
@@ -409,7 +394,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
         isHost={isHost}
         canMove={open && (isHost || isLeader)}
         foodNotes={foodNotes}
-        bringing={bringOn && !isHost ? (items.find((c) => c.party_id === myPartyId)?.item ?? null) : null}
+        bringing={bringOn && !isHost ? (data.contributions.find((c) => c.dinner_id === d.id && c.party_id === myPartyId)?.item ?? null) : null}
         hostUnavailable={d.host_unavailable}
         bringList={bringList}
       />

@@ -9,7 +9,9 @@ export const BRING_ITEM_MAX = 60;
 /** An item as stored: trimmed, 1 to 60 characters, or null when it is not one. */
 export function bringItem(value: string): string | null {
   const item = value.trim();
-  return item.length >= 1 && item.length <= BRING_ITEM_MAX ? item : null;
+  // char_length counts code points; String.length counts UTF-16 units.
+  const length = [...item].length;
+  return length >= 1 && length <= BRING_ITEM_MAX ? item : null;
 }
 
 /**
@@ -52,4 +54,49 @@ export function suggestBringList({
     taken.set(options[best], (taken.get(options[best]) ?? 0) + 1);
   });
   return out;
+}
+
+/**
+ * What the bring-list editor needs for one dinner: its guest parties (seated
+ * now, host left out) with their items, and for Suggest each guest's items at
+ * this season's strictly earlier dinners, oldest first.
+ */
+export function bringListFor(
+  dinner: { id: string; table_id: string; season_date_id: string; starts_at: string; host_party_id: string | null },
+  season: {
+    dates: { id: string }[];
+    dinners: { id: string; starts_at: string }[];
+    seats: { table_id: string; party_id: string; left_at: string | null }[];
+    contributions: { dinner_id: string; party_id: string; item: string }[];
+  },
+  namesOf: (partyId: string) => string
+): {
+  guests: { partyId: string; names: string; item: string | null }[];
+  earlier: Record<string, string[]>;
+  dinnerIndex: number;
+} {
+  const startsOf = new Map(season.dinners.map((d) => [d.id, d.starts_at]));
+  const guestIds = season.seats
+    .filter((s) => s.table_id === dinner.table_id && !s.left_at && s.party_id !== dinner.host_party_id)
+    .map((s) => s.party_id);
+  return {
+    guests: guestIds.map((partyId) => ({
+      partyId,
+      names: namesOf(partyId),
+      item: season.contributions.find((c) => c.dinner_id === dinner.id && c.party_id === partyId)?.item ?? null,
+    })),
+    earlier: Object.fromEntries(
+      guestIds.map((partyId) => [
+        partyId,
+        season.contributions
+          .flatMap((c) => {
+            const starts = startsOf.get(c.dinner_id);
+            return c.party_id === partyId && starts !== undefined && starts < dinner.starts_at ? [{ starts, item: c.item }] : [];
+          })
+          .sort((a, b) => a.starts.localeCompare(b.starts))
+          .map((c) => c.item),
+      ])
+    ),
+    dinnerIndex: Math.max(0, season.dates.findIndex((d) => d.id === dinner.season_date_id)),
+  };
 }
