@@ -47,7 +47,7 @@ const TIMEOUT_MS = 10_000;
 
 export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
 
-async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
+export async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
   const url = new URL(path, creds.baseUrl);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   let response: Response;

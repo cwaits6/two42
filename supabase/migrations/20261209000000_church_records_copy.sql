@@ -139,7 +139,7 @@ create policy "People read their own value sources" on public.records_field_valu
 
 -- The notice is the only state a member reads or writes; the review reason
 -- is read by the church admin's page through the service key.
-grant select (profile_id, notice_filled_at, notice_seen_at) on public.records_person_state to authenticated;
+grant select (org_id, profile_id, notice_filled_at, notice_seen_at) on public.records_person_state to authenticated;
 grant update (notice_seen_at) on public.records_person_state to authenticated;
 create policy "Members read their own notice" on public.records_person_state
   for select to authenticated
