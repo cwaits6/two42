@@ -14,6 +14,7 @@ import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 import {
   householdSections,
+  householdTitle,
   personLine,
   suggestionQuestion,
   type HouseholdSuggestionRow,
@@ -60,6 +61,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [reviewing, setReviewing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [checking, setChecking] = useState<HouseholdSuggestionRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [savingSwitch, setSavingSwitch] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -323,7 +325,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
               <ul className="divide-y divide-border">
                 {checkFirst.rows.map((s) => (
                   <SuggestionCard key={s.id} s={s}>
-                    <Button size="lg" variant="outline" disabled={busy} onClick={() => confirmOne(s)}>
+                    <Button size="lg" variant="outline" disabled={busy} onClick={() => setChecking(s)}>
                       Confirm household
                     </Button>
                   </SuggestionCard>
@@ -339,6 +341,31 @@ export function RecordsHouseholds({ label }: { label: string }) {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={checking !== null}
+        onOpenChange={(open) => !open && setChecking(null)}
+        title="Confirm this household?"
+        description={checking ? `Puts them in ${householdTitle(checking.target)}. Whoever stays behind keeps their household.` : undefined}
+        confirmLabel="Confirm household"
+        pendingLabel="Confirming…"
+        onConfirm={async () => {
+          const row = checking;
+          setChecking(null);
+          if (row) await confirmOne(row);
+        }}
+      >
+        {checking && (
+          <ul className="space-y-1">
+            {checking.people.map((p) => (
+              <li key={p.profileId} className="text-base">
+                <span className="font-medium">{p.name}</span>
+                <span className="text-muted-foreground"> · {personLine(p)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirming}
