@@ -1,12 +1,23 @@
 #!/bin/sh
 # Vercel "Ignored Build Step" for both projects: exit 0 skips the build, exit 1 builds.
-# Arguments are the pathspecs (relative to the project's root directory) whose
-# changes need a build.
+# The argument names the project: "app" (run from the repo root) or "docs" (run
+# from docs-site/). Each project builds only when files it is built from change.
 #
 # A skipped build still reports a green "Vercel" status on the commit. A draft PR
 # can't merge, and .github/workflows/vercel-ready.yml builds the head again for
 # both projects when the PR is marked ready, so the green status a merge relies on
 # comes from a real build.
+
+case "$1" in
+  # The app imports supabase/functions/_shared, but nothing else under supabase/:
+  # migrations, the schema dump, tests, seed data and the edge function entry points.
+  app)
+    set -- . ':(exclude)docs-site' \
+      ':(exclude,glob)supabase/*' ':(exclude,glob)supabase/[!f]*/**' \
+      ':(exclude,glob)supabase/functions/*' ':(exclude,glob)supabase/functions/[!_]*/**' ;;
+  docs) set -- . ;;
+  *) echo "Unknown project '$1': building."; exit 1 ;;
+esac
 
 if [ "$VERCEL_ENV" = "preview" ] && [ -n "$VERCEL_GIT_PULL_REQUEST_ID" ]; then
   # The repo is public, so this needs no token. Any failure falls through to the

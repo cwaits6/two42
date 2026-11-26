@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
   "regions": ["pdx1"],
-  "ignoreCommand": "sh scripts/vercel-ignore-build.sh . ':(exclude)docs-site'"
+  "ignoreCommand": "sh scripts/vercel-ignore-build.sh app"
 }
