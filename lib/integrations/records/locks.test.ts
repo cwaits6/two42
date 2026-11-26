@@ -10,9 +10,13 @@ let tables: Record<string, Row[]>;
 // narrowed one shows up as a wrong set rather than passing against a canned answer.
 function query(table: string) {
   const tests: ((row: Row) => boolean)[] = [];
-  const rows = () => (tables[table] ?? []).filter((row) => tests.every((test) => test(row)));
+  let window: [number, number] | null = null;
+  const matching = () => (tables[table] ?? []).filter((row) => tests.every((test) => test(row)));
+  const rows = () => (window ? matching().slice(window[0], window[1] + 1) : matching());
   const chain = {
     select: () => chain,
+    order: () => chain,
+    range: (from: number, to: number) => ((window = [from, to]), chain),
     eq: (column: string, value: unknown) => (tests.push((row) => row[column] === value), chain),
     in: (column: string, values: unknown[]) => (tests.push((row) => values.includes(row[column])), chain),
     maybeSingle: () => Promise.resolve({ data: rows()[0] ?? null, error: null }),
@@ -44,6 +48,11 @@ beforeEach(() => {
 describe("lockedNameProfiles", () => {
   it("lists everyone in the church with a name source while the name is locked", async () => {
     expect([...(await lockedNameProfiles(client, ORG))].sort()).toEqual(["changed-before", "from-records"]);
+  });
+
+  it("reads past the first page of a large church", async () => {
+    tables.records_field_values = Array.from({ length: 1001 }, (_, i) => value(`p-${i}`, "records"));
+    expect((await lockedNameProfiles(client, ORG)).size).toBe(1001);
   });
 
   it("lists nobody while the name is member-changeable", async () => {

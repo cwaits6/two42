@@ -22,7 +22,11 @@ export function fakeRosterClient(options: FakeRosterOptions) {
       const chain = {
         select: () => chain,
         eq: (column: string, value: unknown) => (matches.push([column, value]), chain),
-        order: async () => ({ data: options.tables?.[table] ?? [], error: null }),
+        // Awaited straight away it answers the roster table; a paged read ranges over the filtered records.
+        order: () => ({
+          then: (resolve: (value: unknown) => void) => resolve({ data: options.tables?.[table] ?? [], error: null }),
+          range: async (from: number, to: number) => ({ data: records().slice(from, to + 1), error: null }),
+        }),
         maybeSingle: async () => ({ data: records()[0] ?? null, error: null }),
         then: (resolve: (value: unknown) => void) => resolve({ data: records(), error: null }),
         insert: () => (writes.push(`insert ${table}`), chain),

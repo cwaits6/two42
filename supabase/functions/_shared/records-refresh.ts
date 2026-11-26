@@ -79,7 +79,14 @@ export type ApplyCopyArgs = {
   _org_id: string;
   _profile_id: string;
   /** The person the copy was read from, and the values it was worked out from. */
-  _expected: { person: string; profile: Columns; household: Columns | null; grade: Columns | null };
+  _expected: {
+    person: string;
+    profile: Columns;
+    household: Columns | null;
+    grade: Columns | null;
+    /** Each copied field's state as read, null where it had none. */
+    states: Record<string, ValueState | null>;
+  };
   _profile: Columns;
   _household: Columns;
   _grade: Columns;
@@ -112,6 +119,8 @@ export interface RefreshOptions {
   normalizePhone: (raw: string) => string | null;
   /** Stores a downloaded photo for the person in two42's own storage and returns its address. */
   storePhoto: (orgId: string, profileId: string, bytes: Uint8Array) => Promise<string>;
+  /** Removes that stored photo; used when the person was deleted while their copy ran. */
+  removePhoto: (orgId: string, profileId: string) => Promise<void>;
   now: () => Date;
   elapsed: () => number;
   budgetMs: number;
@@ -151,6 +160,42 @@ async function allRows<T>(query: () => Rows<T>, what: string): Promise<T[]> {
 async function must(result: PromiseLike<{ error: QueryError }>, what: string) {
   const { error } = await result;
   if (error) throw new Error(`${what} failed: ${error.message}`);
+}
+
+/**
+ * Upserts person state rows. An admin can unlink someone while a refresh runs,
+ * and that person's row then fails the link foreign key and would fail the
+ * whole write, so a page that does is written again without the unlinked people.
+ */
+async function writeStates(
+  db: RecordsRefreshClient,
+  orgId: string,
+  rows: Partial<PersonStateRow>[],
+  what: string,
+) {
+  for (let i = 0; i < rows.length; i += PAGE) {
+    let page = rows.slice(i, i + PAGE);
+    let { error } = await db
+      .from("records_person_state")
+      .upsert(page.map((row) => ({ ...row, org_id: orgId })), { onConflict: "org_id,profile_id" });
+    if (error?.code === "23503") {
+      const linked = new Set(
+        (
+          await allRows(
+            () => db.from("records_person_links").select("profile_id").eq("org_id", orgId).order("profile_id"),
+            "links",
+          )
+        ).map((link) => link.profile_id),
+      );
+      page = page.filter((row) => row.profile_id !== undefined && linked.has(row.profile_id));
+      ({ error } = page.length
+        ? await db
+          .from("records_person_state")
+          .upsert(page.map((row) => ({ ...row, org_id: orgId })), { onConflict: "org_id,profile_id" })
+        : { error: null });
+    }
+    if (error) throw new Error(`${what} failed: ${error.message}`);
+  }
 }
 
 const pick = (row: Columns, columns: readonly string[]): Columns =>
@@ -362,14 +407,7 @@ async function run(
     if ((state?.review_reason ?? null) === reason) continue;
     reviewed.push({ profile_id: link.profile_id, review_reason: reason, review_since: reason ? now : null });
   }
-  for (let i = 0; i < reviewed.length; i += PAGE) {
-    await must(
-      db
-        .from("records_person_state")
-        .upsert(reviewed.slice(i, i + PAGE).map((row) => ({ ...row, org_id: orgId })), { onConflict: "org_id,profile_id" }),
-      "review write",
-    );
-  }
+  await writeStates(db, orgId, reviewed, "review write");
 
   const changes = await source.changedSince(creds, cursor);
   if (settings.size === 0) return changes.cursor;
@@ -403,15 +441,12 @@ async function run(
   const unreached = due.slice(done).map((link) => link.profile_id);
   result.pending = unreached.length + retry.length;
   const marked = [...retry, ...unreached];
-  for (let i = 0; i < marked.length; i += PAGE) {
-    await must(
-      db.from("records_person_state").upsert(
-        marked.slice(i, i + PAGE).map((profileId) => ({ org_id: orgId, profile_id: profileId, copied_at: null })),
-        { onConflict: "org_id,profile_id" },
-      ),
-      "retry mark",
-    );
-  }
+  await writeStates(
+    db,
+    orgId,
+    marked.map((profileId) => ({ profile_id: profileId, copied_at: null })),
+    "retry mark",
+  );
   // Everyone changed since the mark was handled, or marked to be copied in
   // full next time, so the mark can move on.
   return changes.cursor;
@@ -562,11 +597,13 @@ async function copyPerson(
   };
   let plan = planPersonCopy(input);
   let photoSkipped = false;
+  let photoStored = false;
   if (plan.photoWanted) {
     const token = plan.photoWanted;
     const bytes = await options.source.photo(options.creds, token, PHOTO_EDGE);
     if (bytes) {
       plan = planPersonCopy({ ...input, storedPhoto: { token, url: await options.storePhoto(orgId, profileId, bytes) } });
+      photoStored = true;
     } else {
       photoSkipped = true;
     }
@@ -574,7 +611,13 @@ async function copyPerson(
   const { data, error } = await db.rpc("records_apply_copy", {
     _org_id: orgId,
     _profile_id: profileId,
-    _expected: { person: person.id, profile: current.profile, household: current.household, grade: current.grade },
+    _expected: {
+      person: person.id,
+      profile: current.profile,
+      household: current.household,
+      grade: current.grade,
+      states: Object.fromEntries([...settings.keys()].map((field) => [field, stored?.get(field as ValueField)?.state ?? null])),
+    },
     _profile: plan.profile,
     _household: plan.household,
     _grade: plan.grade,
@@ -582,6 +625,16 @@ async function copyPerson(
     _filled: plan.filled,
   });
   if (error) throw new Error(`apply failed: ${error.message}`);
+  // delete_person() removed only the objects there when it ran, so a photo
+  // stored for someone deleted meanwhile would outlive them.
+  if (data === "gone" && photoStored) {
+    await options.removePhoto(orgId, profileId).catch((err) =>
+      logError("church records copy couldn't remove a deleted person's photo", err, {
+        route: "refresh-church-records",
+        ids: { org: orgId, profile: profileId },
+      })
+    );
+  }
   if (data === "stale") {
     logWarn("church records copy skipped a person edited meanwhile", undefined, {
       route: "refresh-church-records",

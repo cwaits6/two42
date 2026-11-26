@@ -180,7 +180,7 @@ export function HouseholdClient({
 
   /** A person's edit, which clears the message on each field it changes. */
   function edit(changes: Partial<HouseholdInfo>) {
-    setInfo({ ...info, ...changes });
+    setInfo((prev) => ({ ...prev, ...changes }));
     setErrors((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([field]) => !(field in changes))),
     );

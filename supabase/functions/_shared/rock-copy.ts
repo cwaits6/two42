@@ -55,6 +55,8 @@ const MAX_PHOTO_BYTES = 524_288;
 // Rock's ModifiedDateTime, in the church's own time zone. Checked before it
 // goes into a filter, since the mark is stored and read back.
 const ROCK_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,7})?$/;
+/** The stored mark: a Rock time, then the last People and PhoneNumbers row ids read at that time, if a scan stopped there. */
+const CURSOR = /^([^;]+)(?:;p=(\d{1,12}))?(?:;n=(\d{1,12}))?$/;
 const ROCK_ID = /^[1-9][0-9]{0,9}$/;
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
@@ -232,11 +234,12 @@ async function changedRows(
   path: string,
   idColumn: string,
   since: string,
+  afterId: number | null,
   fetcher: FetchLike,
-): Promise<{ ids: number[]; latest: string | null; cut: boolean }> {
+): Promise<{ ids: number[]; latest: string | null; cut: boolean; lastId: number | null }> {
   const ids: number[] = [];
   let latest: string | null = null;
-  let after: { time: string; id: number } | null = null;
+  let after: { time: string; id: number } | null = afterId ? { time: since, id: afterId } : null;
   const select = [...new Set([idColumn, "Id", "ModifiedDateTime"])].join(",");
   for (let page = 0; page < MAX_CHANGE_PAGES; page++) {
     const filter: string = after
@@ -255,16 +258,16 @@ async function changedRows(
       if (id) ids.push(id);
       if (typeof row.ModifiedDateTime === "string" && ROCK_TIME.test(row.ModifiedDateTime)) latest = row.ModifiedDateTime;
     }
-    if (body.length < PAGE) return { ids, latest, cut: false };
+    if (body.length < PAGE) return { ids, latest, cut: false, lastId: null };
     const last = body[body.length - 1];
     const lastId = int(last.Id);
     // Without the last row's place the next page can't be asked for safely.
     if (typeof last.ModifiedDateTime !== "string" || !ROCK_TIME.test(last.ModifiedDateTime) || !lastId) {
-      return { ids, latest, cut: true };
+      return { ids, latest, cut: true, lastId: null };
     }
     after = { time: last.ModifiedDateTime, id: lastId };
   }
-  return { ids, latest, cut: true };
+  return { ids, latest, cut: true, lastId: after?.time === latest ? after.id : null };
 }
 
 async function latestChange(creds: RecordsCredentials, path: string, fetcher: FetchLike): Promise<string | null> {
@@ -298,17 +301,23 @@ async function changedSince(
     await latestChange(creds, "/api/People", fetcher),
     await latestChange(creds, "/api/PhoneNumbers", fetcher),
   ]);
-  if (cursor === null || !ROCK_TIME.test(cursor)) {
+  const stored = cursor === null ? null : CURSOR.exec(cursor);
+  if (!stored || !ROCK_TIME.test(stored[1])) {
     // A Rock with no people yet: start from the beginning.
     return { ids: [], cursor: mark ?? "1900-01-01T00:00:00" };
   }
-  const people = await changedRows(creds, "/api/People", "Id", cursor, fetcher);
-  const phones = await changedRows(creds, "/api/PhoneNumbers", "PersonId", cursor, fetcher);
-  let next = latestOf([cursor, mark]) as string;
+  const since = stored[1];
+  const people = await changedRows(creds, "/api/People", "Id", since, stored[2] ? Number(stored[2]) : null, fetcher);
+  const phones = await changedRows(creds, "/api/PhoneNumbers", "PersonId", since, stored[3] ? Number(stored[3]) : null, fetcher);
+  let next = latestOf([since, mark]) as string;
   // A kind cut short is read on from where it stopped; the other kind repeats a little.
   if (people.cut && people.latest) next = earliest(next, people.latest);
   if (phones.cut && phones.latest) next = earliest(next, phones.latest);
-  return { ids: [...new Set([...people.ids, ...phones.ids])].map(String), cursor: next };
+  // A kind cut short at the mark itself also keeps its last row's id, or a run
+  // of more rows than one scan reads, all saved at one time, would be read again forever.
+  const p = people.cut && people.latest === next && people.lastId ? `;p=${people.lastId}` : "";
+  const n = phones.cut && phones.latest === next && phones.lastId ? `;n=${phones.lastId}` : "";
+  return { ids: [...new Set([...people.ids, ...phones.ids])].map(String), cursor: `${next}${p}${n}` };
 }
 
 function isJpeg(bytes: Uint8Array): boolean {

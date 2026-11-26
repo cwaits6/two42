@@ -32,6 +32,8 @@ interface Fixture {
   profiles?: Record<string, unknown>[];
   familyUnits?: Record<string, unknown>[];
   releaseFails?: boolean;
+  /** Unlinked after the refresh read its links: their state row fails the link foreign key. */
+  unlinked?: string;
 }
 
 function fakeDb(fixture: Fixture) {
@@ -57,13 +59,19 @@ function fakeDb(fixture: Fixture) {
       eq: (c: string, v: unknown) => (call.filters.push(["eq", c, v]), self),
       in: (c: string, v: unknown) => (call.filters.push(["in", c, v]), self),
       or: (f: string) => (call.filters.push(["or", f]), self),
-      order: () => self,
+      order: (c: string) => (call.filters.push(["order", c]), self),
       range: () => self,
       select: () => ((call.op = `${call.op}+select`), self),
       then(resolve: (r: unknown) => void) {
         if (call.op === "select") resolve({ data: structuredClone(rows[call.table] ?? []), error: null });
         else if (call.op === "update+select") resolve({ data: fixture.claim, error: null });
-        else if (call.op === "update" && call.table === "records_refresh_state" && fixture.releaseFails) {
+        else if (
+          call.op === "upsert" && call.table === "records_person_state" && fixture.unlinked &&
+          (call.values as { profile_id: string }[]).some((v) => v.profile_id === fixture.unlinked)
+        ) {
+          rows.records_person_links = rows.records_person_links.filter((l) => l.profile_id !== fixture.unlinked);
+          resolve({ error: { message: "violates foreign key constraint", code: "23503" } });
+        } else if (call.op === "update" && call.table === "records_refresh_state" && fixture.releaseFails) {
           resolve({ error: { message: "release refused" } });
         } else resolve({ error: null });
       },
@@ -136,6 +144,7 @@ function options(source: RecordsCopySource, over: Partial<RefreshOptions> = {}):
     source,
     normalizePhone,
     storePhoto: () => Promise.reject(new Error("no photo expected")),
+    removePhoto: () => Promise.reject(new Error("no photo removal expected")),
     now: () => new Date("2026-11-26T03:00:00Z"),
     elapsed: () => 0,
     budgetMs: 60_000,
@@ -207,6 +216,24 @@ Deno.test("people who went inactive or can't be found are listed for review and 
     [[P2, "inactive"], [P3, "missing"]],
   );
   assertFalse(rpcs.some((args) => args._profile_id === P2 || args._profile_id === P3));
+});
+
+Deno.test("someone unlinked while the refresh runs is left out of its writes, and the others are still written", async () => {
+  const { db, calls } = fakeDb({ ...FIXTURE, unlinked: P3 });
+  const result = await refreshOrg(db, options(fakeSource().source));
+  assertEquals(result.status, "done");
+  const reviews = calls.filter((c) => c.table === "records_person_state" && c.op === "upsert");
+  assertEquals(
+    (reviews.at(-1)!.values as { profile_id: string }[]).map((r) => r.profile_id),
+    [P2],
+  );
+});
+
+Deno.test("the copy is handed the state each copied field had when it was read", async () => {
+  const cleared = { profile_id: P1, field: "phone_mobile", state: "cleared", church_value: { phone_mobile: null } };
+  const { db, rpcs } = fakeDb({ ...FIXTURE, settings: [{ field: "phone_mobile", mode: "member" }, { field: "gender", mode: "member" }], values: [cleared] });
+  await refreshOrg(db, options(fakeSource().source));
+  assertEquals((rpcs[0]._expected as { states: unknown }).states, { phone_mobile: "cleared", gender: null });
 });
 
 Deno.test("with every field not from the records, nobody is copied", async () => {
@@ -294,11 +321,12 @@ Deno.test("a copy that finds the member's values changed meanwhile is tried in f
 });
 
 Deno.test("nothing read from the records reaches a log line", async () => {
+  let result: Awaited<ReturnType<typeof refreshOrg>> | undefined;
   const lines = await logged(async () => {
     const { db } = fakeDb({ ...FIXTURE, apply: () => ({ data: null, error: { message: "Zebulon Quux +15125550123" } }) });
-    const result = await refreshOrg(db, options(fakeSource().source));
-    assertEquals(result.failed, 1);
+    result = await refreshOrg(db, options(fakeSource().source));
   });
+  assertEquals(result?.failed, 1);
   assert(lines.length > 0);
   const text = JSON.stringify(lines);
   for (const value of ["Zebulon", "Quux", "Zeb", "5125550123", '"100"', "rock.example.org"]) {
@@ -351,8 +379,24 @@ Deno.test("a photo the records couldn't give right now puts the person back for 
   assertEquals(retry.values, [{ org_id: ORG, profile_id: P1, copied_at: null }]);
 });
 
+Deno.test("a photo stored for someone deleted while their copy ran is removed again", async () => {
+  const { db } = fakeDb({ ...FIXTURE, settings: [{ field: "photo", mode: "member" }], apply: () => ({ data: "gone", error: null }) });
+  const { source } = fakeSource();
+  const withPhoto: RecordsCopySource = {
+    ...source,
+    peopleForCopy: () => Promise.resolve([{ ...CHURCH, photo: "77" }]),
+    photo: () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff])),
+  };
+  const removed: string[] = [];
+  await refreshOrg(db, options(withPhoto, {
+    storePhoto: (_org, profileId) => Promise.resolve(`https://storage.example/${profileId}.jpg`),
+    removePhoto: (orgId, profileId) => (removed.push(`${orgId}/${profileId}`), Promise.resolve()),
+  }));
+  assertEquals(removed, [`${ORG}/${P1}`]);
+});
+
 Deno.test("with two household rows for one person, the copy works from the first, as the database writes it", async () => {
-  const { db, rpcs } = fakeDb({
+  const { db, rpcs, calls } = fakeDb({
     ...FIXTURE,
     settings: [{ field: "grade", mode: "member" }],
     familyMembers: [
@@ -362,6 +406,9 @@ Deno.test("with two household rows for one person, the copy works from the first
   });
   await refreshOrg(db, options(fakeSource().source));
   assertEquals((rpcs[0]._expected as { grade: unknown }).grade, { graduation_year: 2031 });
+  // The fake returns rows as listed, so the order asked for is what makes the first row the first.
+  const read = calls.find((c) => c.table === "family_members" && c.op === "select")!;
+  assert(read.filters.some(([op, column]) => op === "order" && column === "id"));
 });
 
 Deno.test("two linked spouses copied in one batch both get their copy, the second against the anniversary the first wrote", async () => {
@@ -507,14 +554,15 @@ Deno.test("the nightly run shares one budget: a church reached after it is spent
   });
   assertEquals(order, ["org-2", "org-3", "org-1"]);
 
+  let broken: Awaited<ReturnType<typeof refreshAllOrgs>> | undefined;
   const lines = await logged(async () => {
-    const broken = await refreshAllOrgs([org(1)], {
+    broken = await refreshAllOrgs([org(1)], {
       elapsed: () => 0,
       budgetMs: 60_000,
       refreshOne: () => Promise.reject(new Error("records connection read failed")),
     });
-    assertEquals(broken.failed, ["org-1"]);
-    assertFalse(broken.finished);
   });
+  assertEquals(broken?.failed, ["org-1"]);
+  assertFalse(broken?.finished);
   assert(lines.length > 0);
 });

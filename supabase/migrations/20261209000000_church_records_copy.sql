@@ -381,6 +381,16 @@ begin
     return 'stale';
   end if;
 
+  -- A member's change or clear moves a field's state even when its value ends
+  -- where the plan read it, and the plan was worked out for the state it read.
+  for _key in select jsonb_object_keys(coalesce(_expected -> 'states', '{}'::jsonb)) loop
+    if (select v.state from public.records_field_values v
+         where v.org_id = _org_id and v.profile_id = _profile_id and v.field = _key)
+       is distinct from (_expected -> 'states' ->> _key) then
+      return 'stale';
+    end if;
+  end loop;
+
   if _profile <> '{}'::jsonb then
     update public.profiles set
       first_name = case when _profile ? 'first_name' then _profile ->> 'first_name' else first_name end,

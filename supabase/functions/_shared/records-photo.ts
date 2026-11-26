@@ -21,6 +21,7 @@ export interface RecordsPhotoStorage {
         options: { contentType: string; upsert: boolean; cacheControl: string },
       ): PromiseLike<{ error: { message: string } | null }>;
       getPublicUrl(path: string): { data: { publicUrl: string } };
+      remove(paths: string[]): PromiseLike<{ error: { message: string } | null }>;
     };
   };
 }
@@ -38,4 +39,12 @@ export async function storeRecordsPhoto(
   const { error } = await bucket.upload(key, bytes, { contentType: "image/jpeg", upsert: true, cacheControl: "3600" });
   if (error) throw new Error(`records photo upload failed: ${error.message}`);
   return bucket.getPublicUrl(key).data.publicUrl;
+}
+
+/** Removes the photo stored for this person in this church. */
+export async function removeRecordsPhoto(client: RecordsPhotoStorage, orgId: string, profileId: string): Promise<void> {
+  const key = recordsPhotoKey(orgId, profileId);
+  // org-anchor: storage objects carry no org_id; the key's first segment is orgId, which the caller resolved by iterating orgs.
+  const { error } = await client.storage.from("avatars").remove([key]);
+  if (error) throw new Error(`records photo removal failed: ${error.message}`);
 }

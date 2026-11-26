@@ -177,9 +177,39 @@ Deno.test("changedSince asks for each next page after the last row read, not by 
   assert(people.every((params) => params.get("$skip") === null && params.get("$orderby") === "ModifiedDateTime,Id"));
 });
 
+Deno.test("a scan cut short among rows saved at one time keeps its place, and the next run reads on after it", async () => {
+  const T = "2026-11-22T09:00:00";
+  const same = (from: number) => Array.from({ length: 500 }, (_, i) => ({ Id: from + i, ModifiedDateTime: T }));
+  const first = rock({
+    "/api/People": (url) => {
+      if (url.searchParams.get("$top") === "1") return json([{ ModifiedDateTime: T }]);
+      const match = /Id gt (\d+)/.exec(url.searchParams.get("$filter") ?? "");
+      return json(same(match ? Number(match[1]) + 1 : 1));
+    },
+    "/api/PhoneNumbers": () => json([]),
+  });
+  const cut = await first.source.changedSince(creds, "2026-11-21T08:00:00");
+  assertEquals(cut.ids.length, 10_000);
+  assertEquals(cut.cursor, `${T};p=10000`);
+
+  const next = rock({
+    "/api/People": (url) =>
+      json(url.searchParams.get("$top") === "1" ? [{ ModifiedDateTime: T }] : [{ Id: 10_001, ModifiedDateTime: T }]),
+    "/api/PhoneNumbers": () => json([]),
+  });
+  const rest = await next.source.changedSince(creds, cut.cursor);
+  assertEquals(rest, { ids: ["10001"], cursor: T });
+  const people = next.calls.find((c) => c.url.pathname === "/api/People" && c.url.searchParams.get("$top") !== "1")!;
+  assertEquals(
+    people.url.searchParams.get("$filter"),
+    `ModifiedDateTime gt datetime'${T}' or (ModifiedDateTime eq datetime'${T}' and Id gt 10000)`,
+  );
+});
+
 Deno.test("a stored mark that isn't a Rock time never reaches a filter", async () => {
   const { calls, source } = rock({ "/api/People": () => json([]), "/api/PhoneNumbers": () => json([]) });
   await source.changedSince(creds, "2026-11-21T08:00:00' or Id gt 0 or '");
+  await source.changedSince(creds, "2026-11-21T08:00:00;p=1 or Id gt 0");
   assert(calls.every((c) => !(c.url.searchParams.get("$filter") ?? "").includes("Id gt 0")));
 });
 

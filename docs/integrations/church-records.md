@@ -414,9 +414,10 @@ and kept up to date.
 | Copy | Names, nick name, title, suffix, gender, birthday, anniversary, graduation year, photo id; listed mobile and work phones; the names of title and suffix values | The copied values, where each came from, the church's last value |
 | Photo | The photo, resized by the records to 400 pixels | The photo, in two42's storage |
 
-Never read or copied: email (used only for matching), unlisted phones, the
-texting flag, connection status and the church's own fields. Address and home
-phone come with households (T42-273).
+Never copied: email (used only for matching), the texting flag, connection
+status and the church's own fields. Unlisted phones can arrive with a person's
+phone numbers and are dropped as they are read, never stored or copied.
+Address and home phone come with households (T42-273).
 
 ### For the operator
 

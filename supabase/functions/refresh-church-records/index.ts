@@ -19,7 +19,7 @@ import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
 import { openKey, parseRecordsSecret, RECORDS_SECRET_ENV } from "../_shared/records-crypto.ts";
 import { assertAddressGuard } from "../_shared/records-fetch.ts";
-import { type RecordsPhotoStorage, storeRecordsPhoto } from "../_shared/records-photo.ts";
+import { type RecordsPhotoStorage, removeRecordsPhoto, storeRecordsPhoto } from "../_shared/records-photo.ts";
 import { copySourceFor } from "../_shared/records-providers.ts";
 import { type RecordsRefreshClient, refreshAllOrgs, refreshOrg } from "../_shared/records-refresh.ts";
 import { normalizePhone } from "../_shared/phone.ts";
@@ -63,6 +63,11 @@ Deno.serve(serviceKeyCallerOnly(async () => {
     // A runtime that ignored the address check would send a church's key
     // wherever its records' name resolves, so nothing is opened without it.
     await assertAddressGuard();
+  } catch (err) {
+    logError("church records refresh stopped: the address check failed", err, { route: "refresh-church-records" });
+    return json({ error: "The runtime didn't refuse a loopback address, so no church was refreshed." }, 500);
+  }
+  try {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, resolveServiceKey());
     // Casts: structurally checking the full SupabaseClient against these narrow
@@ -94,6 +99,8 @@ Deno.serve(serviceKeyCallerOnly(async () => {
           normalizePhone,
           storePhoto: (orgId, profileId, bytes) =>
             storeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId, bytes),
+          removePhoto: (orgId, profileId) =>
+            removeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId),
           now: () => new Date(),
           elapsed,
           budgetMs: BUDGET_MS,

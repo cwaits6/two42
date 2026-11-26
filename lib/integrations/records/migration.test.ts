@@ -86,8 +86,10 @@ describe("the copy migration agrees with the copy rules", () => {
       const fields = (Object.keys(FIELD_TABLE) as ValueField[]).filter((f) => FIELD_TABLE[f] === kind);
       const columns = sorted(fields.flatMap((f) => FIELD_COLUMNS[f]));
       const set = apply.slice(apply.indexOf(`update public.${table} set`), apply.indexOf("where", apply.indexOf(`update public.${table} set`)));
-      expect(sorted([...set.matchAll(/([a-z_]+) = \(/g)].map((m) => m[1])), `${table} set`).toEqual(columns);
-      expect(sorted([...set.matchAll(new RegExp(`${arg} ->> '([a-z_]+)'`, "g"))].map((m) => m[1])), `${arg} keys`).toEqual(columns);
+      // Each column is set from its own key, so two swapped keys fail here.
+      const pairs = [...set.matchAll(new RegExp(`([a-z_]+) = \\(${arg} ->> '([a-z_]+)'\\)`, "g"))];
+      expect(sorted(pairs.map((m) => m[1])), `${table} set`).toEqual(columns);
+      for (const [, column, key] of pairs) expect(key, `${table}.${column}`).toBe(column);
 
       const watched = sql.match(new RegExp(`before update of ([a-z_, ]+) on public\\.${table}`))?.[1];
       expect(sorted(watched?.split(", ") ?? []), `${table} trigger columns`).toEqual(columns);

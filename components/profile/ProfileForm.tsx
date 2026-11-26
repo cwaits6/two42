@@ -281,6 +281,16 @@ export function ProfileForm({
     if (label?.kind !== "changed" || !label.churchValue) return;
     const value = label.churchValue;
     setRestoring(true);
+    const claimed =
+      field === "birthday" && removesBirthday(profile, { birth_month: (value.birth_month as number | null) ?? null })
+        ? await clearClaimedBirthday(profile.id)
+        : null;
+    if (claimed?.error) {
+      setRestoring(false);
+      logError("Failed to clear the claimed birthday", claimed.error);
+      toast.error(failureMessage("use your church's value"));
+      return;
+    }
     const { data: saved, error } = await supabase
       .from("profiles")
       .update(value)

@@ -4,7 +4,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/sanitize";
 import { type RecordsRefreshClient, refreshOrg, type RefreshResult } from "@/supabase/functions/_shared/records-refresh";
-import { storeRecordsPhoto } from "./photo";
+import { removeRecordsPhoto, storeRecordsPhoto } from "./photo";
 import type { RecordsCredentials, RecordsProvider } from "./types";
 
 // Inside the route's maxDuration; people not reached wait for the next refresh.
@@ -29,6 +29,7 @@ export async function refreshNow(
     source: loaded.provider.copy,
     normalizePhone,
     storePhoto: storeRecordsPhoto,
+    removePhoto: removeRecordsPhoto,
     now: () => new Date(),
     elapsed: () => Date.now() - startedAt,
     budgetMs: BUDGET_MS,

@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(53);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -353,6 +353,22 @@ select is(
   '(records,6)', 'a held change that now matches the church''s value goes back to the church''s records');
 rollback to savepoint anniversary_matches;
 
+savepoint states_checked;
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || jsonb_build_object('states', jsonb_build_object('phone_mobile',
+      (select state from public.records_field_values where profile_id = pg_temp.fx('member') and field = 'phone_mobile'))),
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
+  'applied', 'non-vacuity: a copy planned against the field''s current state applies');
+rollback to savepoint states_checked;
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || '{"states": {"phone_mobile": "no such state"}}',
+    '{"phone_mobile": "+15125550999"}', '{}', '{}', '[]', '{}'),
+  'stale', 'a copy planned against a state the field has since left is refused, though its value is the same');
+
 select is(
   public.records_apply_copy(
     pg_temp.fx('org'), pg_temp.fx('member'),
@@ -431,8 +447,10 @@ select is(
   (select (first_name, occupation)::text from public.profiles where id = pg_temp.fx('member')),
   '(Leo,Plumber)', 'the locked name keeps the church''s value and the rest of the save lands');
 
-select pg_temp.attempt('admin@local.dev',
-  format('update public.family_members set graduation_year = 2030 where claimed_profile_id = %L', pg_temp.fx('member')));
+select is(
+  pg_temp.attempt('admin@local.dev',
+    format('update public.family_members set graduation_year = 2030 where claimed_profile_id = %L', pg_temp.fx('member'))),
+  'rows:1', 'a church admin''s grade edit reaches the copied row');
 select is(
   (select graduation_year from public.family_members where claimed_profile_id = pg_temp.fx('member')),
   2032::smallint, 'a locked grade keeps the church''s value, even for a church admin');

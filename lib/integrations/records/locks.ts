@@ -4,6 +4,7 @@
 // lands.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 
 /**
  * The people in `orgId` whose name comes locked from the church's records.
@@ -19,11 +20,15 @@ export async function lockedNameProfiles(supabase: SupabaseClient<Database>, org
     .maybeSingle();
   if (settingError) throw new Error("Failed to load records_field_settings");
   if (setting?.mode !== "locked") return new Set();
-  const { data, error } = await supabase
-    .from("records_field_values")
-    .select("profile_id")
-    .eq("org_id", orgId)
-    .eq("field", "name");
+  const { data, error } = await fetchAll((from, to) =>
+    supabase
+      .from("records_field_values")
+      .select("profile_id")
+      .eq("org_id", orgId)
+      .eq("field", "name")
+      .order("profile_id")
+      .range(from, to),
+  );
   if (error) throw new Error("Failed to load records_field_values");
   return new Set((data ?? []).map((row) => row.profile_id));
 }
