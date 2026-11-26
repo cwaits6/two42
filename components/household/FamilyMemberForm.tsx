@@ -89,6 +89,9 @@ export function FamilyMemberForm({ member, family, today, onSaved, onCancel, onC
   const [grade, setGrade] = useState(
     () => gradeFor(member?.graduation_year, calendarDate(today))?.toString() ?? NO_GRADE,
   );
+  // An untouched grade keeps the stored year: a year past 12th grade has no option to
+  // round-trip through, and a refresh across 1 August would shift the converted year.
+  const [gradeChanged, setGradeChanged] = useState(false);
   const [isClassMember, setIsClassMember] = useState(member?.is_class_member ?? false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(member?.avatar_url ?? null);
 
@@ -218,9 +221,13 @@ export function FamilyMemberForm({ member, family, today, onSaved, onCancel, onC
       relationship,
       ...birthdayColumns(birthday),
       graduation_year:
-        relationship === "child" && grade !== NO_GRADE
-          ? graduationYearFor(Number(grade), todayDate)
-          : null,
+        relationship !== "child"
+          ? null
+          : !gradeChanged
+            ? (member?.graduation_year ?? null)
+            : grade !== NO_GRADE
+              ? graduationYearFor(Number(grade), todayDate)
+              : null,
       is_class_member: isClassMember,
     };
 
@@ -403,7 +410,14 @@ export function FamilyMemberForm({ member, family, today, onSaved, onCancel, onC
               <Label htmlFor="grade" className="text-base">
                 Grade <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
-              <Select items={GRADE_ITEMS} value={grade} onValueChange={(v) => setGrade(v as string)}>
+              <Select
+                items={GRADE_ITEMS}
+                value={grade}
+                onValueChange={(v) => {
+                  setGrade(v as string);
+                  setGradeChanged(true);
+                }}
+              >
                 <SelectTrigger id="grade" className="w-full text-base py-5">
                   <SelectValue />
                 </SelectTrigger>

@@ -310,6 +310,12 @@ describe("a child's grade", () => {
     expect(savedBody()).toMatchObject({ graduation_year: null });
   });
 
+  it("keeps a stored year no grade option shows when the grade is left alone", async () => {
+    await mount({ ...CHILD, graduation_year: 2026 });
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ relationship: "child", graduation_year: 2026 });
+  });
+
   it("offers no grade for anyone but a child, and clears one on relabelling", async () => {
     await mount({ ...ADULT, graduation_year: 2036 });
     expect(document.body.textContent).not.toContain("Kindergarten");
