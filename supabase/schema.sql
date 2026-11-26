@@ -597,7 +597,8 @@ CREATE OR REPLACE FUNCTION "public"."family_directory_people"("_family_id" "uuid
     'is_class_member', fm.is_class_member,
     'birth_month', fm.birth_month,
     'birth_day', fm.birth_day,
-    'claimed_profile_id', fm.claimed_profile_id
+    'claimed_profile_id', fm.claimed_profile_id,
+    'graduation_year', fm.graduation_year
   ) order by fm.relationship)
   -- A gate in WHERE that names no column of fm runs before the scan, so a
   -- household listing nobody would pay for it. Here it runs at the first row.
@@ -2107,12 +2108,13 @@ COMMENT ON FUNCTION "public"."organizations_timezone_check"() IS 'Trigger functi
 
 
 
-CREATE OR REPLACE FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") RETURNS TABLE("id" "uuid", "created_at" timestamp with time zone, "first_name" "text", "last_name" "text", "preferred_name" "text", "email" "text")
+CREATE OR REPLACE FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") RETURNS TABLE("id" "uuid", "created_at" timestamp with time zone, "first_name" "text", "last_name" "text", "preferred_name" "text", "email" "text", "suffix" "text")
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
   select r.id, r.created_at, p.first_name, p.last_name, p.preferred_name,
-    case when p.hide_email then null else p.email end
+    case when p.hide_email then null else p.email end,
+    p.suffix
   from public.profiles me
   join public.group_join_requests r on r.org_id = me.org_id
   join public.profiles p on p.id = r.profile_id and p.org_id = r.org_id
@@ -4923,11 +4925,17 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "email_event_reminders" boolean DEFAULT true NOT NULL,
     "email_supper_club" boolean DEFAULT true NOT NULL,
+    "gender" "text",
+    "title" "text",
+    "suffix" "text",
     CONSTRAINT "profiles_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
     CONSTRAINT "profiles_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
     CONSTRAINT "profiles_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
+    CONSTRAINT "profiles_gender_check" CHECK (("gender" = ANY (ARRAY['male'::"text", 'female'::"text"]))),
     CONSTRAINT "profiles_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"]))),
-    CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['pending'::"text", 'member'::"text", 'admin'::"text"])))
+    CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['pending'::"text", 'member'::"text", 'admin'::"text"]))),
+    CONSTRAINT "profiles_suffix_check" CHECK ((("suffix" IS NULL) OR ((("char_length"("suffix") >= 1) AND ("char_length"("suffix") <= 20)) AND ("suffix" = "btrim"("suffix"))))),
+    CONSTRAINT "profiles_title_check" CHECK ((("title" IS NULL) OR ((("char_length"("title") >= 1) AND ("char_length"("title") <= 40)) AND ("title" = "btrim"("title")))))
 );
 
 
@@ -4939,6 +4947,18 @@ COMMENT ON COLUMN "public"."profiles"."email_event_reminders" IS 'False stops ev
 
 
 COMMENT ON COLUMN "public"."profiles"."email_supper_club" IS 'False stops every Supper club email to this person: tables, moved suppers and reminders. Only the person can change it.';
+
+
+
+COMMENT ON COLUMN "public"."profiles"."gender" IS 'Male or female, or null. Filters the directory; never shown as text there, and never a condition of joining a group.';
+
+
+
+COMMENT ON COLUMN "public"."profiles"."title" IS 'Shown only on the person''s profile page and a group''s Leadership list.';
+
+
+
+COMMENT ON COLUMN "public"."profiles"."suffix" IS 'Part of the name everywhere a name shows.';
 
 
 
@@ -4986,7 +5006,7 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
     "anniversary",
     "created_at",
     "updated_at",
-    COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "p"."id", 'first_name', "p"."first_name", 'last_name', "p"."last_name", 'preferred_name', "p"."preferred_name", 'avatar_url', "p"."avatar_url", 'relationship', "p"."relationship", 'is_class_member', true, 'phone_mobile', "p"."phone_mobile", 'birth_month', "p"."birth_month", 'birth_day', "p"."birth_day", 'birth_year', "p"."birth_year") ORDER BY "p"."relationship") AS "jsonb_agg"
+    COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "p"."id", 'first_name', "p"."first_name", 'last_name', "p"."last_name", 'preferred_name', "p"."preferred_name", 'suffix', "p"."suffix", 'avatar_url', "p"."avatar_url", 'relationship', "p"."relationship", 'is_class_member', true, 'phone_mobile', "p"."phone_mobile", 'birth_month', "p"."birth_month", 'birth_day', "p"."birth_day", 'birth_year', "p"."birth_year") ORDER BY "p"."relationship") AS "jsonb_agg"
            FROM "public"."profiles" "p"
           WHERE (("p"."family_id" = "f"."id") AND ("p"."org_id" = "f"."org_id") AND ("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"])))), '[]'::"jsonb") AS "members",
     "public"."family_directory_people"("id") AS "family_members_list",
@@ -5035,14 +5055,20 @@ CREATE TABLE IF NOT EXISTS "public"."family_members" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "graduation_year" smallint,
     CONSTRAINT "family_members_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
     CONSTRAINT "family_members_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
     CONSTRAINT "family_members_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
+    CONSTRAINT "family_members_graduation_year_check" CHECK ((("graduation_year" >= 2000) AND ("graduation_year" <= 2100))),
     CONSTRAINT "family_members_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"])))
 );
 
 
 ALTER TABLE "public"."family_members" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."family_members"."graduation_year" IS 'Expected high-school graduation year; the grade shown is worked out from it on each school year''s 1 August. No rule ties it to relationship, so relabelling a graded person never fails; the app shows it for a child only.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."feedback" (
@@ -5540,7 +5566,8 @@ CREATE OR REPLACE VIEW "public"."prayer_wall" WITH ("security_invoker"='true') A
     "r"."org_id",
     "r"."group_id",
     "r"."body_ciphertext",
-    "r"."author_hash"
+    "r"."author_hash",
+    "p"."suffix"
    FROM ((("public"."prayer_requests" "r"
      CROSS JOIN LATERAL ( SELECT "public"."prayer_request_visible_author"("r"."id") AS "author_id"
          OFFSET 0) "a")
@@ -5583,7 +5610,9 @@ SELECT
     NULL::"text" AS "occupation",
     NULL::"text" AS "employer",
     NULL::"jsonb" AS "groups",
-    NULL::"uuid" AS "org_id";
+    NULL::"uuid" AS "org_id",
+    NULL::"text" AS "suffix",
+    NULL::"text" AS "gender";
 
 
 ALTER VIEW "public"."profiles_directory" OWNER TO "postgres";
@@ -7346,7 +7375,9 @@ CREATE OR REPLACE VIEW "public"."profiles_directory" WITH ("security_invoker"='t
     "p"."occupation",
     "p"."employer",
     COALESCE("jsonb_agg"("jsonb_build_object"('id', "mg"."id", 'name', "mg"."name", 'color', "mg"."color", 'icon', "mg"."icon") ORDER BY "mg"."display_order") FILTER (WHERE ("mg"."id" IS NOT NULL)), '[]'::"jsonb") AS "groups",
-    "p"."org_id"
+    "p"."org_id",
+    "p"."suffix",
+    "p"."gender"
    FROM (("public"."profiles" "p"
      LEFT JOIN "public"."team_members" "pg" ON ((("p"."id" = "pg"."profile_id") AND ("pg"."org_id" = "p"."org_id"))))
      LEFT JOIN "public"."teams" "mg" ON ((("pg"."team_id" = "mg"."id") AND ("mg"."org_id" = "p"."org_id"))))
@@ -10431,6 +10462,21 @@ GRANT SELECT("email_event_reminders") ON TABLE "public"."profiles" TO "authentic
 
 GRANT SELECT("email_supper_club") ON TABLE "public"."profiles" TO "anon";
 GRANT SELECT("email_supper_club") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("gender") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("gender") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("title") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("title") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("suffix") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("suffix") ON TABLE "public"."profiles" TO "authenticated";
 
 
 
