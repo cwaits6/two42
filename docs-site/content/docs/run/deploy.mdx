@@ -1,6 +1,17 @@
 ---
 title: Deploy
 description: Set up the Supabase project, deploy the app, and create the first church admin.
+sources:
+  - "vercel.json"
+  - "lib/org.ts"
+  - "lib/supabase/middleware.ts"
+  - "app/api/auth/callback/route.ts"
+  - "components/GoogleMapsScript.tsx"
+  - "public/brand/**"
+  - "TRADEMARK.md"
+  - "SECURITY.md"
+  - "public/.well-known/security.txt"
+  - "docs/legal/README.md"
 ---
 
 You need a Supabase project, a Resend account with a verified sending domain, a host for the Next.js app, and a domain. See [Requirements](/docs/run/requirements).

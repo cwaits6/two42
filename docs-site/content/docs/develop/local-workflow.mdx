@@ -1,6 +1,11 @@
 ---
 title: Local workflow
 description: The checks to run before you push, and how to run each one against your local stack.
+sources:
+  - "scripts/check-service-role-org-scope.mjs"
+  - "scripts/check-profile-email-reads.mjs"
+  - "supabase/config.toml"
+  - "playwright.config.ts"
 ---
 
 Start the local stack and the app first, as in [Run it locally](/docs/run/local).

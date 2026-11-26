@@ -1,6 +1,14 @@
 ---
 title: Email
 description: How two42 sends email through Resend, which address it sends from, and the per-church daily limit.
+sources:
+  - "lib/email/identity.ts"
+  - "lib/email/sendingDomains.ts"
+  - "lib/email/quota.ts"
+  - "supabase/functions/_shared/quota.ts"
+  - "supabase/functions/_shared/branding.ts"
+  - "lib/config.ts"
+  - "lib/email/resend.ts"
 ---
 
 ## Who sends what

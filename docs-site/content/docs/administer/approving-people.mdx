@@ -1,6 +1,24 @@
 ---
 title: Approve people
 description: How church admins and leaders review access requests, requests for a new group, requests to join a group, and pending people.
+sources:
+  - "app/admin/requests/**"
+  - "components/admin/PendingAccessRequests.tsx"
+  - "components/admin/PendingGroupRequests.tsx"
+  - "components/admin/PendingJoinRequests.tsx"
+  - "components/admin/ApprovalQueue.tsx"
+  - "lib/admin/**"
+  - "app/api/admin/approve/**"
+  - "app/join/family/[token]/FamilyRequestForm.tsx"
+  - "app/api/family-invites/request/**"
+  - "lib/groups/requests.ts"
+  - "lib/groups/joinQueue.ts"
+  - "lib/groups/pendingJoinRequests.ts"
+  - "app/g/[groupId]/settings/requests/**"
+  - "app/admin/members/memberRoles.ts"
+  - "app/admin/members/RoleChangeDialog.tsx"
+  - "app/admin/members/[id]/MemberRole.tsx"
+  - "app/admin/members/MembersList.tsx"
 ---
 
 ## Where requests wait

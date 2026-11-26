@@ -1,6 +1,27 @@
 ---
 title: Dinner club
 description: Sign up for a season of dinners in members' homes, see your table, say what you bring, and change your plans.
+sources:
+  - "app/g/[groupId]/dinner-club/page.tsx"
+  - "app/g/[groupId]/dinner-club/load.ts"
+  - "components/dinnerClub/SignUpForm.tsx"
+  - "components/dinnerClub/WaitlistForm.tsx"
+  - "components/dinnerClub/DinnerCard.tsx"
+  - "components/dinnerClub/BringListDialog.tsx"
+  - "components/dinnerClub/CalendarLinkCard.tsx"
+  - "components/dinnerClub/HostingDetailsDialog.tsx"
+  - "components/dinnerClub/HostingFields.tsx"
+  - "components/dinnerClub/MoveDinnerButton.tsx"
+  - "components/dinnerClub/MoveDialog.tsx"
+  - "components/dinnerClub/WithdrawButton.tsx"
+  - "lib/dinnerClub/bringList.ts"
+  - "lib/dinnerClub/notify.ts"
+  - "lib/dinnerClub/ics.ts"
+  - "app/api/dinner-club/feed-token/**"
+  - "app/api/dinner-club/feed.ics/**"
+  - "app/api/dinner-club/dinners/[dinnerId]/move/**"
+  - "supabase/functions/send-dinner-reminders/**"
+  - "supabase/functions/_shared/dinner-reminders.ts"
 ---
 
 ## How a dinner club works

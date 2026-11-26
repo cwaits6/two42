@@ -30,6 +30,7 @@ What changed in code. Name any shared component or token introduced or reused.
 - [ ] Meaning never carried by color alone
 - [ ] Empty, loading, and error states read differently from each other
 - [ ] `npm run lint` passes locally
+- [ ] Docs: the matching `docs-site/content/docs/` page is updated in this PR, or the PR carries the `docs-not-needed` label
 
 <!-- Schema change — delete this block if the PR adds no migration. -->
 ## Schema change
