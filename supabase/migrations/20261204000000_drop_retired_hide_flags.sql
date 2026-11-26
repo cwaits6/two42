@@ -5,13 +5,14 @@
 -- Deletes any value hidden by a flag set true since the last sweep, through a
 -- direct API write. The where clauses are in directory_retire_hidden_values().
 -- The lock holds writers off until the drops commit, so a flag set between the
--- sweep and the drop cannot leave its value exposed by the ungated views.
-lock table public.profiles, public.family_units in share mode;
-
+-- sweep and the drop cannot leave its value exposed by the ungated views. It is
+-- taken inside the block because the CLI runs the file as one pipelined batch,
+-- where a top-level LOCK TABLE is refused but a nested one holds to the commit.
 do $$
 declare
   _counts jsonb;
 begin
+  lock table public.profiles, public.family_units in share mode;
   _counts := public.directory_retire_hidden_values();
   raise notice 'directory_retire_hidden_values: %', _counts;
 end $$;
