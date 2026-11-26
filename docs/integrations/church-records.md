@@ -320,7 +320,8 @@ and kept up to date.
   `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's;
   each linked person's records hold their own, so while two linked people in
   a household differ, the first one copied stands and the other's isn't
-  recorded, though a member's change or clear of it is kept),
+  recorded; a member's change or clear of it keeps its state and takes the
+  new church value, so the two agree again once the church corrects both),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   sources, so its values become ordinary two42 data; any change asks the next
@@ -362,8 +363,9 @@ and kept up to date.
   status by id for **Needs review**, then copies linked people never copied and
   people changed since the last mark, 50 at a time, within a time budget. Each
   copy goes through `records_apply_copy()`, which writes nothing if the
-  member's values changed since they were read. The mark moves on only once
-  everyone changed since it was handled. Details are read only for those
+  member's values changed since they were read. A refresh that runs out of
+  time marks the people it didn't reach to be copied in full next time, and
+  still moves the mark on. Details are read only for those
   people; existence and status are read for everyone linked, because a
   person deleted or merged in the records leaves no change to find.
 - **Needs review**: linked people who are inactive (or deceased, or not a
