@@ -73,7 +73,7 @@ const REPEAT_LABELS: Record<RepeatKind, string> = {
 
 export const REPEAT_OPTIONS = REPEAT_KINDS.map((value) => ({ value, label: REPEAT_LABELS[value] }));
 
-const REPLY_LABELS: Record<ReplyStatus, string> = {
+export const REPLY_LABELS: Record<ReplyStatus, string> = {
   going: "Going",
   not_going: "Not going",
 };

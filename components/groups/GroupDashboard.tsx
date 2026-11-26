@@ -39,9 +39,11 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HomeGreeting } from "@/components/groups/HomeGreeting";
 import { HomePrayerCard } from "@/components/groups/home/HomePrayerCard";
+import { NextSupperCard } from "@/components/groups/home/NextSupperCard";
 import { StartingNowPanel } from "@/components/groups/home/StartingNowPanel";
 import { RsvpControl } from "@/components/events/RsvpControl";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { loadNextSupper } from "@/lib/supperClub/nextSupper";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { cn } from "@/lib/utils";
 
@@ -86,15 +88,31 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const now = new Date();
   const isLeader = group.role === "leader";
   const context = { groupId: group.id, isLeader, userId: user.id, timeZone, now };
-  const reads = await loadGroupHomeReads(supabase, { ...context, orgId: viewer.org_id });
+  const [reads, nextSupper] = await Promise.all([
+    loadGroupHomeReads(supabase, { ...context, orgId: viewer.org_id }),
+    loadNextSupper(supabase, { orgId: viewer.org_id, groupId: group.id, userId: user.id, now }),
+  ]);
   const home = buildGroupHome(reads, context);
   const href = (path: string) => groupPath(group.id, path);
+
+  // Its own card, never a row in This week: suppers stay off the group's events and calendar.
+  const supperCard =
+    nextSupper === null ? (
+      <ErrorState thing="your next supper" />
+    ) : (
+      nextSupper.supper && (
+        <NextSupperCard supper={nextSupper.supper} zone={timeZone} href={href("/supper-club")} />
+      )
+    );
 
   if (home.nothingAtAll) {
     return (
       <PageContainer size="wide">
         {greeting}
-        <NothingYet isLeader={isLeader} href={href} />
+        <div className="space-y-12">
+          {supperCard}
+          <NothingYet isLeader={isLeader} href={href} />
+        </div>
       </PageContainer>
     );
   }
@@ -131,6 +149,8 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
         ) : (
           home.todo.length > 0 && <TodoSection rows={home.todo} />
         )}
+
+        {supperCard}
 
         {home.servingCards === null ? (
           <section>

@@ -25,6 +25,7 @@ const OTHER_ADDRESS = "48 Sample Row";
 const OWN_ITEM = "Dessert";
 const OTHER_ITEM = "Bread";
 const PAGE = `/g/${GROUP_B}/supper-club`;
+const NEXT_SUPPER = "Your next supper";
 
 const DROP_SQL = `
   delete from public.supper_rotations where id = '${ROTATION}';
@@ -134,6 +135,19 @@ test.describe("a guest at a published table", () => {
     await expect(page.getByText(OTHER_ITEM)).toHaveCount(0);
   });
 
+  test("sees their next supper on Home, with their host's address and what they bring", async ({ page }) => {
+    await page.goto("/dashboard");
+    const card = page.getByRole("region", { name: /./ }).filter({ hasText: NEXT_SUPPER });
+    await expect(card).toBeVisible();
+    await expect(card.getByText(TITLE)).toBeVisible();
+    await expect(card.getByText(/^(Henry and Chloe|Chloe and Henry)$/)).toBeVisible();
+    await expect(card.getByText(`${OWN_ADDRESS}, Springfield`)).toBeVisible();
+    await expect(card.getByText(OWN_ITEM, { exact: true })).toBeVisible();
+    await expect(card.getByText("No reply yet")).toBeVisible();
+    await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
+    await expect(page.getByText(OTHER_ITEM)).toHaveCount(0);
+  });
+
   test("finds no supper on the group calendar", async ({ page }) => {
     // At phone width the calendar opens in List, which shows every upcoming
     // event, so the supper 10 days out would be on screen if it leaked.
@@ -182,6 +196,14 @@ test.describe("a member of the group at no table", () => {
     await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
   });
 
+  test("sees no supper on the group's Home", async ({ page }) => {
+    await page.goto(`/g/${GROUP_B}/dashboard`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText(NEXT_SUPPER)).toHaveCount(0);
+    await expect(page.getByText(OWN_ADDRESS)).toHaveCount(0);
+    await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
+  });
+
   test("on the waiting list, sees no table, no address and no list until seated", async ({ page }) => {
     runSql(WAITLIST_SQL);
     try {
@@ -221,10 +243,23 @@ test.describe("the group switch", () => {
     expect((await page.goto(`/g/${GROUP_C}/supper-club`))?.status()).toBe(404);
   });
 
-  test("turned off, hides the page and keeps the rotation", async ({ page }) => {
+  test("shows the next supper on the Home of the group that turned it on only", async ({ page }) => {
+    await page.goto(`/g/${GROUP_B}/dashboard`);
+    await expect(page.getByText(NEXT_SUPPER)).toBeVisible();
+    await expect(page.getByText(`${OTHER_ADDRESS}, Springfield`)).toBeVisible();
+    await page.goto(`/g/${GROUP_C}/dashboard`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText(NEXT_SUPPER)).toHaveCount(0);
+    await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
+  });
+
+  test("turned off, hides the page and the Home card and keeps the rotation", async ({ page }) => {
     runSql(`update public.group_settings set supper_club_enabled = false where group_id = '${GROUP_B}';`);
     try {
       expect((await page.goto(PAGE))?.status()).toBe(404);
+      await page.goto(`/g/${GROUP_B}/dashboard`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByText(NEXT_SUPPER)).toHaveCount(0);
     } finally {
       runSql(`update public.group_settings set supper_club_enabled = true where group_id = '${GROUP_B}';`);
     }
