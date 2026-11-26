@@ -46,10 +46,10 @@ function seed(): Record<string, Row[]> {
       { org_id: OTHER_ORG, party_id: "p-other", profile_id: ISAAC },
     ],
     supper_seats: [
-      { org_id: ORG, table_id: "t1", party_id: "p-henry", rotation_id: "s1", group_id: "g1", left_at: null },
-      { org_id: ORG, table_id: "t1", party_id: "p-isaac", rotation_id: "s1", group_id: "g1", left_at: null },
-      { org_id: ORG, table_id: "t2", party_id: "p-leo", rotation_id: "s1", group_id: "g1", left_at: null },
-      { org_id: OTHER_ORG, table_id: "t9", party_id: "p-other", rotation_id: "s9", group_id: "g9", left_at: null },
+      { org_id: ORG, table_id: "t1", party_id: "p-henry", rotation_id: "s1", group_id: "g1", seated_at: "2030-11-01T00:00:00.000Z", left_at: null },
+      { org_id: ORG, table_id: "t1", party_id: "p-isaac", rotation_id: "s1", group_id: "g1", seated_at: "2030-11-01T00:00:00.000Z", left_at: null },
+      { org_id: ORG, table_id: "t2", party_id: "p-leo", rotation_id: "s1", group_id: "g1", seated_at: "2030-11-01T00:00:00.000Z", left_at: null },
+      { org_id: OTHER_ORG, table_id: "t9", party_id: "p-other", rotation_id: "s9", group_id: "g9", seated_at: "2030-11-01T00:00:00.000Z", left_at: null },
     ],
     group_settings: [
       { org_id: ORG, group_id: "g1", supper_club_enabled: true },
@@ -205,6 +205,27 @@ describe("GET /api/supper-club/feed.ics", () => {
     const body = await (await feed(TOKEN)).text();
     expect(body).toContain("UID:supper-d1@two42");
     expect(body).not.toContain("12 Fixture Lane");
+  });
+
+  it("keeps a supper from before the person was seated, without its host's address", async () => {
+    const rows = seed();
+    const seat = rows.supper_seats.find((s) => s.party_id === "p-isaac");
+    seat!.seated_at = "2031-01-06T00:00:00.000Z";
+    createServiceClient.mockResolvedValue(fakeClient(rows).client);
+    const body = await (await feed(TOKEN)).text();
+    expect(body).toContain("UID:supper-d1@two42");
+    expect(body).not.toContain("12 Fixture Lane");
+  });
+
+  it("gives the host's address on every supper once one of theirs is still to come for the person", async () => {
+    const rows = seed();
+    const seat = rows.supper_seats.find((s) => s.party_id === "p-isaac");
+    seat!.seated_at = "2031-01-06T00:00:00.000Z";
+    rows.suppers.push({ org_id: ORG, id: "d3", table_id: "t1", rotation_id: "s1", starts_at: "2031-02-05T00:00:00.000Z", length_minutes: 120, host_party_id: "p-henry" });
+    createServiceClient.mockResolvedValue(fakeClient(rows).client);
+    const body = await (await feed(TOKEN)).text();
+    expect(body).toContain("UID:supper-d3@two42");
+    expect(body).toContain("12 Fixture Lane");
   });
 
   it("drops a group whose leader turned the Supper club off", async () => {

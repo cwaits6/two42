@@ -939,6 +939,31 @@ select is(pg_temp.count_as('h', 'supper_party_notes', format('party_id = %L', pg
 select is(pg_temp.count_as('h2', 'supper_party_notes', format('party_id = %L', pg_temp.id('ru'))), '1',
   'the host of a supper still to come does');
 
+-- Addresses follow attendance the same way. h and h2 were seated before the
+-- held supper; u only after it, so h's one supper at the table is not u's.
+insert into public.supper_party_addresses (org_id, party_id, rotation_id, group_id, address_line1)
+values
+  (pg_temp.id('org_a'), pg_temp.id('rh'), pg_temp.id('rs'), pg_temp.id('grp'), '3 Turns Lane'),
+  (pg_temp.id('org_a'), pg_temp.id('rh2'), pg_temp.id('rs'), pg_temp.id('grp'), '4 Turns Lane');
+update public.supper_seats set seated_at = now() - interval '2 days'
+ where table_id = pg_temp.id('rt') and party_id in (pg_temp.id('rh'), pg_temp.id('rh2'));
+select is(pg_temp.count_as('u', 'supper_party_addresses', format('party_id = %L', pg_temp.id('rh'))), '0',
+  'a guest seated after a host''s only supper at the table does not read that host''s address');
+select is(pg_temp.count_as('u', 'supper_party_addresses', format('party_id = %L', pg_temp.id('rh2'))), '1',
+  'a guest seated late still reads the address of a supper still to come');
+select is(pg_temp.count_as('h2', 'supper_party_addresses', format('party_id = %L', pg_temp.id('rh'))), '1',
+  'a guest seated in time for the held supper reads its host''s address');
+select is(pg_temp.count_as(who, 'supper_party_addresses', format('party_id = %L', pg_temp.id('rh'))), '1',
+  what || ' reads the held supper''s host''s address')
+from (values ('h', 'the host'), ('l', 'a leader')) v(who, what);
+select is(pg_temp.count_as(who, 'supper_party_addresses', format('party_id in (%L, %L)', pg_temp.id('rh'), pg_temp.id('rh2'))), '0',
+  what || ' reads neither host''s address')
+from (values
+  ('n', 'a member of the group at no table'),
+  ('om', 'a member of another group'),
+  ('admin_a', 'a church admin outside the group'),
+  ('xb', 'someone in another church')) v(who, what);
+
 select pg_temp.turns_draft(current_setting('sc.rt'), array['rh2', 'ru'], 'rh2', 'rh2');
 select ok(pg_temp.read_as('l', format('select count(*) from public.supper_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
   'a draft that moves a held supper''s host off the table publishes');

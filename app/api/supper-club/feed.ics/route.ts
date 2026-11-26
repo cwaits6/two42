@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   const { data: seats, error: seatsError } = myParties.length
     ? await supabase
         .from("supper_seats")
-        .select("table_id, rotation_id, group_id")
+        .select("table_id, rotation_id, group_id, seated_at")
         .eq("org_id", orgId)
         .in("party_id", myParties)
         .is("left_at", null)
@@ -154,8 +154,20 @@ export async function GET(request: Request) {
     logError("Failed to read the supper feed's host seats", hostSeatRead.error, { route: "/api/supper-club/feed.ics" });
     return failed();
   }
-  // The same rule as the address policy: a host who has left the table keeps no address on it.
+  // The same rule as the address policy: a host who has left the table keeps
+  // no address on it, and only a supper the person was seated in time for
+  // gives them its host's address.
   const seatedHost = new Set((hostSeatRead.data ?? []).map((st) => `${st.table_id}:${st.party_id}`));
+  const seatedSince = new Map((seats ?? []).map((st) => [st.table_id, st.seated_at]));
+  const readableHosts = new Set(
+    (suppers ?? [])
+      .filter((d) => d.host_party_id && seatedHost.has(`${d.table_id}:${d.host_party_id}`))
+      .filter((d) => {
+        const since = seatedSince.get(d.table_id);
+        return since !== undefined && Date.parse(since) <= Date.parse(d.starts_at);
+      })
+      .map((d) => d.host_party_id),
+  );
 
   const hostIds = [...new Set((hostRead.data ?? []).map((m) => m.profile_id))];
   const { data: hostProfiles, error: namesError } = hostIds.length
@@ -182,7 +194,7 @@ export async function GET(request: Request) {
         ) || null
       : null,
     address:
-      d.host_party_id && seatedHost.has(`${d.table_id}:${d.host_party_id}`)
+      d.host_party_id && seatedHost.has(`${d.table_id}:${d.host_party_id}`) && readableHosts.has(d.host_party_id)
         ? (addressOf.get(d.host_party_id) ?? null)
         : null,
   }));
