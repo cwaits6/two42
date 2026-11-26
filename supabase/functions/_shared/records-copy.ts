@@ -125,13 +125,13 @@ export interface CopyInput {
   today?: Date;
 }
 
-const blank = (value: Cell | undefined) => value === null || value === undefined || value === "";
+export const blank = (value: Cell | undefined) => value === null || value === undefined || value === "";
 
 export function isEmptyValue(value: Columns): boolean {
   return Object.values(value).every(blank);
 }
 
-function pick(row: Columns, columns: readonly string[]): Columns {
+export function pick(row: Columns, columns: readonly string[]): Columns {
   return Object.fromEntries(columns.map((c) => [c, blank(row[c]) ? null : row[c]]));
 }
 
@@ -144,19 +144,29 @@ function affix(value: string | null, max: number): string | null {
   return text && text.length <= max ? text : null;
 }
 
-function phone(value: RecordsPhone | null, normalizePhone: CopyInput["normalizePhone"]): string | null {
+export function phone(value: RecordsPhone | null, normalizePhone: CopyInput["normalizePhone"]): string | null {
   if (!value) return null;
   return normalizePhone(`+${value.countryCode || "1"}${value.number}`);
 }
 
 /** Month and day as every date form requires them; a year only from 1900 to this one. */
-function dateColumns(date: RecordsDate, prefix: string, today: Date): Columns {
-  const empty = { [`${prefix}_month`]: null, [`${prefix}_day`]: null, [`${prefix}_year`]: null };
+export function formDate(date: RecordsDate, today: Date = new Date()): RecordsDate {
   const { month, day, year } = date;
+  const empty = { month: null, day: null, year: null };
   if (!month || !day || month < 1 || month > 12) return empty;
   const yearOk = year !== null && year >= 1900 && year <= today.getFullYear();
   if (day < 1 || day > new Date(yearOk ? year : 2000, month, 0).getDate()) return empty;
-  return { [`${prefix}_month`]: month, [`${prefix}_day`]: day, [`${prefix}_year`]: yearOk ? year : null };
+  return { month, day, year: yearOk ? year : null };
+}
+
+function dateColumns(date: RecordsDate, prefix: string, today: Date): Columns {
+  const { month, day, year } = formDate(date, today);
+  return { [`${prefix}_month`]: month, [`${prefix}_day`]: day, [`${prefix}_year`]: year };
+}
+
+/** A graduation year the grade form can hold. */
+export function formGraduationYear(grade: number | null): number | null {
+  return grade !== null && grade >= 2000 && grade <= 2100 ? grade : null;
 }
 
 /**
@@ -174,7 +184,6 @@ export function churchValues(
   const last = titleCaseName(person.lastName);
   const nick = titleCaseName(person.nickName);
   const nameOk = !!first && !!last && first.length <= MAX_NAME_LENGTH && last.length <= MAX_NAME_LENGTH;
-  const grade = person.graduationYear;
   return {
     ...(nameOk
       ? {
@@ -192,7 +201,7 @@ export function churchValues(
     phone_work: { phone_work: phone(person.work, normalizePhone) },
     birthday: dateColumns(person.birthday, "birth", today),
     anniversary: dateColumns(person.anniversary, "anniversary", today),
-    grade: { graduation_year: grade !== null && grade >= 2000 && grade <= 2100 ? grade : null },
+    grade: { graduation_year: formGraduationYear(person.graduationYear) },
   };
 }
 
@@ -240,31 +249,37 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
       continue;
     }
 
-    if (!prior) {
-      if (isEmptyValue(value)) continue;
-      if (equal) {
-        // A preferred name the member already set stays theirs, even when the nick name matches it.
-        if (field !== "preferred_name") record(field, "records", value);
-      } else if (isEmptyValue(now)) {
-        write(field, value);
-        record(field, "records", value);
-        plan.filled.push(field);
-      } else if (field !== "preferred_name") {
-        // Turning a field on never replaces what a member already entered; it offers the church's value instead.
-        record(field, "changed", value);
-      }
-      continue;
-    }
-
-    if (prior.state === "records") {
-      if (!equal) write(field, value);
-      record(field, "records", value);
-    } else {
-      // The member's own value, or their clear, stays; only what the church holds is kept up to date.
-      record(field, prior.state, value);
-    }
+    const step = memberStep(now, value, prior, columns);
+    if (!step) continue;
+    // A preferred name the member already set stays theirs, even when the nick name matches it.
+    if (field === "preferred_name" && !prior && !step.write) continue;
+    if (step.write) write(field, value);
+    if (step.write && !prior) plan.filled.push(field);
+    record(field, step.state, value);
   }
   return plan;
+}
+
+/**
+ * A member-changeable field's next step: a first fill never replaces what a
+ * member entered, a value still the church's follows the records, and a
+ * member's change or clear stays theirs. Null when there is nothing to record.
+ */
+export function memberStep(
+  now: Columns,
+  value: Columns,
+  prior: { state: ValueState } | undefined,
+  columns: readonly string[],
+): { write: boolean; state: ValueState } | null {
+  const equal = sameValue(now, value, columns);
+  if (!prior) {
+    if (isEmptyValue(value)) return null;
+    if (equal) return { write: false, state: "records" };
+    // Turning a field on never replaces what a member already entered; it offers the church's value instead.
+    return isEmptyValue(now) ? { write: true, state: "records" } : { write: false, state: "changed" };
+  }
+  if (prior.state === "records") return { write: !equal, state: "records" };
+  return { write: false, state: prior.state };
 }
 
 // The photo is the member's: a member's own upload is never replaced, and the

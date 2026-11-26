@@ -7,7 +7,18 @@
 // 20261210000000_church_records_households.sql.
 import { normalizePostalCode, normalizeState, titleCaseCity, titleCaseStreet } from "./address-case.ts";
 import { MAX_NAME_LENGTH, normalizeName, titleCaseName } from "./name-case.ts";
-import { type Columns, isEmptyValue, sameValue, type ValueState } from "./records-copy.ts";
+import {
+  blank,
+  type Columns,
+  formDate,
+  formGraduationYear,
+  isEmptyValue,
+  memberStep,
+  phone,
+  pick,
+  sameValue,
+  type ValueState,
+} from "./records-copy.ts";
 import type { RecordsChild, RecordsFamily } from "./records-types.ts";
 import type { Relationship } from "./relationships.ts";
 
@@ -25,8 +36,6 @@ export const HOUSEHOLD_FIELD_COLUMNS: Record<HouseholdField, readonly string[]> 
 /** The household columns a copy reads: the fields' own, and the spouse's phone choice that replaces phone_home. */
 export const HOUSEHOLD_COPY_COLUMNS = [...ADDRESS_COLUMNS, "phone_home", "phone_profile_id"] as const;
 
-
-const blank = (value: unknown) => value === null || value === undefined || value === "";
 const isUs = (country: string) => !country || ["us", "usa"].includes(country.trim().toLowerCase());
 
 /**
@@ -55,11 +64,7 @@ export function householdChurchValues(
       };
     }
   }
-  const phone = family.homePhone;
-  return {
-    address,
-    phone_home: { phone_home: phone ? normalizePhone(`+${phone.countryCode || "1"}${phone.number}`) : null },
-  };
+  return { address, phone_home: { phone_home: phone(family.homePhone, normalizePhone) } };
 }
 
 export interface HouseholdStoredValue {
@@ -78,9 +83,6 @@ export interface HouseholdCopyPlan {
   household: Columns;
   values: HouseholdValueRow[];
 }
-
-const pick = (row: Columns, columns: readonly string[]): Columns =>
-  Object.fromEntries(columns.map((c) => [c, blank(row[c]) ? null : row[c]]));
 
 /**
  * The household's copy, by the member-changeable rules people's details follow:
@@ -108,23 +110,10 @@ export function planHouseholdCopy(input: {
       else if (!isEmptyValue(value)) record("changed");
       continue;
     }
-    const now = pick(input.current, columns);
-    const equal = sameValue(now, value, columns);
-    if (!prior) {
-      if (isEmptyValue(value)) continue;
-      if (equal) record("records");
-      else if (isEmptyValue(now)) {
-        Object.assign(plan.household, value);
-        record("records");
-      } else record("changed");
-      continue;
-    }
-    if (prior.state === "records") {
-      if (!equal) Object.assign(plan.household, value);
-      record("records");
-    } else {
-      record(prior.state);
-    }
+    const step = memberStep(pick(input.current, columns), value, prior, columns);
+    if (!step) continue;
+    if (step.write) Object.assign(plan.household, value);
+    record(step.state);
   }
   return plan;
 }
@@ -341,16 +330,14 @@ export function childSuggestionRows(
     const last = titleCaseName(child.lastName);
     if (!first || !last || first.length > MAX_NAME_LENGTH || last.length > MAX_NAME_LENGTH) return [];
     if (known.has(`${normalizeName(first)} ${normalizeName(last)}`)) return [];
-    const { month, day } = child.birthday;
-    const dateOk = !!month && !!day && month >= 1 && month <= 12 && day >= 1 && day <= new Date(2000, month, 0).getDate();
-    const grade = child.graduationYear;
+    const { month, day } = formDate({ ...child.birthday, year: null });
     return [{
       external_person_id: child.id,
       first_name: first,
       last_name: last,
-      birth_month: dateOk ? month : null,
-      birth_day: dateOk ? day : null,
-      graduation_year: grade !== null && grade >= 2000 && grade <= 2100 ? grade : null,
+      birth_month: month,
+      birth_day: day,
+      graduation_year: formGraduationYear(child.graduationYear),
       photo: child.photo && child.photo.length <= 100 ? child.photo : null,
     }];
   });

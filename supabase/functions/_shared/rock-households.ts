@@ -143,14 +143,6 @@ async function members(
   return found;
 }
 
-/** Month and day only when they make a date in some year; a child's year is never read. */
-function monthDay(monthValue: unknown, dayValue: unknown): RecordsChild["birthday"] {
-  const month = int(monthValue);
-  const day = int(dayValue);
-  if (!month || !day || month > 12 || day > new Date(2000, month, 0).getDate()) return { month: null, day: null };
-  return { month, day };
-}
-
 /** The family's home address: of its home locations, the one marked for mail first, as Rock's own family view picks it. */
 function homeLocationIds(groupRows: readonly Record<string, unknown>[], homeType: number | null) {
   const byFamily = new Map<number, number>();
@@ -212,7 +204,7 @@ async function families(
           id: String(id),
           firstName: text(row.FirstName),
           lastName: text(row.LastName),
-          birthday: monthDay(row.BirthMonth, row.BirthDay),
+          birthday: { month: int(row.BirthMonth), day: int(row.BirthDay) },
           graduationYear: int(row.GraduationYear),
           photo: photo === null ? null : String(photo),
         }

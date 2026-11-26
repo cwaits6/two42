@@ -104,12 +104,12 @@ Deno.test("families come back with their active members, home address and listed
   assertEquals(family.address, { street1: "12 Oak St", street2: "", city: "Austin", state: "TX", postalCode: "78701", country: "US" });
   // 100's home number is unlisted, so the family's is 101's.
   assertEquals(family.homePhone, { countryCode: "1", number: "5125550122" });
-  // A day the month doesn't have is no birthday.
+  // The month and day pass on as the records hold them; the planner decides whether they make a date.
   assertEquals(family.children, [{
     id: "102",
     firstName: "lily",
     lastName: "Hale",
-    birthday: { month: null, day: null },
+    birthday: { month: 2, day: 30 },
     graduationYear: 2034,
     photo: "88",
   }]);
