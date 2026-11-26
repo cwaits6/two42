@@ -10,6 +10,7 @@ import { logError, logWarn } from "./log.ts";
 import {
   type Columns,
   type CurrentValues,
+  FIELD_COLUMNS,
   type FieldMode,
   LOCKABLE_FIELDS,
   planPersonCopy,
@@ -110,7 +111,7 @@ export interface RefreshResult {
   pending: number;
   /** People listed under Needs review. */
   review: number;
-  /** Photos the records wouldn't give. */
+  /** Photos the records had no usable copy of. */
   photosSkipped: number;
   failed: number;
   /** Whether the run stopped at its time budget. */
@@ -137,6 +138,9 @@ async function must(result: PromiseLike<{ error: QueryError }>, what: string) {
   const { error } = await result;
   if (error) throw new Error(`${what} failed: ${error.message}`);
 }
+
+const pick = (row: Columns, columns: readonly string[]): Columns =>
+  Object.fromEntries(columns.map((column) => [column, row[column] ?? null]));
 
 function parseSettings(rows: { field: string; mode: string }[]): Map<RecordsField, FieldMode> {
   const settings = new Map<RecordsField, FieldMode>();
@@ -178,30 +182,40 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
   if (claimError) throw new Error(`refresh claim failed: ${claimError.message}`);
   if (!claimed || claimed.length === 0) return { ...result, status: "busy" };
 
-  let cursor = claimed[0].cursor;
-  try {
-    cursor = await run(db, options, claimed[0].cursor, result);
-  } finally {
-    await must(
+  const release = (values: Partial<RefreshStateRow>) =>
+    must(
       db
         .from("records_refresh_state")
-        .update({
-          cursor,
-          running_since: null,
-          last_refreshed_at: options.now().toISOString(),
-          last_counts: {
-            copied: result.copied,
-            pending: result.pending,
-            review: result.review,
-            photosSkipped: result.photosSkipped,
-            failed: result.failed,
-          },
-        })
+        .update({ ...values, running_since: null })
         .eq("org_id", orgId)
         .eq("connection_id", connectionId),
       "refresh state release",
     );
+  let cursor: string | null;
+  try {
+    cursor = await run(db, options, claimed[0].cursor, result);
+  } catch (err) {
+    // A failed run is not a refresh: "Last refreshed" keeps the last one that
+    // finished, and the run's own error is the one that reaches the caller.
+    await release({}).catch((releaseError) =>
+      logError("church records refresh claim not released", releaseError, {
+        route: "refresh-church-records",
+        ids: { org: orgId },
+      })
+    );
+    throw err;
   }
+  await release({
+    cursor,
+    last_refreshed_at: options.now().toISOString(),
+    last_counts: {
+      copied: result.copied,
+      pending: result.pending,
+      review: result.review,
+      photosSkipped: result.photosSkipped,
+      failed: result.failed,
+    },
+  });
   return result;
 }
 
@@ -345,7 +359,7 @@ async function copyBatch(
             () =>
               db
                 .from("family_units")
-                .select("id, anniversary_month, anniversary_day, anniversary_year")
+                .select(["id", ...FIELD_COLUMNS.anniversary].join(", "))
                 .eq("org_id", orgId)
                 .in("id", familyIds)
                 .order("id"),
@@ -353,20 +367,20 @@ async function copyBatch(
           )
         ).map((row) => [row.id, row]),
   );
-  const grades = new Map(
-    (
-      await allRows(
-        () =>
-          db
-            .from("family_members")
-            .select("id, claimed_profile_id, graduation_year")
-            .eq("org_id", orgId)
-            .in("claimed_profile_id", profileIds)
-            .order("id"),
-        "household members",
-      )
-    ).map((row) => [row.claimed_profile_id, row]),
-  );
+  // The lowest id is the person's grade row, as records_apply_copy() picks it.
+  const grades = new Map<string, Columns & { id: string; claimed_profile_id: string }>();
+  for (const row of await allRows(
+    () =>
+      db
+        .from("family_members")
+        .select(["id", "claimed_profile_id", ...FIELD_COLUMNS.grade].join(", "))
+        .eq("org_id", orgId)
+        .in("claimed_profile_id", profileIds)
+        .order("id"),
+    "household members",
+  )) {
+    if (!grades.has(row.claimed_profile_id)) grades.set(row.claimed_profile_id, row);
+  }
   const stored = new Map<string, Map<ValueField, StoredValue>>();
   for (const row of await allRows(
     () =>
@@ -394,13 +408,9 @@ async function copyBatch(
     const household = profile.family_id ? households.get(profile.family_id) ?? null : null;
     const grade = grades.get(link.profile_id) ?? null;
     const current: CurrentValues = {
-      profile: Object.fromEntries(PROFILE_COPY_COLUMNS.map((c) => [c, profile[c] ?? null])),
-      household: household && {
-        anniversary_month: household.anniversary_month ?? null,
-        anniversary_day: household.anniversary_day ?? null,
-        anniversary_year: household.anniversary_year ?? null,
-      },
-      grade: grade && { graduation_year: grade.graduation_year ?? null },
+      profile: pick(profile, PROFILE_COPY_COLUMNS),
+      household: household && pick(household, FIELD_COLUMNS.anniversary),
+      grade: grade && pick(grade, FIELD_COLUMNS.grade),
     };
     try {
       const outcome = await copyPerson(db, options, settings, link.profile_id, person, current, stored.get(link.profile_id));

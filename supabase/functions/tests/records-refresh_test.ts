@@ -2,7 +2,7 @@
 // the fakes below satisfy RecordsRefreshClient and RecordsCopySource
 // structurally and record every call.
 
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertFalse, assertRejects } from "jsr:@std/assert@1";
 import { refreshOrg, type RecordsRefreshClient, type RefreshOptions } from "../_shared/records-refresh.ts";
 import type { RecordsCopyPerson, RecordsCopySource, RecordsPresence } from "../_shared/records-types.ts";
 import { normalizePhone } from "../_shared/phone.ts";
@@ -27,6 +27,9 @@ interface Fixture {
   claim: { cursor: string | null }[];
   states: Record<string, unknown>[];
   apply: (args: Record<string, unknown>) => { data: string | null; error: { message: string } | null };
+  values?: Record<string, unknown>[];
+  familyMembers?: Record<string, unknown>[];
+  releaseFails?: boolean;
 }
 
 function fakeDb(fixture: Fixture) {
@@ -43,8 +46,8 @@ function fakeDb(fixture: Fixture) {
     records_person_state: fixture.states,
     profiles: [P1, P4].map((id) => ({ id, family_id: null, first_name: "Kept", last_name: "Name", phone_mobile: null })),
     family_units: [],
-    family_members: [],
-    records_field_values: [],
+    family_members: fixture.familyMembers ?? [],
+    records_field_values: fixture.values ?? [],
   };
   const chain = (call: Call) => {
     const self = {
@@ -57,7 +60,9 @@ function fakeDb(fixture: Fixture) {
       then(resolve: (r: unknown) => void) {
         if (call.op === "select") resolve({ data: rows[call.table] ?? [], error: null });
         else if (call.op === "update+select") resolve({ data: fixture.claim, error: null });
-        else resolve({ error: null });
+        else if (call.op === "update" && call.table === "records_refresh_state" && fixture.releaseFails) {
+          resolve({ error: { message: "release refused" } });
+        } else resolve({ error: null });
       },
     };
     return self;
@@ -231,4 +236,62 @@ Deno.test("nothing read from the records reaches a log line", async () => {
   for (const value of ["Zebulon", "Quux", "Zeb", "5125550123", '"100"', "rock.example.org"]) {
     assertFalse(text.includes(value), `a log line carries ${value}`);
   }
+});
+
+Deno.test("a value the member cleared is handed to the copy and stays cleared", async () => {
+  const cleared = { profile_id: P1, field: "phone_mobile", state: "cleared", church_value: { phone_mobile: "+15125550123" } };
+  const { db, rpcs } = fakeDb({ ...FIXTURE, values: [cleared] });
+  await refreshOrg(db, options(fakeSource().source));
+  assertEquals(rpcs.length, 1);
+  assertEquals(rpcs[0]._profile, {});
+  assertEquals(rpcs[0]._filled, false);
+  assertEquals(
+    (rpcs[0]._values as { field: string; state: string }[]).find((v) => v.field === "phone_mobile")?.state,
+    "cleared",
+  );
+});
+
+Deno.test("a failed run keeps the last refresh time and releases its claim", async () => {
+  const { db, calls } = fakeDb(FIXTURE);
+  const { source } = fakeSource();
+  const failing = { ...source, presence: () => Promise.reject(new Error("records down")) };
+  await assertRejects(() => refreshOrg(db, options(failing)), Error, "records down");
+  const release = calls.at(-1)!;
+  assertEquals(release.table, "records_refresh_state");
+  assertEquals(release.values, { running_since: null });
+});
+
+Deno.test("a release that also fails doesn't hide why the run failed", async () => {
+  const { db } = fakeDb({ ...FIXTURE, releaseFails: true });
+  const { source } = fakeSource();
+  const failing = { ...source, presence: () => Promise.reject(new Error("records down")) };
+  await assertRejects(() => refreshOrg(db, options(failing)), Error, "records down");
+});
+
+Deno.test("a photo the records couldn't give right now puts the person back for the next run", async () => {
+  const { db, calls, rpcs } = fakeDb({ ...FIXTURE, settings: [{ field: "photo", mode: "member" }] });
+  const { source } = fakeSource();
+  const withPhoto: RecordsCopySource = {
+    ...source,
+    peopleForCopy: () => Promise.resolve([{ ...CHURCH, photo: "77" }]),
+    photo: () => Promise.reject(new Error("timed out")),
+  };
+  const result = await refreshOrg(db, options(withPhoto));
+  assertEquals(rpcs, []);
+  assertEquals(result.failed, 1);
+  const retry = calls.filter((c) => c.table === "records_person_state" && c.op === "upsert").at(-1)!;
+  assertEquals(retry.values, [{ org_id: ORG, profile_id: P1, copied_at: null }]);
+});
+
+Deno.test("with two household rows for one person, the copy works from the first, as the database writes it", async () => {
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    settings: [{ field: "grade", mode: "member" }],
+    familyMembers: [
+      { id: "fm-1", claimed_profile_id: P1, graduation_year: 2031 },
+      { id: "fm-2", claimed_profile_id: P1, graduation_year: 2029 },
+    ],
+  });
+  await refreshOrg(db, options(fakeSource().source));
+  assertEquals((rpcs[0]._expected as { grade: unknown }).grade, { graduation_year: 2031 });
 });

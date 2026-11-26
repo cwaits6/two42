@@ -64,6 +64,9 @@ export interface RecordsCopySource {
   peopleForCopy(creds: RecordsCredentials, ids: readonly string[]): Promise<RecordsCopyPerson[]>;
   /** Which of these ids still exist, and whether each is active. An id that doesn't is left out. */
   presence(creds: RecordsCredentials, ids: readonly string[]): Promise<Map<string, RecordsPresence>>;
-  /** The photo as a JPEG no larger than maxEdge on its longer side, or null when the records won't give one. */
+  /**
+   * The photo as a JPEG no larger than maxEdge on its longer side, or null when the records have no usable one.
+   * Throws when the records can't be reached or fail, so the person is tried again rather than left without it.
+   */
   photo(creds: RecordsCredentials, token: string, maxEdge: number): Promise<Uint8Array | null>;
 }

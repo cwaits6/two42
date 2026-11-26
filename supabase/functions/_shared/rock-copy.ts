@@ -327,7 +327,11 @@ async function photo(
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
-    return null;
+    throw new RecordsError("unreachable");
+  }
+  if (response.status >= 500 || response.status === 429) {
+    await response.body?.cancel();
+    throw new RecordsError("unreachable", response.status);
   }
   if (response.status !== 200 || !(response.headers.get("content-type") ?? "").startsWith("image/jpeg")) {
     await response.body?.cancel();

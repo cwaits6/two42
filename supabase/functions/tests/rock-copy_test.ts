@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertFalse, assertRejects } from "jsr:@std/assert@1";
+import { RecordsError } from "../_shared/records-errors.ts";
 import { rockCopySource, ROCK_PHONE_TYPE_GUIDS } from "../_shared/rock-copy.ts";
 import { ROCK_GUIDS } from "../_shared/rock-client.ts";
 
@@ -164,6 +165,14 @@ Deno.test("a photo comes from Rock's image handler without the key, and only as 
     null,
   );
   assertEquals(await rock({ "/GetImage.ashx": image(jpeg, "image/jpeg", 404) }).source.photo(creds, "77", 400), null);
+  for (const status of [500, 503, 429]) {
+    await assertRejects(
+      () => rock({ "/GetImage.ashx": image(jpeg, "image/jpeg", status) }).source.photo(creds, "77", 400),
+      RecordsError,
+    );
+  }
+  const down = rockCopySource(() => Promise.reject(new TypeError("network")));
+  await assertRejects(() => down.photo(creds, "77", 400), RecordsError);
   const refused = rock({ "/GetImage.ashx": image(jpeg) });
   assertEquals(await refused.source.photo(creds, "../x", 400), null);
   assertEquals(refused.calls, []);
