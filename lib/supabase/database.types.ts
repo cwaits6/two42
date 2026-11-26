@@ -2628,7 +2628,7 @@ isOneToOne: false
 { Args: { "_base_url": string,"_connected_by": string,"_key_ciphertext": string,"_key_hint": string,"_org_id": string,"_provider": string }; Returns: undefined
                            },
 "records_save_field_settings":
-{ Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: undefined
+{ Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: string
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string

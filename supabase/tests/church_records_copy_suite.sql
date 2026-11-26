@@ -2,8 +2,8 @@
 -- each person's notice and review state, and the refresh's mark. The copy
 -- rules themselves are proven in supabase/functions/tests/records-copy_test.ts;
 -- this suite proves what the database guarantees around them: the church
--- boundary, that only server code writes settings and sources, that a member
--- reads only their own sources, and what a member's edit does to them.
+-- boundary, that only server code writes settings and sources, who reads
+-- which sources, and what a member's edit does to them.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(36);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -196,6 +196,22 @@ select is(
   array[false, false, true, false, false, true],
   'only the service role saves settings or applies a copy');
 
+insert into public.records_refresh_state (org_id, connection_id, running_since)
+  select org_id, connection_id, now() from public.records_connections where org_id = pg_temp.fx('org');
+select is(
+  public.records_save_field_settings(pg_temp.fx('org'), '{"name": "member"}', pg_temp.fx('admin')),
+  'busy', 'settings aren''t saved while a refresh is running, since it works from the ones it read');
+update public.records_refresh_state set running_since = now() - interval '20 minutes' where org_id = pg_temp.fx('org');
+select is(
+  array[
+    (select mode from public.records_field_settings where org_id = pg_temp.fx('org') and field = 'name'),
+    public.records_save_field_settings(pg_temp.fx('org'),
+      '{"name": "locked", "phone_mobile": "member", "birthday": "member", "anniversary": "member", "grade": "locked"}',
+      pg_temp.fx('admin'))
+  ],
+  array['locked', 'saved'], 'nothing changed meanwhile, and a claim past its lease no longer holds a save back');
+delete from public.records_refresh_state where org_id = pg_temp.fx('org');
+
 select is(
   pg_temp.seen('leo.loremsworth@example.test', 'select count(*)::int from public.records_field_settings'),
   5, 'a member reads the church''s settings');
@@ -261,17 +277,27 @@ select is(
   'gone', 'a profile from another church is not this church''s to copy into');
 
 -- ── Who reads the sources ───────────────────────────────────────────────────
+-- Leo manages the household; Isaac is in it without managing it; Zoe is in none.
+update public.profiles set relationship = 'primary' where id = pg_temp.fx('member');
+update public.profiles set relationship = 'other' where id = pg_temp.fx('member2');
+update public.profiles set family_id = null where email = 'zoe.dummyfield@example.test';
 select is(
   array[
     pg_temp.seen('leo.loremsworth@example.test',
       format('select count(*)::int from public.records_field_values where profile_id = %L', pg_temp.fx('member'))),
     pg_temp.seen('leo.loremsworth@example.test',
       format('select count(*)::int from public.records_field_values where profile_id = %L', pg_temp.fx('member2'))),
+    pg_temp.seen('isaac.seedly@example.test',
+      format('select count(*)::int from public.records_field_values where profile_id = %L', pg_temp.fx('member'))),
+    pg_temp.seen('isaac.seedly@example.test',
+      format('select count(*)::int from public.records_field_values where profile_id = %L and field = %L',
+             pg_temp.fx('member'), 'anniversary')),
+    pg_temp.seen('zoe.dummyfield@example.test', 'select count(*)::int from public.records_field_values'),
     pg_temp.seen('admin@local.dev', 'select count(*)::int from public.records_field_values'),
     pg_temp.seen('owner@copy-boundary.example.test', 'select count(*)::int from public.records_field_values')
   ],
-  array[5, 0, 7, 0],
-  'a member reads their own sources and not another person''s, even in their household; a church admin reads every one in their church only');
+  array[5, 2, 1, 1, 0, 7, 0],
+  'a member reads their own sources; a household manager those of the people they edit; the rest of the household only the anniversary; nobody else any; a church admin every one in their church only');
 
 select is(
   array[

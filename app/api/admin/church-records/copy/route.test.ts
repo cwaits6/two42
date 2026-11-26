@@ -26,6 +26,7 @@ beforeEach(() => {
   requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", user: { id: "admin-1" } });
   store.readConnection.mockResolvedValue(CONNECTION);
   store.readFieldSettings.mockResolvedValue({ name: "locked", phone_mobile: "member" });
+  store.saveFieldSettings.mockResolvedValue("saved");
   store.readCopyStatus.mockResolvedValue({
     lastRefreshedAt: "2026-11-26T03:00:00Z",
     pending: 3,
@@ -83,6 +84,13 @@ describe("/api/admin/church-records/copy", () => {
       { name: "locked", phone_mobile: "member", photo: "member" },
       "admin-1",
     );
+  });
+
+  it("answers 409 while a refresh is running, which saved nothing", async () => {
+    store.saveFieldSettings.mockResolvedValue("busy");
+    const res = await put({ fields: { name: "locked" } });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/refresh is running/);
   });
 
   it.each([

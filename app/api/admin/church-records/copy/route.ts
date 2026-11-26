@@ -19,7 +19,7 @@ import {
  *        their two42 name, why, and where to open them in the records.
  *   PUT  save the settings, `{ fields: { <field>: "locked" | "member" } }`;
  *        a field left out is not from the records. Only identity fields can
- *        be locked.
+ *        be locked. 409 while a refresh is running, saving nothing.
  *
  * Answers 404 while the church isn't connected, or its provider offers no
  * copying. The org is the caller's own, from requireOrgAdmin().
@@ -72,7 +72,12 @@ export async function PUT(request: Request) {
   }
   try {
     if (!(await copyProvider(gate.orgId))) return hidden();
-    await saveFieldSettings(gate.orgId, fields, gate.user.id);
+    if ((await saveFieldSettings(gate.orgId, fields, gate.user.id)) === "busy") {
+      return NextResponse.json(
+        { error: "A refresh is running. Save again when it finishes, in a few minutes." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ fields: await readFieldSettings(gate.orgId) });
   } catch (err) {
     logError("Church records copy settings save failed", err, { route: "/api/admin/church-records/copy", ids: { org: gate.orgId } });

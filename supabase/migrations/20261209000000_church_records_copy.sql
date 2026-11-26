@@ -127,14 +127,27 @@ create policy "Members read the church's field settings" on public.records_field
   for select to authenticated
   using (org_id = (select public.app_request_org_id()));
 
--- A person's own sources, and every person's for a church admin. Nobody else
--- reads them, a spouse included.
+-- A person's own sources and every person's for a church admin. In a
+-- household, a household manager reads those of the people they can edit, so
+-- the edit sheet shows what is locked, and everyone reads the anniversary's,
+-- which is the household's own. Nobody else reads them.
 grant select on public.records_field_values to authenticated;
-create policy "People read their own value sources" on public.records_field_values
+create policy "People read the value sources of details they edit" on public.records_field_values
   for select to authenticated
   using (
     org_id = (select public.app_request_org_id())
-    and (profile_id = (select auth.uid()) or (select public.is_admin()))
+    and (
+      profile_id = (select auth.uid())
+      or (select public.is_admin())
+      or exists (
+        select 1 from public.profiles p
+         where p.id = records_field_values.profile_id
+           and p.org_id = records_field_values.org_id
+           and p.family_id is not null
+           and p.family_id = (select public.current_family_id())
+           and (records_field_values.field = 'anniversary' or (select public.is_household_manager()))
+      )
+    )
   );
 
 -- The notice is the only state a member reads or writes; the review reason
@@ -215,10 +228,16 @@ grant execute on function public.records_pick(jsonb, text[]) to service_role;
 -- change asks the next refresh to copy everyone in full, which is how a field
 -- just turned on gets filled.
 --
+-- Answers 'busy', saving nothing, while a refresh holds its claim: that run
+-- read the settings when it started and would write by the old ones. The
+-- claim's row is locked first, so a refresh starting meanwhile waits and then
+-- reads the settings saved here. The 15 minutes match the claim's lease in
+-- supabase/functions/_shared/records-refresh.ts.
+--
 -- SECURITY INVOKER and executable by the service role only: the caller is
 -- server code that has checked the church admin and passes that admin's org.
 create function public.records_save_field_settings(_org_id uuid, _settings jsonb, _updated_by uuid)
-  returns void
+  returns text
   language plpgsql
   security invoker
   set search_path = ''
@@ -226,7 +245,15 @@ as $$
 declare
   _before jsonb;
   _after jsonb;
+  _running timestamptz;
 begin
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return 'busy';
+  end if;
+
   select coalesce(jsonb_object_agg(field, mode), '{}'::jsonb) into _before
     from public.records_field_settings where org_id = _org_id;
 
@@ -243,7 +270,7 @@ begin
   select coalesce(jsonb_object_agg(field, mode), '{}'::jsonb) into _after
     from public.records_field_settings where org_id = _org_id;
   if _after = _before then
-    return;
+    return 'saved';
   end if;
 
   delete from public.records_field_values v
@@ -252,6 +279,7 @@ begin
 
   update public.records_person_state set copied_at = null
    where org_id = _org_id and copied_at is not null;
+  return 'saved';
 end;
 $$;
 

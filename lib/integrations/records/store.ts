@@ -169,14 +169,21 @@ export async function readFieldSettings(orgId: string): Promise<FieldSettings> {
 }
 
 /** Replaces the settings in one transaction; a field turned off loses its sources, and any change asks for a full copy. */
-export async function saveFieldSettings(orgId: string, settings: FieldSettings, updatedBy: string): Promise<void> {
+/** "busy" when a refresh is running: nothing was saved, because that run would write by the old settings. */
+export async function saveFieldSettings(
+  orgId: string,
+  settings: FieldSettings,
+  updatedBy: string,
+): Promise<"saved" | "busy"> {
   const service = await createServiceClient();
-  const { error } = await service.rpc("records_save_field_settings", {
+  const { data, error } = await service.rpc("records_save_field_settings", {
     _org_id: orgId,
     _settings: settings,
     _updated_by: updatedBy,
   });
   if (error) throw new RecordsStoreError("records field settings write failed", { cause: error });
+  if (data !== "saved" && data !== "busy") throw new RecordsStoreError("records field settings write gave no answer");
+  return data;
 }
 
 export interface ReviewPerson {
