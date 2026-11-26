@@ -287,7 +287,11 @@ grant execute on function public.records_save_field_settings(uuid, jsonb, uuid) 
 -- Saves the children switch. Turning it off removes every suggested child the
 -- household hasn't decided on and every photo token still waiting, so nothing
 -- about a child is kept while it is off; the records of a household's
--- decisions stay, so a dismissed child stays dismissed.
+-- decisions stay, so a dismissed child stays dismissed. Answers 'busy',
+-- saving nothing, while a refresh holds its claim, since that run read the
+-- switch when it started and would keep suggesting children and fetching
+-- their photos; the 15 minutes match the claim's lease, as in
+-- records_save_field_settings().
 --
 -- SECURITY INVOKER and executable by the service role only: the caller is
 -- server code that has checked the church admin and passes that admin's org.
@@ -297,7 +301,19 @@ create function public.records_save_children_setting(_org_id uuid, _on boolean, 
   security invoker
   set search_path = ''
 as $$
+declare
+  _running timestamptz;
 begin
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return 'busy';
+  end if;
+
   insert into public.records_org_settings (org_id, suggest_children, updated_by, updated_at)
   values (_org_id, _on, _updated_by, now())
   on conflict (org_id) do update

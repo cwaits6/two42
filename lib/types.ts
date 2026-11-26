@@ -1,4 +1,5 @@
 import type { Tables } from "@/lib/supabase/database.types";
+import type { Relationship } from "@/supabase/functions/_shared/relationships";
 
 export type UserRole = "pending" | "member" | "admin";
 
@@ -210,13 +211,7 @@ export interface Lecture {
   created_at: string;
 }
 
-export type FamilyMemberRelationship =
-  | "primary"
-  | "spouse"
-  | "child"
-  | "parent"
-  | "sibling"
-  | "other";
+export type FamilyMemberRelationship = Relationship;
 
 /** Lightweight non-auth family member (children, non-attending spouses, etc.) */
 export interface FamilyMember {

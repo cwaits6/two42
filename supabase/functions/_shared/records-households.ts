@@ -9,6 +9,7 @@ import { normalizePostalCode, normalizeState, titleCaseCity, titleCaseStreet } f
 import { MAX_NAME_LENGTH, normalizeName, titleCaseName } from "./name-case.ts";
 import { type Columns, isEmptyValue, sameValue, type ValueState } from "./records-copy.ts";
 import type { RecordsChild, RecordsFamily } from "./records-types.ts";
+import type { Relationship } from "./relationships.ts";
 
 /** The household fields a church admin chooses a setting for; always the members' to change. */
 export const HOUSEHOLD_FIELDS = ["address", "phone_home"] as const;
@@ -24,7 +25,6 @@ export const HOUSEHOLD_FIELD_COLUMNS: Record<HouseholdField, readonly string[]> 
 /** The household columns a copy reads: the fields' own, and the spouse's phone choice that replaces phone_home. */
 export const HOUSEHOLD_COPY_COLUMNS = [...ADDRESS_COLUMNS, "phone_home", "phone_profile_id"] as const;
 
-export type Relationship = "primary" | "spouse" | "child" | "parent" | "sibling" | "other";
 
 const blank = (value: unknown) => value === null || value === undefined || value === "";
 const isUs = (country: string) => !country || ["us", "usa"].includes(country.trim().toLowerCase());
@@ -160,6 +160,10 @@ export interface SuggestedPerson {
   from_family_id: string | null;
   relationship: Relationship;
 }
+
+/** What records_confirm_household() answers; its SQL body returns exactly these. */
+export const CONFIRM_HOUSEHOLD_OUTCOMES = ["confirmed", "stale", "gone", "busy"] as const;
+export type ConfirmHouseholdOutcome = (typeof CONFIRM_HOUSEHOLD_OUTCOMES)[number];
 
 export interface HouseholdSuggestion {
   external_family_id: string;

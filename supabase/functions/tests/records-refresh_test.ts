@@ -692,6 +692,9 @@ Deno.test("no refresh changes a household's people: groupings are only stored as
   const apply = rpcs[fns.indexOf("records_apply_household_copy")];
   assertEquals((apply._household as Record<string, unknown>).address_line1, "12 Oak St");
   assertEquals((apply._expected as { family: string }).family, "500");
+  // Home phone is off in the field settings, so the family's home phone isn't copied or tracked.
+  assertFalse("phone_home" in (apply._household as Record<string, unknown>));
+  assertEquals((apply._values as { field: string }[]).map((v) => v.field), ["address"]);
 });
 
 Deno.test("a refresh cut short before every family was read keeps the last suggestions", async () => {
@@ -706,6 +709,33 @@ Deno.test("a refresh cut short before every family was read keeps the last sugge
   const result = await refreshOrg(db, options(source, { elapsed: () => spent }));
   assertFalse(fns.includes("records_replace_household_suggestions"));
   assertEquals(result.householdsCopied, 0);
+  assertEquals(result.stoppedAtBudget, true);
+});
+
+Deno.test("a refresh cut short at an added child's photo hasn't finished", async () => {
+  let spent = 0;
+  const { db, calls } = fakeDb({ ...HOUSEHOLD_FIXTURE, childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }] });
+  const { source } = householdSource({
+    families: () => {
+      spent = 100_000;
+      return Promise.resolve([FAMILY]);
+    },
+  });
+  source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+  const result = await refreshOrg(db, options(source, { elapsed: () => spent }));
+  assertEquals(result.stoppedAtBudget, true);
+  assertFalse(calls.some((c) => c.table === "records_child_suggestions" && c.op === "update"));
+});
+
+Deno.test("records that can't be reached while reading families fail the run instead of blaming the key", async () => {
+  const { db, calls } = fakeDb(HOUSEHOLD_FIXTURE);
+  const { source } = householdSource({ familyOf: () => Promise.reject(new RecordsError("unreachable")) });
+  await logged(async () => {
+    await assertRejects(() => refreshOrg(db, options(source)), RecordsError);
+  });
+  const release = calls.filter((c) => c.table === "records_refresh_state" && c.op === "update").at(-1)!;
+  assertEquals((release.values as { running_since: null }).running_since, null);
+  assertFalse("last_counts" in (release.values as Record<string, unknown>));
 });
 
 Deno.test("with the children switch off, no child is asked for or suggested", async () => {

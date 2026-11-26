@@ -39,6 +39,7 @@ beforeEach(() => {
   });
   store.readyHouseholdSuggestions.mockResolvedValue(new Set([A, B]));
   store.confirmHousehold.mockResolvedValue("confirmed");
+  store.saveChildrenSetting.mockResolvedValue("saved");
 });
 
 describe("/api/admin/church-records/households", () => {
@@ -76,6 +77,13 @@ describe("/api/admin/church-records/households", () => {
     const res = await send(PUT, { suggestChildren: true });
     expect(await res.json()).toEqual({ suggestChildren: true });
     expect(store.saveChildrenSetting).toHaveBeenCalledWith("org-1", true, "admin-1");
+  });
+
+  it("answers 409 for the children switch while a refresh runs, since that run keeps the old one", async () => {
+    store.saveChildrenSetting.mockResolvedValue("busy");
+    const res = await send(PUT, { suggestChildren: false });
+    expect(res.status).toBe(409);
+    expect(await res.json()).not.toHaveProperty("suggestChildren");
   });
 
   it("refuses a bulk confirm holding any suggestion under Check first", async () => {

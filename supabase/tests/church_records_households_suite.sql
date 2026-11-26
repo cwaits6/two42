@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(75);
+select plan(83);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -323,7 +323,11 @@ insert into public.records_refresh_state (org_id, connection_id, running_since)
   values (pg_temp.fx('org'), pg_temp.fx('connection'), now())
   on conflict (org_id) do update set running_since = excluded.running_since;
 select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'busy',
-  'a confirmation waits while a refresh is replacing the suggestions');
+  'a confirmation is refused while a refresh is replacing the suggestions');
+select is(public.records_save_children_setting(pg_temp.fx('org'), true, pg_temp.fx('admin')), 'busy',
+  'so is the children switch, since that refresh read it when it started');
+select is((select suggest_children from public.records_org_settings where org_id = pg_temp.fx('org')), false,
+  'and the switch stays as it was');
 update public.records_refresh_state set running_since = null where org_id = pg_temp.fx('org');
 
 select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('other_suggestion'), pg_temp.fx('admin')), 'gone',
@@ -351,6 +355,46 @@ select is((select count(*)::int from public.records_household_suggestions where 
 select is(
   (select count(*)::int from public.profiles where id = pg_temp.fx('hannah') and family_id = pg_temp.fx('loremsworth')),
   1, 'the household he left keeps everyone else in it');
+
+insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id)
+  values (pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('hannah'), '105'),
+         (pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.uid('ruth.fixtureton@example.test'), '104');
+select public.records_replace_household_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), jsonb_build_array(
+  jsonb_build_object('external_family_id', 'F2', 'target_family_id', pg_temp.fx('seedly'), 'family_name', null, 'ready', false,
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'relationship', 'primary'))),
+  jsonb_build_object('external_family_id', 'F5', 'target_family_id', pg_temp.fx('home'), 'family_name', null, 'ready', false,
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'relationship', 'other'))),
+  jsonb_build_object('external_family_id', 'F4', 'target_family_id', null, 'family_name', 'Fixtureton', 'ready', true,
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.uid('ruth.fixtureton@example.test'), 'from_family_id', null, 'relationship', 'primary')))));
+create temp table before_guards on commit drop as select id, family_id, relationship from public.profiles;
+create temp table before_units on commit drop as select id from public.family_units;
+
+select is(
+  public.records_confirm_household(pg_temp.fx('org'),
+    (select id from public.records_household_suggestions where external_family_id = 'F2'), pg_temp.fx('admin')),
+  'stale', 'a suggestion naming a primary for a household that keeps its own primary is stale');
+select is(
+  public.records_confirm_household(pg_temp.fx('org'),
+    (select id from public.records_household_suggestions where external_family_id = 'F5'), pg_temp.fx('admin')),
+  'stale', 'so is one into a household linked to another family');
+select is(
+  (select count(*)::int from public.profiles p join before_guards b using (id)
+    where (p.family_id, p.relationship) is distinct from (b.family_id, b.relationship)),
+  0, 'and neither moves anyone');
+
+select is(
+  public.records_confirm_household(pg_temp.fx('org'),
+    (select id from public.records_household_suggestions where external_family_id = 'F4'), pg_temp.fx('admin')),
+  'confirmed', 'the church admin confirms a suggestion for a new household');
+select is(
+  (select row(f.org_id = pg_temp.fx('org'), f.family_name, p.relationship, f.id in (select id from before_units))::text
+     from public.profiles p join public.family_units f on f.id = p.family_id
+    where p.id = pg_temp.uid('ruth.fixtureton@example.test')),
+  row(true, 'Fixtureton', 'primary', false)::text, 'the person it names is the primary of a new household in this church');
+select is(
+  (select l.family_id from public.records_household_links l where l.org_id = pg_temp.fx('org') and l.external_family_id = 'F4'),
+  (select family_id from public.profiles where id = pg_temp.uid('ruth.fixtureton@example.test')),
+  'and the new household is linked to its family');
 
 -- ── A linked household's address and home phone ─────────────────────────────
 select is(

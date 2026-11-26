@@ -12,6 +12,11 @@ import type { FieldSettings } from "./settings";
 import { openKey } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
+import {
+  CONFIRM_HOUSEHOLD_OUTCOMES,
+  type ConfirmHouseholdOutcome,
+  type SuggestedPerson,
+} from "@/supabase/functions/_shared/records-households";
 
 export interface ConnectionSummary {
   provider: string;
@@ -317,11 +322,7 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
 
   const parsed = rows.map((row) => ({
     row,
-    people: (Array.isArray(row.people) ? row.people : []) as {
-      profile_id: string;
-      from_family_id: string | null;
-      relationship: string;
-    }[],
+    people: (Array.isArray(row.people) ? row.people : []) as SuggestedPerson[],
   }));
   const profileIds = [...new Set(parsed.flatMap((s) => s.people.map((p) => p.profile_id)))];
   const familyIds = [
@@ -409,8 +410,11 @@ export async function readyHouseholdSuggestions(orgId: string, ids: readonly str
   return new Set((data ?? []).map((row) => row.id));
 }
 
-/** Turning children off removes every suggested child nobody has decided on. */
-export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy: string): Promise<void> {
+/**
+ * Turning children off removes every suggested child nobody has decided on.
+ * "busy" when a refresh is running: nothing was saved, because that run would keep the old switch.
+ */
+export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy: string): Promise<"saved" | "busy"> {
   const service = await createServiceClient();
   const { data, error } = await service.rpc("records_save_children_setting", {
     _org_id: orgId,
@@ -418,12 +422,12 @@ export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy:
     _updated_by: updatedBy,
   });
   if (error) throw new RecordsStoreError("records children setting write failed", { cause: error });
-  if (data !== "saved") throw new RecordsStoreError("records children setting write gave no answer");
+  if (data !== "saved" && data !== "busy") throw new RecordsStoreError("records children setting write gave no answer");
+  return data;
 }
 
-export type ConfirmHouseholdResult = "confirmed" | "stale" | "gone" | "busy";
 
-export async function confirmHousehold(orgId: string, suggestionId: string, confirmedBy: string): Promise<ConfirmHouseholdResult> {
+export async function confirmHousehold(orgId: string, suggestionId: string, confirmedBy: string): Promise<ConfirmHouseholdOutcome> {
   const service = await createServiceClient();
   const { data, error } = await service.rpc("records_confirm_household", {
     _org_id: orgId,
@@ -431,8 +435,7 @@ export async function confirmHousehold(orgId: string, suggestionId: string, conf
     _confirmed_by: confirmedBy,
   });
   if (error) throw new RecordsStoreError("records household confirm failed", { cause: error });
-  if (data !== "confirmed" && data !== "stale" && data !== "gone" && data !== "busy") {
-    throw new RecordsStoreError("records household confirm gave no answer");
-  }
-  return data;
+  const answer = CONFIRM_HOUSEHOLD_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records household confirm gave no answer");
+  return answer;
 }

@@ -158,8 +158,9 @@ How it works:
   phone, and updates the suggested children. The church admin's
   **Households** tab reads only two42's database, and the browser sends only
   suggestion ids. A refresh cut short keeps the last refresh's suggestions.
-  A records error reading families ends only the household step: people are
-  still copied, and the tab says families couldn't be read.
+  A key refused a family read ends only the household step: people are still
+  copied, and the tab says families couldn't be read. Any other records error
+  reading families fails the refresh, like any other.
 - **Which household.** A family's household is the one already linked to it;
   else, of its linked people's households not linked to another family, the
   one holding most of them, then the oldest; else a new household named from
@@ -174,7 +175,7 @@ How it works:
   are **Ready to confirm**, in bulk. Confirming refuses a suggestion that
   changed since the refresh (anyone moved, unlinked or no longer approved, the
   household linked elsewhere or holding a primary or spouse it didn't), and
-  waits while a refresh runs.
+  is refused while a refresh runs.
 - **Relationships.** When the family's two adults are married in the records
   and both are linked, one is `primary` (whoever already is, in the household)
   and the other `spouse`. A child in the records becomes `child`. Anyone whose
@@ -199,7 +200,9 @@ How it works:
   decision, so the child is never suggested again. An added child's photo is
   fetched by the next refresh, stored under the child's own storage key, and
   never replaces a photo the household uploaded. Turning the switch off
-  removes every open suggestion and every photo still waiting.
+  removes every open suggestion and every photo still waiting. Saving the
+  switch is refused while a refresh holds its claim, because that refresh
+  works from the switch it read when it started.
 - Not built: dismissing a household suggestion, unlinking a household, and a
   review list for families missing from the records.
 

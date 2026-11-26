@@ -760,7 +760,11 @@ const asPlanProfile = (row: ProfileRow) => row as unknown as PlanProfile;
  */
 async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, result: RefreshResult) {
   const source = options.source.households;
-  if (!source || options.elapsed() >= options.budgetMs) return;
+  if (!source) return;
+  if (options.elapsed() >= options.budgetMs) {
+    result.stoppedAtBudget = true;
+    return;
+  }
   const { orgId, connectionId, creds } = options;
 
   const [orgSettings] = await allRows(
@@ -796,19 +800,20 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
 
   let familyOf: Map<string, string>;
   const families: RecordsFamily[] = [];
-  let complete = true;
   try {
     familyOf = await source.familyOf(creds, personLinks.map((l) => l.external_person_id));
     const familyIds = [...new Set([...familyOf.values(), ...householdLinks.map((l) => l.external_family_id)])].sort();
     for (let i = 0; i < familyIds.length; i += FAMILIES_PER_READ) {
+      // Suggestions are only replaced from every family, so the last ones stay.
       if (options.elapsed() >= options.budgetMs) {
-        complete = false;
-        break;
+        result.stoppedAtBudget = true;
+        return;
       }
       families.push(...(await source.families(creds, familyIds.slice(i, i + FAMILIES_PER_READ), { children: suggestChildren })));
     }
   } catch (err) {
-    if (!(err instanceof RecordsError)) throw err;
+    // Only a refused read is the key's role; anything else fails the run like any records error.
+    if (!(err instanceof RecordsError) || err.kind !== "unauthorized") throw err;
     result.householdsUnavailable = true;
     logWarn("church records refresh couldn't read families", err, {
       route: "refresh-church-records",
@@ -851,22 +856,20 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
     ).map((row) => [row.id, row]),
   );
 
-  if (complete) {
-    const suggestions = planHouseholdSuggestions({
-      families,
-      familyOf,
-      links: new Map(personLinks.map((l) => [l.external_person_id, l.profile_id])),
-      profiles,
-      households: new Map([...households.values()].map((h) => [h.id, { id: h.id, created_at: String(h.created_at) }])),
-      householdLinks: new Map(householdLinks.map((l) => [l.family_id, l.external_family_id])),
-    });
-    const { error } = await db.rpc("records_replace_household_suggestions", {
-      _org_id: orgId,
-      _connection_id: connectionId,
-      _suggestions: suggestions,
-    });
-    if (error) throw new Error(`household suggestions write failed: ${error.message}`);
-  }
+  const suggestions = planHouseholdSuggestions({
+    families,
+    familyOf,
+    links: new Map(personLinks.map((l) => [l.external_person_id, l.profile_id])),
+    profiles,
+    households: new Map([...households.values()].map((h) => [h.id, { id: h.id, created_at: String(h.created_at) }])),
+    householdLinks: new Map(householdLinks.map((l) => [l.family_id, l.external_family_id])),
+  });
+  const { error } = await db.rpc("records_replace_household_suggestions", {
+    _org_id: orgId,
+    _connection_id: connectionId,
+    _suggestions: suggestions,
+  });
+  if (error) throw new Error(`household suggestions write failed: ${error.message}`);
 
   const linked = householdLinks.filter((l) => familyById.has(l.external_family_id) && households.has(l.family_id));
   const linkedIds = linked.map((l) => l.family_id);
@@ -940,11 +943,11 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
     }
   }
 
-  await addedChildPhotos(db, options);
+  await addedChildPhotos(db, options, result);
 }
 
 /** Photos of children a household added, fetched only after they were added; a member's own photo is never replaced. */
-async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOptions) {
+async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOptions, result: RefreshResult) {
   const { orgId, creds, source } = options;
   const waiting = (
     await allRows(
@@ -959,7 +962,10 @@ async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOption
     )
   ).filter((row) => row.photo);
   for (const row of waiting) {
-    if (options.elapsed() >= options.budgetMs) return;
+    if (options.elapsed() >= options.budgetMs) {
+      result.stoppedAtBudget = true;
+      return;
+    }
     const memberId = row.family_member_id;
     let bytes: Uint8Array | null = null;
     if (memberId) {

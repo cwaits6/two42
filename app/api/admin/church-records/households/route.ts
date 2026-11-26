@@ -18,7 +18,8 @@ import {
  *   GET   whether children are suggested, when the last refresh ran, whether
  *         it could read families, and the suggestions, named from two42 only.
  *   PUT   `{ suggestChildren: boolean }`. Turning it off removes every child
- *         suggestion no household has decided on.
+ *         suggestion no household has decided on. 409 while a refresh is
+ *         running.
  *   POST  `{ suggestions: string[] }`, 1 to 100 ids: confirm them, each all
  *         or nothing. More than one only when every one is confirmable in
  *         bulk. 409 when a single one changed since the refresh, or a refresh
@@ -59,7 +60,12 @@ export async function PUT(request: Request) {
   }
   try {
     if (!(await householdsProvider(gate.orgId))) return hidden();
-    await saveChildrenSetting(gate.orgId, body.suggestChildren, gate.user.id);
+    if ((await saveChildrenSetting(gate.orgId, body.suggestChildren, gate.user.id)) === "busy") {
+      return NextResponse.json(
+        { error: "A refresh is running. Save again when it finishes, in a few minutes." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ suggestChildren: body.suggestChildren });
   } catch (err) {
     logError("Church records children setting save failed", err, { route: "/api/admin/church-records/households", ids: { org: gate.orgId } });
@@ -106,7 +112,7 @@ export async function POST(request: Request) {
     }
     if (ids.length === 1 && changed === 1) {
       return NextResponse.json(
-        { error: "This changed since the last refresh. Choose Refresh now, then try again." },
+        { error: "This changed since the last refresh. Choose Refresh now on the People tab, then try again." },
         { status: 409 },
       );
     }
