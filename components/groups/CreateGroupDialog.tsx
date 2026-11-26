@@ -94,7 +94,7 @@ export function CreateGroupDialog({
         supabase.auth.getUser(),
         supabase
           .from("profiles")
-          .select("id, first_name, last_name, preferred_name")
+          .select("id, first_name, last_name, preferred_name, suffix")
           .neq("role", "pending")
           .order("last_name", { ascending: true })
           .order("first_name", { ascending: true }),

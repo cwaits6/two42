@@ -14,6 +14,8 @@ interface ProfileHouseholdTabsProps {
   family: FamilyUnit | null;
   householdProfiles: (Profile | HouseholdSummary)[];
   familyMembers: FamilyMember[];
+  /** The church's calendar date, YYYY-MM-DD, for working out a child's grade. */
+  today: string;
 }
 
 function ProfileHouseholdTabsInner({
@@ -21,6 +23,7 @@ function ProfileHouseholdTabsInner({
   family,
   householdProfiles,
   familyMembers,
+  today,
 }: ProfileHouseholdTabsProps) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>(
@@ -52,6 +55,7 @@ function ProfileHouseholdTabsInner({
           family={family}
           initialFamilyMembers={familyMembers}
           householdProfiles={householdProfiles}
+          today={today}
           onEditSelf={() => setActiveTab("me")}
         />
       </TabsContent>

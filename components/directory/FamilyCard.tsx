@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { Heart, Home, MapPin, Pencil } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
 import { isChildWithoutAccount } from "@/lib/household";
+import { childGradeLabel } from "@/lib/grade";
 import { displayName, initials } from "@/lib/names";
 import { DirRow, PhoneText } from "@/components/directory/DirRow";
 import { isOwnHousehold } from "@/components/directory/ownEntry";
@@ -47,13 +48,15 @@ interface FamilyCardProps {
   profileMap: Record<string, DirectoryProfile>;
   onOpenPerson: (profile: DirectoryProfile) => void;
   viewerFamilyId: string | null;
+  /** The church's calendar date, for a child's grade. */
+  today: Date;
 }
 
 /**
  * Household detail: each member as a row (tappable when they have a
  * directory profile), then the shared home phone and address.
  */
-export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId }: FamilyCardProps) {
+export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, today }: FamilyCardProps) {
   const hasSpouse =
     family.members.some((m) => m.relationship === "spouse") ||
     family.family_members_list.some((fm) => fm.relationship === "spouse");
@@ -108,7 +111,10 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId }:
             key={fm.id}
             avatar={<MemberAvatar member={fm} />}
             title={displayName(fm)}
-            subtitle={isChildWithoutAccount(fm) ? undefined : relLabel(fm.relationship)}
+            subtitle={
+              childGradeLabel(fm, today) ??
+              (isChildWithoutAccount(fm) ? undefined : relLabel(fm.relationship))
+            }
           />
         ))}
       </div>

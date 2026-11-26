@@ -45,7 +45,7 @@ export function wroteComment(
 }
 
 export interface OpenedComment {
-  view: Omit<PrayerCommentView, "first_name" | "last_name" | "preferred_name">;
+  view: Omit<PrayerCommentView, "first_name" | "last_name" | "preferred_name" | "suffix">;
   /** For the name lookup only; never sent to the browser. Null on a hidden-name comment. */
   writerId: string | null;
 }
@@ -90,14 +90,14 @@ export function openComments(
   });
 }
 
-export type CommentWriterName = { id: string; first_name: string | null; last_name: string | null; preferred_name: string | null };
+export type CommentWriterName = { id: string; first_name: string | null; last_name: string | null; preferred_name: string | null; suffix: string | null };
 
 /** Names of the named writers the client can see; pass the request client so the profiles read policy decides. */
 export async function commentWriterNames(client: SupabaseClient, orgId: string, ids: readonly string[]) {
   if (ids.length === 0) return { data: [] as CommentWriterName[], error: null };
   const { data, error } = await client
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name")
+    .select("id, first_name, last_name, preferred_name, suffix")
     .eq("org_id", orgId)
     .in("id", [...new Set(ids)])
     .returns<CommentWriterName[]>();

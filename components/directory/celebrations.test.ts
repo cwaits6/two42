@@ -69,6 +69,7 @@ function householdRecord(
     first_name: "Sam",
     last_name: "Miller",
     preferred_name: null,
+    graduation_year: null,
     avatar_url: null,
     relationship: "child",
     is_class_member: true,

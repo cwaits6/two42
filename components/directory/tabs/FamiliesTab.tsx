@@ -60,6 +60,7 @@ function FamiliesTabInner() {
     basePath,
     currentUserId,
     currentFamilyId,
+    today,
   } = useDirectory();
   const [query, setQuery] = useState("");
   const searchParams = useSearchParams();
@@ -256,6 +257,7 @@ function FamiliesTabInner() {
                 family={panel.family}
                 profileMap={profileMap}
                 viewerFamilyId={currentFamilyId}
+                today={today}
                 onOpenPerson={(profile) =>
                   openPanel({ kind: "person", profile, fromFamily: panel.family })
                 }

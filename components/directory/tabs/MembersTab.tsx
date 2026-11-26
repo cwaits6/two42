@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { displayName, initials } from "@/lib/names";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow, DirSection, PhoneText } from "@/components/directory/DirRow";
@@ -25,6 +26,12 @@ import {
   toggleInSet,
   type RosterFilter,
 } from "@/components/directory/rosterFilter";
+import {
+  GENDER_FILTERS,
+  applyGenderFilter,
+  genderCounts,
+  type GenderFilter,
+} from "@/components/directory/genderFilter";
 import { useGroupRoster } from "@/components/directory/useGroupRoster";
 import { AddMemberPanel } from "@/components/directory/roster/AddMemberPanel";
 import { BulkLabelBar } from "@/components/directory/roster/BulkLabelBar";
@@ -56,6 +63,7 @@ function MembersTabInner() {
   const { members, memberships, profileMap, familyMap, scope, currentUserId, orgName, reload } =
     useDirectory();
   const [query, setQuery] = useState("");
+  const [gender, setGender] = useState<GenderFilter>("all");
   const [selected, setSelected] = useState<DirectoryProfile | null>(null);
   const personParam = useSearchParams().get("person");
 
@@ -84,10 +92,13 @@ function MembersTabInner() {
     setChecked(new Set());
   }, [scopedGroupId]);
 
-  const sections = useMemo(() => {
+  // The counts come from the list before the gender filter, so each option's
+  // count is the number of people it shows.
+  const { sections, counts } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = members.filter((m) => !q || matchesQuery(m, q));
-    if (scopedGroupId) list = applyRosterFilter(list, filter, roster.index);
+    let base = members.filter((m) => !q || matchesQuery(m, q));
+    if (scopedGroupId) base = applyRosterFilter(base, filter, roster.index);
+    const list = applyGenderFilter(base, gender);
     list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
     const map: Record<string, DirectoryProfile[]> = {};
     for (const m of list) {
@@ -95,8 +106,8 @@ function MembersTabInner() {
       const letter = /[A-Z]/.test(first) ? first : "#";
       (map[letter] ??= []).push(m);
     }
-    return map;
-  }, [members, query, scopedGroupId, filter, roster.index]);
+    return { sections: map, counts: genderCounts(base) };
+  }, [members, query, scopedGroupId, filter, roster.index, gender]);
   const letters = Object.keys(sections).sort();
 
   // Add mode offers everyone the viewer can read who is not already in the
@@ -199,7 +210,12 @@ function MembersTabInner() {
     if (error) toast.error(error);
   }
 
-  const filtering = scopedGroupId !== null && !isEmptyFilter(filter);
+  const filtering = gender !== "all" || (scopedGroupId !== null && !isEmptyFilter(filter));
+
+  function clearFilters() {
+    setFilter(EMPTY_FILTER);
+    setGender("all");
+  }
   const emptyMessage =
     memberships.length === 0
       ? "You are not in a group yet."
@@ -271,6 +287,13 @@ function MembersTabInner() {
                 className="h-13 rounded-xl pl-12 text-base"
               />
             </div>
+            <Segmented
+              label="Gender"
+              options={GENDER_FILTERS.map((o) => ({ value: o.value, label: `${o.label} (${counts[o.value]})` }))}
+              value={gender}
+              onChange={setGender}
+              className="mb-7"
+            />
             {toolbar}
           </>
         }
@@ -282,7 +305,7 @@ function MembersTabInner() {
                 message={emptyMessage}
                 action={
                   filtering ? (
-                    <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
+                    <Button variant="outline" onClick={clearFilters}>
                       Clear filters
                     </Button>
                   ) : undefined

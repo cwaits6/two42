@@ -436,8 +436,8 @@ select is(
   '8', 'a member sharing a group gets the household''s people through the directory');
 select is(
   (select array_agg(k order by k) from jsonb_object_keys(pg_temp.person('sharer', 'kid')) k),
-  array['avatar_url', 'birth_day', 'birth_month', 'claimed_profile_id', 'first_name', 'id',
-        'is_class_member', 'last_name', 'preferred_name', 'relationship'],
+  array['avatar_url', 'birth_day', 'birth_month', 'claimed_profile_id', 'first_name',
+        'graduation_year', 'id', 'is_class_member', 'last_name', 'preferred_name', 'relationship'],
   'each person carries exactly what the directory uses, and no birth year');
 select is(pg_temp.person('sharer', 'kid') ->> 'first_name', 'Pip',
   'a child with a preferred name is read by that name only');

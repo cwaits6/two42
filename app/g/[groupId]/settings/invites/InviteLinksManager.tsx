@@ -116,7 +116,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
       // to "a leader"; the name is a courtesy, not a gate.
       const { data } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name, preferred_name")
+        .select("id, first_name, last_name, preferred_name, suffix")
         .in("id", creatorIds);
       creatorRows = (data ?? []) as Creator[];
     }

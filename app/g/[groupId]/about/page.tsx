@@ -3,7 +3,7 @@ import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Users } from "lucide-react";
-import { displayName, initials } from "@/lib/names";
+import { displayName, initials, titledName } from "@/lib/names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,7 +46,7 @@ export default async function AboutGroupPage({
     supabase
       .from("class_teachers")
       .select(
-        "*, profiles(id, first_name, last_name, preferred_name, avatar_url)",
+        "*, profiles(id, first_name, last_name, preferred_name, title, suffix, avatar_url)",
       )
       .eq("group_id", group.id)
       .order("sort_order")
@@ -138,7 +138,7 @@ export default async function AboutGroupPage({
                     </Avatar>
                     <div className="min-w-0">
                       <h3 className="text-lg font-semibold text-foreground">
-                        {displayName(teacher.profiles)}
+                        {titledName(teacher.profiles)}
                       </h3>
                       {teacher.title && (
                         <p className="text-base text-muted-foreground">{teacher.title}</p>

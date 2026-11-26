@@ -197,7 +197,7 @@ select columns_are('public', 'profiles_directory', array[
   'id', 'first_name', 'last_name', 'preferred_name', 'avatar_url', 'role', 'relationship', 'bio',
   'family_id', 'created_at', 'email', 'phone_mobile', 'phone_home', 'phone_work', 'address_line1',
   'address_line2', 'city', 'state', 'postal_code', 'birth_month', 'birth_day', 'birth_year',
-  'anniversary', 'occupation', 'employer', 'groups', 'org_id'
+  'anniversary', 'occupation', 'employer', 'groups', 'org_id', 'suffix', 'gender'
 ], 'profiles_directory keeps its columns');
 
 select is(

@@ -171,7 +171,7 @@ export default async function EventDetailPage({
     const { data: people, error: peopleError } = coming.length
       ? await supabase
           .from("profiles")
-          .select("id, first_name, last_name, preferred_name, avatar_url")
+          .select("id, first_name, last_name, preferred_name, suffix, avatar_url")
           .in("id", coming.map((r) => r.user_id))
       : { data: [], error: null };
     if (peopleError) logError("Failed to load who's coming", peopleError, { ids: { event: id } });
@@ -184,6 +184,7 @@ export default async function EventDetailPage({
         first_name: p?.first_name ?? null,
         last_name: p?.last_name ?? null,
         preferred_name: p?.preferred_name ?? null,
+        suffix: p?.suffix ?? null,
         avatar_url: p?.avatar_url ?? null,
         status: r.status as Attendee["status"],
       };

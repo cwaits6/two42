@@ -28,7 +28,7 @@ export default async function AdminGroupPage({ params }: { params: Promise<{ id:
   const [{ data: group, error }, memberships] = await Promise.all([
     supabase
       .from("groups")
-      .select("id, name, description, group_members(role, profile_id, profiles(first_name, last_name, preferred_name))")
+      .select("id, name, description, group_members(role, profile_id, profiles(first_name, last_name, preferred_name, suffix))")
       .eq("id", id)
       .maybeSingle(),
     // Null, never an empty list: a failed read must not say "not in this group".

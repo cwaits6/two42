@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
+import { displayName, hasName } from "@/lib/names";
 
 /**
  * POST /api/profile/resolve-family
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
         first_name,
         last_name,
         preferred_name,
+        suffix,
         relationship,
         role
       )
@@ -72,6 +74,7 @@ export async function POST(request: Request) {
           first_name: string | null;
           last_name: string | null;
           preferred_name: string | null;
+          suffix: string | null;
           relationship: string;
           role: string;
         }>) ?? []
@@ -83,10 +86,7 @@ export async function POST(request: Request) {
         id: f.id,
         family_name: f.family_name,
         members: activeMembers.map((p) => ({
-          name:
-            [p.preferred_name || p.first_name, p.last_name]
-              .filter(Boolean)
-              .join(" ") || "Unknown",
+          name: hasName(p) ? displayName(p) : "Unknown",
           relationship: p.relationship,
         })),
       };

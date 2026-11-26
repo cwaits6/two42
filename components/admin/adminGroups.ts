@@ -33,7 +33,7 @@ export async function listAdminGroups(
   const { data, error } = await client
     .from("groups")
     .select(
-      "id, name, description, members:group_members(count), leaders:group_members(profiles(first_name, last_name, preferred_name))",
+      "id, name, description, members:group_members(count), leaders:group_members(profiles(first_name, last_name, preferred_name, suffix))",
     )
     .eq("leaders.role", "leader")
     .order("name", { ascending: true });

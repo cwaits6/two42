@@ -68,3 +68,17 @@ describe("POST /api/household/members names", () => {
     });
   });
 });
+
+describe("POST /api/household/members grade", () => {
+  it("refuses a graduation year out of range on the field", async () => {
+    db.answers = { profiles: [primary] };
+    const res = await POST(
+      new Request("http://localhost/api/household/members", {
+        method: "POST",
+        body: JSON.stringify({ first_name: "Ruth", relationship: "child", graduation_year: "soon" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ fieldErrors: { graduation_year: "Choose a grade." } });
+  });
+});

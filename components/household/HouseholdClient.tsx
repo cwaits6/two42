@@ -40,7 +40,8 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { householdFieldErrors, type HouseholdFieldErrors } from "@/app/api/household/householdUpdates";
-import { relLabel } from "@/components/directory/utils";
+import { calendarDate, relLabel } from "@/components/directory/utils";
+import { childGradeLabel } from "@/lib/grade";
 import {
   formatPhone,
   formatPhoneAsYouType,
@@ -92,6 +93,8 @@ interface HouseholdClientProps {
   family: FamilyUnit;
   initialFamilyMembers: FamilyMember[];
   householdProfiles: (Profile | HouseholdSummary)[];
+  /** The church's calendar date, YYYY-MM-DD. */
+  today: string;
   /** Called when the user clicks "Edit" on their own row — the parent switches to the Me tab */
   onEditSelf: () => void;
 }
@@ -149,9 +152,11 @@ export function HouseholdClient({
   family,
   initialFamilyMembers,
   householdProfiles,
+  today,
   onEditSelf,
 }: HouseholdClientProps) {
   const router = useRouter();
+  const todayDate = calendarDate(today);
   const [info, setInfo] = useState<HouseholdInfo>(fromFamily(family));
   const [savingInfo, setSavingInfo] = useState(false);
   const [errors, setErrors] = useState<HouseholdFieldErrors>({});
@@ -631,7 +636,9 @@ export function HouseholdClient({
                 </Avatar>
                 <div className="min-w-0">
                   <p className="text-base font-medium">{displayName(fm)}</p>
-                  <p className="text-base text-muted-foreground">{relLabel(fm.relationship)}</p>
+                  <p className="text-base text-muted-foreground">
+                    {[relLabel(fm.relationship), childGradeLabel(fm, todayDate)].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
               </div>
               {canEditSpouseProfiles && (
@@ -796,6 +803,7 @@ export function HouseholdClient({
               key={fmSheetState?.mode === "edit" ? fmSheetState.member.id : "new"}
               member={fmSheetState?.mode === "edit" ? fmSheetState.member : null}
               family={family}
+              today={today}
               onSaved={() => {
                 setFmSheetState(null);
                 router.refresh();

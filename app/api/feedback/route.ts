@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   // caller's own org — it anchors the service-role reads below.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role, first_name, last_name, preferred_name")
+    .select("org_id, role, first_name, last_name, preferred_name, suffix")
     .eq("id", user.id)
     .single();
 

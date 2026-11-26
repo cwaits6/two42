@@ -7,6 +7,7 @@ import { isMemberRole } from "@/lib/roles";
 import { CHILD_INVITE_REFUSED } from "@/lib/household";
 import { logError } from "@/lib/log";
 import { normalizeEmail } from "@/lib/sanitize";
+import { displayName, hasName } from "@/lib/names";
 
 /**
  * POST /api/family-invites
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   // Load the caller's profile to check their role
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("role, first_name, last_name, preferred_name")
+    .select("role, first_name, last_name, preferred_name, suffix")
     .eq("id", user.id)
     .single();
 
@@ -136,13 +137,7 @@ export async function POST(request: Request) {
   const joinLink = `${siteConfig.url}/join/family/${invite.token}`;
 
   // Build the inviter's display name
-  const inviterName =
-    [
-      callerProfile.preferred_name || callerProfile.first_name,
-      callerProfile.last_name,
-    ]
-      .filter(Boolean)
-      .join(" ") || "A member";
+  const inviterName = hasName(callerProfile) ? displayName(callerProfile) : "A member";
 
   // Build the family member's display name
   const memberName = [familyMember.first_name, familyMember.last_name]

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name")
+      .select("id, first_name, last_name, preferred_name, suffix")
       .eq("id", user.id)
       .single(),
     supabase
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
   const { data: memberRows, error: memberRowsError } = await service
     .from("team_members")
     .select(
-      "profiles(id, first_name, last_name, preferred_name, email, role, email_announcements)"
+      "profiles(id, first_name, last_name, preferred_name, suffix, email, role, email_announcements)"
     )
     .eq("team_id", groupId)
     .eq("org_id", group.org_id);
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
       (r) =>
         r.profiles as unknown as Pick<
           Profile,
-          "id" | "first_name" | "last_name" | "preferred_name" | "email" | "role" | "email_announcements"
+          "id" | "first_name" | "last_name" | "preferred_name" | "suffix" | "email" | "role" | "email_announcements"
         > | null
     )
     .filter(

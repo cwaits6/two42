@@ -1,10 +1,6 @@
-import { displayName, initials } from "@/lib/names";
+import { displayName, initials, type NameParts } from "@/lib/names";
 
-interface PersonNameParts {
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name?: string | null;
-}
+type PersonNameParts = NameParts;
 
 function hasName(p: PersonNameParts): boolean {
   return [p.preferred_name, p.first_name, p.last_name].some((part) => part?.trim());
@@ -45,14 +41,16 @@ export function personInitials(p: PersonNameParts): string {
 
 /**
  * "David & Lena Reyes" when a couple shares a last name, "David Reyes & Lena
- * Cho" when they do not; the same shape as the directory's anniversaries.
+ * Cho" when they do not; the same shape as the directory's anniversaries. A
+ * suffix belongs to one person, so either one having a suffix spells out both.
  */
 export function coupleName(a: PersonNameParts, b: PersonNameParts): string {
   const lastA = a.last_name?.trim() ?? "";
   const lastB = b.last_name?.trim() ?? "";
   const firstA = firstOf(a);
   const firstB = firstOf(b);
-  if (firstA && firstB && lastA && lastA === lastB) return `${firstA} & ${firstB} ${lastA}`;
+  const suffixed = Boolean(a.suffix?.trim() || b.suffix?.trim());
+  if (firstA && firstB && lastA && lastA === lastB && !suffixed) return `${firstA} & ${firstB} ${lastA}`;
   return `${personName(a)} & ${personName(b)}`;
 }
 

@@ -56,7 +56,7 @@ export async function loadDeletionSummary(
   }>(
     await service
       .from("profiles")
-      .select("role, first_name, last_name, preferred_name, email")
+      .select("role, first_name, last_name, preferred_name, suffix, email")
       .eq("id", personId)
       .eq("org_id", orgId),
     "target profile",

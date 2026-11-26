@@ -8,6 +8,7 @@ import type { FamilyDirectoryFull } from "@/lib/types";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let root: Root;
+const today = new Date(2026, 10, 26);
 
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -15,7 +16,7 @@ afterEach(async () => {
 });
 
 describe("FamilyCard", () => {
-  it("labels an adult child with an account, once, and a child without one by name alone", async () => {
+  it("labels an adult child with an account, once, and a child without one by name and grade alone", async () => {
     const person = (first_name: string, relationship: string) => ({
       id: first_name,
       first_name,
@@ -32,6 +33,7 @@ describe("FamilyCard", () => {
         { ...person("Grown", "child"), claimed_profile_id: "p1" },
         { ...person("Jack", "child"), claimed_profile_id: null },
         { ...person("Pat", "parent"), claimed_profile_id: null },
+        { ...person("Lily", "child"), claimed_profile_id: null, graduation_year: 2036 },
       ],
     } as unknown as FamilyDirectoryFull;
 
@@ -40,7 +42,7 @@ describe("FamilyCard", () => {
     root = createRoot(host);
     await act(async () => {
       root.render(
-        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId: null }),
+        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId: null, today }),
       );
     });
 
@@ -48,6 +50,7 @@ describe("FamilyCard", () => {
     expect(host.textContent).toContain("Grown MockinghamChild");
     expect(host.textContent).not.toContain("Jack MockinghamChild");
     expect(host.textContent).toContain("Pat MockinghamParent");
+    expect(host.textContent).toContain("Lily Mockingham3rd grade");
   });
 
   it("offers Edit household on the viewer's own household only", async () => {
@@ -71,7 +74,7 @@ describe("FamilyCard", () => {
     const render = async (viewerFamilyId: string | null) => {
       await act(async () => {
         root.render(
-          createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId }),
+          createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId, today }),
         );
       });
     };

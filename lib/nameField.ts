@@ -5,6 +5,14 @@
 import { titleCaseName } from "@/lib/sanitize";
 
 export const MAX_NAME_LENGTH = 100;
+export const MAX_TITLE_LENGTH = 40;
+export const MAX_SUFFIX_LENGTH = 20;
+
+/** Title (Dr., Pastor) and suffix (Jr., III) are optional and only length-checked. */
+export function nameAffixError(value: string | null, field: "title" | "suffix"): string | undefined {
+  const max = field === "title" ? MAX_TITLE_LENGTH : MAX_SUFFIX_LENGTH;
+  return value && value.length > max ? `Use ${max} characters or fewer.` : undefined;
+}
 
 export type NameLabel = "first name" | "last name" | "preferred name";
 

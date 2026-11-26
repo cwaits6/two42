@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { memberNames } from "@/lib/nameField";
+import { parseGraduationYear } from "@/lib/grade";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
 
@@ -71,6 +72,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ fieldErrors }, { status: 400 });
   }
   const updates: Record<string, unknown> = { ...names };
+  if (body.graduation_year !== undefined) {
+    const graduationYear = parseGraduationYear(body.graduation_year);
+    if (graduationYear === undefined) {
+      return NextResponse.json({ fieldErrors: { graduation_year: "Choose a grade." } }, { status: 400 });
+    }
+    updates.graduation_year = graduationYear;
+  }
   if (relationship !== undefined) updates.relationship = relationship;
   if (birth_month !== undefined) updates.birth_month = birth_month ? Number(birth_month) : null;
   if (birth_day !== undefined) updates.birth_day = birth_day ? Number(birth_day) : null;

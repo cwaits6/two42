@@ -573,9 +573,10 @@ policy (members and admins only) cannot express without widening every
 - `pending_group_join_requests(_group_id)` — the leader's review list.
   Tenant anchor: the caller's own `profiles` row; rows only when the caller
   leads the group (`is_group_leader()`) or is an org admin (`is_admin()`),
-  else empty. Returns id, created_at, first_name, last_name, preferred_name
-  and email (NULL when the requester set `hide_email`) for pending
-  requests only. Read-only. EXECUTE: `authenticated` only.
+  else empty. Returns id, created_at, first_name, last_name, preferred_name,
+  email (NULL when the requester set `hide_email`) and suffix for pending
+  requests only; the current body is in `20261208000000_profile_fields.sql`.
+  Read-only. EXECUTE: `authenticated` only.
 - `review_group_join_request(_request_id, _approve)` — approve or decline.
   Tenant anchor: the caller's own `profiles` row; the request is selected
   by id **and** that org with `for update`, and the caller must lead its
@@ -830,7 +831,8 @@ hold `SELECT` on every other column of `profiles`, and not on `email`.
 Three `SECURITY DEFINER` functions, first in
 `supabase/migrations/20261112000000_children_directory.sql`; the current bodies
 are in `20261125000000_household_and_deletion_rules.sql`, and
-`family_directory_people()`'s in `20261130000000_household_hidden_when_all_unlisted.sql`. Each has
+`family_directory_people()`'s in `20261208000000_profile_fields.sql`, which adds a
+child's `graduation_year` to each person and changes nothing else. Each has
 `search_path = ''`, and each is read or fired only as described here. Each
 reads the child rule from `is_child_without_account()`, a pure `SECURITY INVOKER`
 function that is not a bypass surface.

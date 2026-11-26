@@ -113,7 +113,7 @@ export async function loadFundFormData(
   const memberships = readList<{ profiles: PickerProfile | null }>(
     await supabase
       .from("group_members")
-      .select("profiles(id, first_name, last_name, preferred_name, avatar_url, role, is_unlisted)")
+      .select("profiles(id, first_name, last_name, preferred_name, suffix, avatar_url, role, is_unlisted)")
       .eq("org_id", orgId)
       .eq("group_id", groupId)
       .returns<{ profiles: PickerProfile | null }[]>(),

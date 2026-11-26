@@ -22,7 +22,7 @@ export interface MemberRow {
 
 /** One row per person and per invite still waiting on a sign-up, sorted by the name shown. */
 export function toMemberRows(
-  members: Pick<Profile, "id" | "first_name" | "last_name" | "preferred_name" | "email" | "role">[],
+  members: Pick<Profile, "id" | "first_name" | "last_name" | "preferred_name" | "suffix" | "email" | "role">[],
   invited: Pick<AccessRequest, "id" | "name" | "email">[],
 ): MemberRow[] {
   const rows: MemberRow[] = [

@@ -17,6 +17,7 @@ const HOUSEHOLD_CARD = `/directory/families?family=${HOUSEHOLD}`;
 const CHLOE_CARD = `/directory/families?person=${CHLOE}`;
 const ANNIVERSARIES = "/directory/anniversaries";
 const NOTICE = "Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves. Leave out anything you don't want shown.";
+const PROFILE_NOTICE = "Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves. Title and gender aren't shown there. Leave out anything you don't want shown.";
 const WIDTHS = [390, 1280];
 
 const SEED_SQL = `
@@ -80,7 +81,7 @@ test.describe("what a spouse and a church admin can set", () => {
 
       await page.goto("/profile");
       await expect(page.getByLabel("First name")).toBeVisible();
-      await expect(page.getByText(NOTICE)).toBeVisible();
+      await expect(page.getByText(PROFILE_NOTICE)).toBeVisible();
       expect(await hideSettings(page)).toEqual([
         "Hide my email from the directory",
         "Hide me from the directory",

@@ -84,7 +84,7 @@ async function mount(member: FamilyMember, family: FamilyUnit = FAMILY) {
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(createElement(FamilyMemberForm, { member, family, onSaved }));
+    root.render(createElement(FamilyMemberForm, { member, family, today: "2026-11-26", onSaved }));
   });
 }
 
@@ -290,5 +290,36 @@ describe("name checks", () => {
     expect(choice.getAttribute("aria-invalid")).toBe("true");
     expect(document.body.textContent).toContain("Use 100 characters or fewer.");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a child's grade", () => {
+  const CHILD = { ...ADULT, first_name: "Lily", relationship: "child", birth_year: null, graduation_year: 2036 } as FamilyMember;
+
+  it("starts on the saved grade and saves the year a new one implies", async () => {
+    await mount(CHILD);
+    await click("5th grade");
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ relationship: "child", graduation_year: 2034 });
+  });
+
+  it("clears the grade with No grade", async () => {
+    await mount(CHILD);
+    await click("No grade");
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ graduation_year: null });
+  });
+
+  it("keeps a stored year no grade option shows when the grade is left alone", async () => {
+    await mount({ ...CHILD, graduation_year: 2026 });
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ relationship: "child", graduation_year: 2026 });
+  });
+
+  it("offers no grade for anyone but a child, and clears one on relabelling", async () => {
+    await mount({ ...ADULT, graduation_year: 2036 });
+    expect(document.body.textContent).not.toContain("Kindergarten");
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ relationship: "spouse", graduation_year: null });
   });
 });

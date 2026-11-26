@@ -56,6 +56,10 @@ alter table public.family_units
   add column hide_address boolean not null default false,
   add column hide_phone_home boolean not null default false;
 
+-- Later migrations append columns to this view, and CREATE OR REPLACE cannot
+-- drop them, so the replay below creates it afresh at the shape it expects.
+drop view public.profiles_directory;
+
 select is(
   pg_temp.replay('20261111000000',
     'create function public\.(family_anniversary_hidden|directory_retire_hidden_values)\('),

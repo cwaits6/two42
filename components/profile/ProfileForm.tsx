@@ -35,7 +35,8 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { initials } from "@/lib/names";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
-import { nameFieldError } from "@/lib/nameField";
+import { nameAffixError, nameFieldError } from "@/lib/nameField";
+import { GenderChoice } from "@/components/profile/GenderChoice";
 import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
@@ -48,7 +49,7 @@ import {
   canManageAvatar,
   type AvatarEligibilityCaller,
 } from "@/lib/members/avatar-eligibility";
-import type { Profile, FamilyUnit } from "@/lib/types";
+import type { Profile, FamilyUnit, Gender } from "@/lib/types";
 import { logError } from "@/lib/log";
 
 interface ProfileFormProps {
@@ -89,6 +90,9 @@ interface FormState {
   first_name: string;
   last_name: string;
   preferred_name: string;
+  title: string;
+  suffix: string;
+  gender: Gender | null;
   email: string;
   phone_mobile: string;
   phone_home: string;
@@ -113,6 +117,9 @@ function initialState(profile: Profile): FormState {
     first_name: profile.first_name || "",
     last_name: profile.last_name || "",
     preferred_name: profile.preferred_name || "",
+    title: profile.title || "",
+    suffix: profile.suffix || "",
+    gender: profile.gender,
     email: profile.email || "",
     phone_mobile: formatPhone(profile.phone_mobile),
     phone_home: formatPhone(profile.phone_home),
@@ -139,6 +146,8 @@ type FieldErrors = Partial<
     | "first_name"
     | "last_name"
     | "preferred_name"
+    | "title"
+    | "suffix"
     | "email"
     | "phone_mobile"
     | "phone_home"
@@ -263,6 +272,9 @@ export function ProfileForm({
         ? familySurname
         : titleCaseName(state.last_name);
     const preferredName = titleCaseName(state.preferred_name);
+    // Not title-cased: that would turn "MD" into "Md".
+    const title = trimText(state.title);
+    const suffix = trimText(state.suffix);
     // Unchecked "different address" means: use the family's address (blank).
     const ownAddress = !familyHasAddress || differentAddress;
     const city = ownAddress ? titleCaseCity(state.city) : null;
@@ -297,6 +309,10 @@ export function ProfileForm({
     if (lastNameError) found.last_name = lastNameError;
     const preferredNameError = nameFieldError(preferredName, "preferred name", false);
     if (preferredNameError) found.preferred_name = preferredNameError;
+    const titleError = nameAffixError(title, "title");
+    if (titleError) found.title = titleError;
+    const suffixError = nameAffixError(suffix, "suffix");
+    if (suffixError) found.suffix = suffixError;
     // Only admins can edit the email; a member's own is managed in Settings.
     const email = state.email.trim();
     if (isAdmin && !email) {
@@ -342,6 +358,9 @@ export function ProfileForm({
       first_name: firstName,
       last_name: lastName,
       preferred_name: preferredName,
+      title,
+      suffix,
+      gender: state.gender,
       // The email field is disabled for non-admins (changed via Settings),
       // and the database refuses profiles.email on non-admin updates (RLS pins
       // your own, a trigger refuses anyone else's) — don't send it.
@@ -414,7 +433,7 @@ export function ProfileForm({
     <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
-          {!isAdmin && <DirectoryNotice />}
+          {!isAdmin && <DirectoryNotice notShown="Title and gender aren't shown there." />}
 
           {/* Photo — hidden for admins editing a profile they have no
               storage write arm for: not themselves, and not a household
@@ -522,6 +541,41 @@ export function ProfileForm({
             />
             <FieldError fieldId="preferred_name" message={errors.preferred_name} />
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="title" className="text-base">
+                Title <Optional />
+              </Label>
+              <Input
+                id="title"
+                value={state.title}
+                onChange={(e) => update("title", e.target.value)}
+                placeholder="e.g. Dr., Pastor"
+                className="py-5 text-base"
+                {...invalidFieldProps("title", errors.title)}
+              />
+              <FieldError fieldId="title" message={errors.title} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="suffix" className="text-base">
+                Suffix <Optional />
+              </Label>
+              <Input
+                id="suffix"
+                value={state.suffix}
+                onChange={(e) => update("suffix", e.target.value)}
+                placeholder="e.g. Jr., III"
+                className="py-5 text-base"
+                {...invalidFieldProps("suffix", errors.suffix)}
+              />
+              <FieldError fieldId="suffix" message={errors.suffix} />
+            </div>
+          </div>
+          <p className="text-base text-muted-foreground">
+            A suffix shows after the name everywhere. A title shows only on this profile and a
+            group&apos;s Leadership list.
+          </p>
 
           <Separator />
 
@@ -667,6 +721,21 @@ export function ProfileForm({
             <FieldError fieldId="birth_year" message={errors.birth_year} />
             <p className="text-base text-muted-foreground">
               The year is optional.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p id="gender-label" className="text-base font-medium">
+              Gender
+            </p>
+            <GenderChoice
+              labelledBy="gender-label"
+              value={state.gender}
+              onChange={(v) => update("gender", v)}
+            />
+            <p className="text-base text-muted-foreground">
+              Lets people filter the directory by Male or Female. It isn&apos;t shown on the
+              entry.
             </p>
           </div>
 

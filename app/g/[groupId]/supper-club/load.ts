@@ -217,7 +217,7 @@ export async function loadPeople(supabase: Client, ids: string[]): Promise<Perso
   const rows = readList(
     await supabase
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name, family_id, role")
+      .select("id, first_name, last_name, preferred_name, suffix, family_id, role")
       .in("id", [...new Set(ids)]),
     "Supper club names"
   );

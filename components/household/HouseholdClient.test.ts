@@ -41,6 +41,7 @@ async function mount(family = FAMILY, householdProfiles: Profile[] = []) {
         family,
         initialFamilyMembers: [],
         householdProfiles,
+        today: "2026-11-26",
         onEditSelf: () => {},
       }),
     );

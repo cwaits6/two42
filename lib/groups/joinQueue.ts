@@ -30,6 +30,7 @@ export interface PendingJoinRequestRow {
   last_name: string | null;
   preferred_name: string | null;
   email: string | null;
+  suffix: string | null;
 }
 
 /** Tags the function's row with the group it was read for; the row itself carries no group. */
@@ -44,6 +45,7 @@ export function toPendingJoinRequest(
       first_name: raw.first_name,
       last_name: raw.last_name,
       preferred_name: raw.preferred_name,
+      suffix: raw.suffix,
     },
     email: raw.email,
     group,

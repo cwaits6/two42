@@ -49,10 +49,10 @@ const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
   personName(a).localeCompare(personName(b));
 
 const SIGNUP_SELECT =
-  "id, service_date, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))";
+  "id, service_date, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name, suffix))";
 
 const ROSTER_PROFILE =
-  "profiles(id, role, first_name, last_name, preferred_name, avatar_url, family_id, relationship)";
+  "profiles(id, role, first_name, last_name, preferred_name, suffix, avatar_url, family_id, relationship)";
 
 export default async function ServingSchedulePage({
   params,
@@ -71,7 +71,7 @@ export default async function ServingSchedulePage({
     await Promise.all([
       supabase
         .from("profiles")
-        .select("id, org_id, role, family_id, relationship, first_name, last_name, preferred_name")
+        .select("id, org_id, role, family_id, relationship, first_name, last_name, preferred_name, suffix")
         .eq("id", user.id)
         .single(),
       supabase
@@ -151,6 +151,7 @@ export default async function ServingSchedulePage({
       first_name: p.first_name,
       last_name: p.last_name,
       preferred_name: p.preferred_name,
+      suffix: p.suffix,
       avatar_url: p.avatar_url,
       family_id: p.family_id,
       relationship: p.relationship,

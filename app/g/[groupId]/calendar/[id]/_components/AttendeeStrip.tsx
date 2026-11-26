@@ -6,6 +6,7 @@ export interface Attendee {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix: string | null;
   avatar_url: string | null;
   status: RsvpStatus;
 }

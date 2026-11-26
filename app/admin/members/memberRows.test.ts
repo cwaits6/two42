@@ -12,7 +12,7 @@ const profile = (id: string, first: string, last: string, role: "admin" | "membe
   id,
   first_name: first,
   last_name: last,
-  preferred_name: null,
+  preferred_name: null, suffix: null,
   email: `${first.toLowerCase()}@example.test`,
   role,
 });

@@ -23,6 +23,7 @@ export interface TeamRosterPerson {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix?: string | null;
   avatar_url: string | null;
   family_id: string | null;
   relationship: string | null;

@@ -29,7 +29,8 @@ import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
 import { Camera, Check, Plus } from "lucide-react";
-import type { Profile, FamilyMemberRelationship } from "@/lib/types";
+import type { Profile, FamilyMemberRelationship, Gender } from "@/lib/types";
+import { GenderChoice } from "@/components/profile/GenderChoice";
 import {
   aboutYouErrors,
   contactErrors,
@@ -54,7 +55,8 @@ interface PendingPerson extends PersonDraft {
 }
 
 /** Each step's label in the progress list is also its heading. */
-const STEPS = ["About you", "Contact", "Household", "Work"] as const;
+const STEPS = ["About you", "Gender", "Contact", "Household", "Work"] as const;
+type StepName = (typeof STEPS)[number];
 
 const ADDABLE: { relationship: FamilyMemberRelationship; label: string }[] = [
   { relationship: "spouse", label: "Add spouse" },
@@ -81,10 +83,10 @@ const optional = (
   <span className="font-normal text-muted-foreground">(optional)</span>
 );
 
-function StepHeading({ step, intro }: { step: number; intro: string }) {
+function StepHeading({ name, intro }: { name: StepName; intro: string }) {
   return (
     <div>
-      <h2 className="mb-1 text-2xl">{STEPS[step - 1]}</h2>
+      <h2 className="mb-1 text-2xl">{name}</h2>
       <p className="text-base text-muted-foreground">{intro}</p>
     </div>
   );
@@ -273,6 +275,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   );
   const [hideEmail, setHideEmail] = useState(profile.hide_email ?? false);
 
+  const [gender, setGender] = useState<Gender | null>(profile.gender);
+
   // Household
   const [searchDone, setSearchDone] = useState(false);
   const [matches, setMatches] = useState<HouseholdMatch[]>([]);
@@ -291,6 +295,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [occupation, setOccupation] = useState(profile.occupation ?? "");
   const [employer, setEmployer] = useState(profile.employer ?? "");
 
+  const current: StepName = STEPS[step - 1];
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "?";
   const hasSpouse = pendingPeople.some((m) => m.relationship === "spouse");
   const surname = titleCaseName(lastName) ?? lastName.trim();
@@ -423,11 +428,11 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   };
 
   const stepErrors = (): StepErrors => {
-    if (step === 1) return aboutYouErrors({ firstName, lastName, preferredName, birthMonth, birthDay, birthYear });
-    if (step === 2) {
+    if (current === "About you") return aboutYouErrors({ firstName, lastName, preferredName, birthMonth, birthDay, birthYear });
+    if (current === "Contact") {
       return contactErrors({ phoneMobile, phoneHome, phoneWork });
     }
-    if (step === 3) return householdErrors(householdId !== null, hasSpouse ? anniversary : undefined);
+    if (current === "Household") return householdErrors(householdId !== null, hasSpouse ? anniversary : undefined);
     return {};
   };
 
@@ -441,7 +446,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
   const goNext = () => {
     // An open add form is added, not silently dropped.
-    if (step === 3 && !addPendingPerson()) return;
+    if (current === "Household" && !addPendingPerson()) return;
     if (accept(stepErrors())) goTo(step + 1);
   };
 
@@ -457,6 +462,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         phone_home: phoneHome ? normalizePhone(phoneHome) : null,
         phone_work: phoneWork ? normalizePhone(phoneWork) : null,
         hide_email: hideEmail,
+        gender,
         family_id: householdId,
         occupation: occupation.trim() || null,
         employer: employer.trim() || null,
@@ -515,7 +521,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
   return (
     <div className="space-y-6">
-      <ol aria-label="Setup steps" className="grid grid-cols-4 gap-2">
+      <ol aria-label="Setup steps" className="grid grid-cols-5 gap-2">
         {STEPS.map((label, i) => {
           const num = i + 1;
           const done = num < step;
@@ -536,8 +542,9 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
               >
                 {done ? <Check className="h-5 w-5" /> : num}
               </span>
+              {/* Five labels don't fit a narrow screen; the step's heading names it there. */}
               <span
-                className={`text-base leading-tight ${
+                className={`text-base leading-tight max-sm:sr-only ${
                   active ? "font-semibold text-foreground" : "text-muted-foreground"
                 }`}
               >
@@ -552,27 +559,42 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
       <Card className="py-6">
         <CardContent className="space-y-6">
-          <DirectoryNotice />
+          <DirectoryNotice notShown="Gender isn't shown there." />
 
           <div ref={headingRef} tabIndex={-1} className="outline-none">
-            {step === 1 && (
-              <StepHeading step={1} intro="Your name and photo, as the directory shows them." />
+            {current === "About you" && (
+              <StepHeading name={current} intro="Your name and photo, as the directory shows them." />
             )}
-            {step === 2 && (
-              <StepHeading step={2} intro="Only signed-in members of your church can see these." />
-            )}
-            {step === 3 && (
-              <StepHeading step={3} intro="The people you live with, listed together in the directory." />
-            )}
-            {step === 4 && (
+            {current === "Gender" && (
               <StepHeading
-                step={4}
+                name={current}
+                intro="Lets people filter the directory by Male or Female. It isn't shown on your entry."
+              />
+            )}
+            {current === "Gender" && (
+            <>
+              <p id="gender-label" className="sr-only">
+                Gender
+              </p>
+              <GenderChoice labelledBy="gender-label" value={gender} onChange={setGender} />
+            </>
+          )}
+
+          {current === "Contact" && (
+              <StepHeading name={current} intro="Only signed-in members of your church can see these." />
+            )}
+            {current === "Household" && (
+              <StepHeading name={current} intro="The people you live with, listed together in the directory." />
+            )}
+            {current === "Work" && (
+              <StepHeading
+                name={current}
                 intro="Sharing what you do helps people in your groups find help from someone they know."
               />
             )}
           </div>
 
-          {step === 1 && (
+          {current === "About you" && (
             <>
               <div className="flex flex-wrap items-center gap-5">
                 <Avatar className="h-20 w-20 shrink-0">
@@ -688,7 +710,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
             </>
           )}
 
-          {step === 2 && (
+          {current === "Contact" && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="phone_mobile" className="text-base">
@@ -776,7 +798,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
             </>
           )}
 
-          {step === 3 && (
+          {current === "Household" && (
             <>
               {householdId === null ? (
                 <div className="space-y-4">
@@ -954,7 +976,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
             </>
           )}
 
-          {step === 4 && (
+          {current === "Work" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="occupation" className="text-base">
@@ -993,9 +1015,23 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
           <span />
         )}
         {step < STEPS.length ? (
-          <Button type="button" onClick={goNext}>
-            Continue
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            {current === "Gender" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setGender(null);
+                  goNext();
+                }}
+              >
+                Skip
+              </Button>
+            )}
+            <Button type="button" onClick={goNext}>
+              Continue
+            </Button>
+          </div>
         ) : (
           <Button type="button" onClick={handleFinish} disabled={saving}>
             {saving ? "Saving…" : "Finish setup"}
