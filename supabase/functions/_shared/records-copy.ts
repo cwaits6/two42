@@ -31,7 +31,8 @@ export type FieldMode = "locked" | "member";
 /** The preferred name follows the name's setting, is filled from the nick name and is never locked. */
 export type ValueField = RecordsField | "preferred_name";
 
-export type ValueState = "records" | "changed" | "cleared";
+export const VALUE_STATES = ["records", "changed", "cleared"] as const;
+export type ValueState = (typeof VALUE_STATES)[number];
 
 type Cell = string | number | null;
 export type Columns = Record<string, Cell>;
@@ -96,11 +97,11 @@ export interface StoredValue {
   churchValue: Columns;
 }
 
-export interface ValueRow {
+export type ValueRow = {
   field: ValueField;
   state: ValueState;
   church_value: Columns;
-}
+};
 
 export interface CopyPlan {
   profile: Columns;
