@@ -712,6 +712,46 @@ Deno.test("a refresh cut short before every family was read keeps the last sugge
   assertEquals(result.stoppedAtBudget, true);
 });
 
+Deno.test("a refresh whose time runs out on the last person copied reads no families and hasn't finished", async () => {
+  let spent = 0;
+  let familiesAsked = false;
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    apply: () => {
+      spent = 100_000;
+      return { data: "applied", error: null };
+    },
+  });
+  const { source } = householdSource({
+    familyOf: () => {
+      familiesAsked = true;
+      return Promise.resolve(new Map());
+    },
+  });
+  const result = await refreshOrg(db, options(source, { elapsed: () => spent }));
+  assertEquals(result.copied, 1);
+  assertEquals(result.stoppedAtBudget, true);
+  assertFalse(familiesAsked);
+  const release = calls.filter((c) => c.table === "records_refresh_state" && c.op === "update").at(-1)!;
+  assertFalse("last_counts" in (release.values as Record<string, unknown>));
+});
+
+Deno.test("a refresh cut short before a linked household's address was copied hasn't finished", async () => {
+  let spent = 0;
+  const { db, calls, fns } = fakeDb({ ...HOUSEHOLD_FIXTURE, householdLinks: [{ family_id: H1, external_family_id: "500" }] });
+  const { source } = householdSource({
+    families: () => {
+      spent = 100_000;
+      return Promise.resolve([FAMILY]);
+    },
+  });
+  const result = await refreshOrg(db, options(source, { elapsed: () => spent }));
+  assertEquals(result.stoppedAtBudget, true);
+  assertFalse(fns.includes("records_apply_household_copy"));
+  const release = calls.filter((c) => c.table === "records_refresh_state" && c.op === "update").at(-1)!;
+  assertFalse("last_counts" in (release.values as Record<string, unknown>));
+});
+
 Deno.test("a refresh cut short at an added child's photo hasn't finished", async () => {
   let spent = 0;
   const { db, calls } = fakeDb({ ...HOUSEHOLD_FIXTURE, childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }] });
