@@ -47,9 +47,9 @@ Check, in order:
 
 **Refresh** on the church records page shows when the last refresh finished; a refresh that failed or ran out of time leaves it as it was. If only **Refresh now** ever updates it:
 
-1. **The schedule.** No migration schedules `refresh-church-records`; add the job as in [refresh-church-records](/docs/run/edge-functions#refresh-church-records).
-2. **The function secret.** `RECORDS_KEY_SECRET` must be set in the edge function secrets, with the same value as the app's. Without it the function answers 200 and does nothing. With a different value it answers 500 and lists, under `failed`, the id of every church whose key it couldn't open; **Refresh now** on the church records page works with the app's value, so it keeps working meanwhile.
-3. **Time.** A church listed under `cutShort` or `notStarted` in the function's response had more to copy than the run's 90 seconds allowed. The next run carries on; a church's first copy can take a few nights, or a few presses of **Refresh now**.
+1. **The schedule.** No migration schedules `refresh-church-records`; add the job as in [refresh-church-records](/docs/run/edge-functions#refresh-church-records). The scheduled-jobs check doesn't cover it, so read its responses in `net._http_response`. Scheduled on the hour rather than at half past, it also makes the check report an extra response, or a non-200, at that hour.
+2. **The function secret.** `RECORDS_KEY_SECRET` must be set in the edge function secrets, with the same value as the app's. Without it the function answers 200 and does nothing. With a value that isn't a 32-byte base64 key it answers 500 and does nothing. With a different valid key it answers 500 and lists, under `failed`, the id of every church whose key it couldn't open; **Refresh now** on the church records page works with the app's value, so it keeps working meanwhile.
+3. **Time.** A church listed under `cutShort` or `notStarted` in the function's response had more to copy than the run's 90 seconds allowed. The next run carries on; a church's first copy can take a few nights, or a few presses of **Refresh now**. A church listed under `busy` had a refresh already running, usually a **Refresh now**, or one that stopped less than 15 minutes earlier without finishing, so the run skipped it; the next run refreshes it.
 4. **A `500` in `net._http_response`** before any church ran means the runtime didn't refuse a request to a loopback address, so the function stopped before opening any church's key.
 
 ## Links in reminder emails point to the wrong site

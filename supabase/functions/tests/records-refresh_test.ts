@@ -426,7 +426,7 @@ Deno.test("a copy whose anniversary was held still counts the person's own write
   assertEquals(result.copied, 1);
 });
 
-Deno.test("the nightly run shares one budget: a church reached after it is spent isn't started, and any unfinished church fails the run", async () => {
+Deno.test("the nightly run shares one budget: a church reached after it is spent isn't started, and any unfinished or held church fails the run", async () => {
   const org = (n: number) => ({ id: `org-${n}`, name: "", timezone: "UTC", branding: null, org_email_domains: [] });
   const done = (over: Partial<Awaited<ReturnType<typeof refreshOrg>>> = {}) => ({
     status: "done" as const, copied: 1, pending: 0, review: 0, photosSkipped: 0, failed: 0, stoppedAtBudget: false, ...over,
@@ -459,6 +459,16 @@ Deno.test("the nightly run shares one budget: a church reached after it is spent
   });
   assertEquals(clean.connected, 1);
   assert(clean.finished);
+
+  // A church another refresh holds was not refreshed by this run.
+  const held = await refreshAllOrgs([org(1), org(2)], {
+    elapsed: () => 0,
+    budgetMs: 60_000,
+    refreshOne: (o) => Promise.resolve(o.id === "org-1" ? done({ status: "busy", copied: 0 }) : done()),
+  });
+  assertEquals(held.busy, ["org-1"]);
+  assertEquals([held.connected, held.copied], [1, 1]);
+  assertFalse(held.finished);
 
   const lines = await logged(async () => {
     const broken = await refreshAllOrgs([org(1)], {

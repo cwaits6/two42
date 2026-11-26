@@ -10,7 +10,8 @@
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
 // org_id explicitly. Opens each church's key with RECORDS_KEY_SECRET; without
-// it the integration is off and the run does nothing.
+// it the integration is off and the run does nothing, and with a value that
+// isn't a key it answers 500 so the schedule shows the fault.
 
 // Pinned exactly, in lockstep with the reminder functions and package-lock.json.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
@@ -46,7 +47,14 @@ function json(body: unknown, status: number) {
 }
 
 Deno.serve(serviceKeyCallerOnly(async () => {
-  const secret = parseRecordsSecret(Deno.env.get(RECORDS_SECRET_ENV));
+  const raw = Deno.env.get(RECORDS_SECRET_ENV);
+  const secret = parseRecordsSecret(raw);
+  if (!secret && raw?.trim()) {
+    logError("church records refresh skipped: RECORDS_KEY_SECRET is not a valid key", undefined, {
+      route: "refresh-church-records",
+    });
+    return json({ error: "RECORDS_KEY_SECRET is not a valid key." }, 500);
+  }
   if (!secret) {
     logInfo("church records refresh skipped: the integration is off", { route: "refresh-church-records" });
     return json({ orgs: 0 }, 200);
@@ -92,7 +100,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
       },
     });
 
-    const { connected, copied, review, pending, failed, cutShort, notStarted } = all;
+    const { connected, copied, review, pending, failed, cutShort, notStarted, busy } = all;
     const summary = {
       route: "refresh-church-records",
       ids: {
@@ -103,13 +111,15 @@ Deno.serve(serviceKeyCallerOnly(async () => {
         orgsFailed: failed.length,
         orgsCutShort: cutShort.length,
         orgsNotStarted: notStarted.length,
+        orgsBusy: busy.length,
       },
     };
     if (cutShort.length || notStarted.length) logWarn("church records refresh ran out of time", undefined, summary);
+    else if (busy.length) logWarn("church records refresh skipped churches another refresh held", undefined, summary);
     else logInfo("church records refresh run", summary);
     // The org failures carry ids only: an error's text could hold a database message.
     return json(
-      { orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted },
+      { orgs: orgs.length, connected, copied, review, pending, failed, cutShort, notStarted, busy },
       all.finished ? 200 : 500,
     );
   } catch (err) {

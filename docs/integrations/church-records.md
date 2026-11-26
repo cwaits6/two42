@@ -418,7 +418,8 @@ phone come with households (T42-273).
 
 Set `RECORDS_KEY_SECRET` in the edge function secrets as well, the same value
 as the app's, and schedule `refresh-church-records` nightly (no migration
-does): see the docs site's **Edge functions** page. Before it opens a key the
+does), off the hour so the scheduled-jobs check, which doesn't know the job,
+doesn't count its responses: see the docs site's **Edge functions** page. Before it opens a key the
 function checks the runtime refuses a request to a loopback address, and stops
 with a 500 if it doesn't.
 

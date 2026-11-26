@@ -62,21 +62,23 @@ Serving emails carry links that act without signing in when `SERVING_LINK_SECRET
 
 ### refresh-church-records
 
-For every church connected to its church records, copies the details of people changed there since the last run, and of linked people not copied yet, into two42, following the church admin's settings. It lists linked people who became inactive or can't be found under **Needs review**, and changes nothing else about them. It stops starting people after 90 seconds, shared by every church in the run; the rest wait for the next run, which carries on where this one stopped. A run that ran out of time answers 500 and lists, under `cutShort`, each church it stopped partway through and, under `notStarted`, each it never reached; their **Last refreshed** stays on their last finished refresh. A church admin's **Refresh now** runs the same code. See [Imports](/docs/administer/imports#copy-details-from-your-churchs-records).
+For every church connected to its church records, copies the details of people changed there since the last run, and of linked people not copied yet, into two42, following the church admin's settings. It lists linked people who became inactive or can't be found under **Needs review**, and changes nothing else about them. It stops starting people after 90 seconds, shared by every church in the run; the rest wait for the next run, which carries on where this one stopped. A run that ran out of time answers 500 and lists, under `cutShort`, each church it stopped partway through and, under `notStarted`, each it never reached. A church whose refresh was already running, a **Refresh now** for example, is skipped and listed under `busy`, and the run answers 500 too. Each listed church's **Last refreshed** stays on its last finished refresh. A church admin's **Refresh now** runs the same code. See [Imports](/docs/administer/imports#copy-details-from-your-churchs-records).
 
-It needs `RECORDS_KEY_SECRET` in the edge function secrets, the same value as the app's; without it the function answers 200 and does nothing. Before it opens any church's key it checks that the runtime refuses a request to a loopback address, and stops with a 500 if it doesn't.
+It needs `RECORDS_KEY_SECRET` in the edge function secrets, the same value as the app's; without it the function answers 200 and does nothing, and with a value that isn't a 32-byte base64 key it answers 500 and does nothing. Before it opens any church's key it checks that the runtime refuses a request to a loopback address, and stops with a 500 if it doesn't.
 
-No migration schedules it. To run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:00 UTC:
+No migration schedules it. To run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:30 UTC:
 
 ```sql
 select private.schedule_edge_reminder(
   'refresh-church-records-nightly',
-  '0 8 * * *',
+  '30 8 * * *',
   '/functions/v1/refresh-church-records',
   '{}'::jsonb,
   120000
 );
 ```
+
+The scheduled-jobs check doesn't know this job: it counts every response in the first 15 minutes of each hour against the jobs it expects. Scheduled at half past, the job's responses fall outside those windows; scheduled on the hour, the check reports an extra response that night, and a non-200 when the run was cut short. Read this job's results in `net._http_response` instead.
 
 ### clean-up-expired-data
 

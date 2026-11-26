@@ -239,7 +239,7 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
 }
 
 export interface AllOrgsResult {
-  /** Churches with a connection that were refreshed. */
+  /** Churches with a connection that this run refreshed. */
   connected: number;
   copied: number;
   review: number;
@@ -249,6 +249,8 @@ export interface AllOrgsResult {
   cutShort: string[];
   /** Churches reached after the time was spent, left for the next run. */
   notStarted: string[];
+  /** Churches whose refresh another run held, so this run skipped them. */
+  busy: string[];
   /** Every church was refreshed to the end. */
   finished: boolean;
 }
@@ -269,6 +271,7 @@ export async function refreshAllOrgs(
     failed: [],
     cutShort: [],
     notStarted: [],
+    busy: [],
     finished: true,
   };
   const results = await forEachOrg(orgs, async (org) => {
@@ -280,6 +283,10 @@ export async function refreshAllOrgs(
     }
     const result = await options.refreshOne(org);
     if (!result) return { sent: 0, sendFailures: 0 };
+    if (result.status === "busy") {
+      all.busy.push(org.id);
+      return { sent: 0, sendFailures: 0 };
+    }
     all.connected++;
     all.copied += result.copied;
     all.review += result.review;
@@ -288,7 +295,7 @@ export async function refreshAllOrgs(
     return { sent: result.copied, sendFailures: result.failed };
   });
   all.failed = results.filter((r) => r.error).map((r) => r.orgId);
-  all.finished = all.failed.length + all.cutShort.length + all.notStarted.length === 0;
+  all.finished = all.failed.length + all.cutShort.length + all.notStarted.length + all.busy.length === 0;
   return all;
 }
 
