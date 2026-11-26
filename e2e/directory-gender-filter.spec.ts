@@ -13,7 +13,7 @@ const genderFilter = (page: Page) => page.getByRole("group", { name: "Gender" })
 const option = (page: Page, label: string) =>
   genderFilter(page).getByRole("button", { name: new RegExp(`^${label} \\(\\d+\\)$`) });
 const personRows = (page: Page) => page.locator("section h2 + div > button");
-const person = (page: Page, name: string) => page.getByRole("button", { name });
+const person = (page: Page, name: string) => personRows(page).filter({ hasText: name });
 
 async function choose(page: Page, label: string): Promise<number> {
   await option(page, label).click();
