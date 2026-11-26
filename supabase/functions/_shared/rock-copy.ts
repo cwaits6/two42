@@ -15,7 +15,7 @@ import type {
   RecordsPhone,
   RecordsPresence,
 } from "./records-types.ts";
-import { type FetchLike, getJson, ROCK_GUIDS } from "./rock-client.ts";
+import { type FetchLike, getJson, ROCK_GUIDS, type RockRestPath } from "./rock-client.ts";
 
 /** Rock's stock phone types, looked up by Guid because their ids differ between installs. */
 export const ROCK_PHONE_TYPE_GUIDS = {
@@ -109,7 +109,7 @@ export function rockIds(ids: readonly string[]): number[] {
 
 export async function byIdChunks(
   creds: RecordsCredentials,
-  path: string,
+  path: RockRestPath,
   column: string,
   ids: readonly number[],
   select: readonly string[],
@@ -236,7 +236,7 @@ async function presence(
  */
 async function changedRows(
   creds: RecordsCredentials,
-  path: string,
+  path: RockRestPath,
   idColumn: string,
   since: string,
   afterId: number | null,
@@ -275,7 +275,7 @@ async function changedRows(
   return { ids, latest, cut: true, lastId: after?.time === latest ? after.id : null };
 }
 
-async function latestChange(creds: RecordsCredentials, path: string, fetcher: FetchLike): Promise<string | null> {
+async function latestChange(creds: RecordsCredentials, path: RockRestPath, fetcher: FetchLike): Promise<string | null> {
   const [row] = rows(
     await getJson(
       creds,

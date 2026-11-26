@@ -47,7 +47,7 @@ const TIMEOUT_MS = 10_000;
 
 export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
 
-export async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
+export async function getJson(creds: RecordsCredentials, path: RockRestPath, query: Record<string, string>, fetcher: FetchLike) {
   const url = new URL(path, creds.baseUrl);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   let response: Response;
@@ -110,6 +110,9 @@ export const ROCK_REST_PATHS = [
   "/api/GroupMembers",
   "/api/Locations",
 ] as const;
+
+/** Every request names one of these, so the connection check covers whatever a refresh reads. */
+export type RockRestPath = (typeof ROCK_REST_PATHS)[number];
 
 /**
  * Proves the address is a Rock and the key can read every controller a

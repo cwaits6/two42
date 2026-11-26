@@ -1,8 +1,7 @@
 // Rock RMS as a source of church records.
 import { normalizeName } from "@/lib/integrations/records/match";
 import type { RecordsCredentials, RecordsPerson, RecordsProvider } from "@/lib/integrations/records/types";
-import { rockCopySource } from "@/supabase/functions/_shared/rock-copy";
-import { rockHouseholdSource } from "@/supabase/functions/_shared/rock-households";
+import { COPY_SOURCES } from "@/supabase/functions/_shared/records-providers";
 import {
   checkConnection,
   definedValueIds,
@@ -46,7 +45,7 @@ export const rockProvider: RecordsProvider = {
     keyHelp:
       "In Rock, add a REST key under Admin Tools, Settings, REST Keys. Give its user a security role of its own that can only view the People, PhoneNumbers, DefinedValues, Groups, GroupMembers and Locations REST controllers, with no edit rights. The key isn't shown again after you save it.",
   },
-  copy: { ...rockCopySource(), households: rockHouseholdSource() },
+  copy: COPY_SOURCES.rock,
   checkConnection: (creds: RecordsCredentials) => checkConnection(creds),
   async findByLastNames(creds, lastNames) {
     const ids = await definedValueIds(creds);

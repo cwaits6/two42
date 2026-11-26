@@ -13,11 +13,21 @@ import {
   type ValueField,
 } from "@/supabase/functions/_shared/records-copy";
 import {
+  type ChildRow,
+  CONFIRM_HOUSEHOLD_OUTCOMES,
   HOUSEHOLD_COPY_COLUMNS,
   HOUSEHOLD_FIELD_COLUMNS,
   HOUSEHOLD_FIELDS,
+  type HouseholdSuggestion,
+  type HouseholdValueRow,
+  type SuggestedPerson,
 } from "@/supabase/functions/_shared/records-households";
-import { APPLY_HOUSEHOLD_OUTCOMES, APPLY_OUTCOMES, LEASE_MS } from "@/supabase/functions/_shared/records-refresh";
+import {
+  APPLY_HOUSEHOLD_OUTCOMES,
+  APPLY_OUTCOMES,
+  type ApplyHouseholdCopyArgs,
+  LEASE_MS,
+} from "@/supabase/functions/_shared/records-refresh";
 
 const copySql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
 const householdsSql = readFileSync("supabase/migrations/20261210000000_church_records_households.sql", "utf8");
@@ -37,6 +47,40 @@ function between(start: string, end: string): string {
 function table(name: string): string {
   return between(`create table public.${name} (`, "\n);");
 }
+
+/** The column names of the jsonb_to_recordset(...) as <alias>(...) in a body. */
+function recordset(body: string, alias: string): string[] {
+  const start = body.search(new RegExp(`jsonb_to_recordset\\([^;]*?\\)\\s+as\\s+${alias}\\(`));
+  expect(start, alias).toBeGreaterThanOrEqual(0);
+  const open = body.indexOf(`as ${alias}(`, start) + `as ${alias}(`.length;
+  const columns = body.slice(open, body.indexOf(")", open));
+  return columns.split(",").map((c) => c.trim().split(/\s+/)[0]);
+}
+
+/** The keys a body reads off a jsonb value: <name> ->> 'key' and <name> -> 'key'. */
+const keysRead = (body: string, name: string) =>
+  [...body.matchAll(new RegExp(`${name} ->>? '([a-z_0-9]+)'`, "g"))].map((m) => m[1]);
+
+// Typed literals: each lists exactly its type's keys, or the type check fails.
+const SUGGESTED_PERSON: SuggestedPerson = { profile_id: "p", from_family_id: null, relationship: "primary" };
+const SUGGESTION: HouseholdSuggestion = {
+  external_family_id: "f",
+  target_family_id: null,
+  family_name: null,
+  people: [SUGGESTED_PERSON],
+  ready: true,
+};
+const CHILD: ChildRow = {
+  external_person_id: "c",
+  first_name: "",
+  last_name: "",
+  birth_month: null,
+  birth_day: null,
+  graduation_year: null,
+  photo: null,
+};
+const VALUE: HouseholdValueRow = { field: "address", state: "records", church_value: {} };
+const EXPECTED: ApplyHouseholdCopyArgs["_expected"] = { family: "f", household: {}, states: {} };
 
 describe("the copy migration agrees with the copy rules", () => {
   beforeEach(() => {
@@ -160,11 +204,48 @@ describe("the households migration agrees with the household rules", () => {
     expect(sorted([...new Set(answers)])).toEqual(sorted(APPLY_HOUSEHOLD_OUTCOMES));
   });
 
-  it("holds a settings save and a household confirmation back for as long as a refresh's claim lasts", () => {
-    for (const fn of ["records_save_field_settings", "records_confirm_household"]) {
+  it("holds a settings save, the children switch and a household confirmation back for as long as a refresh's claim lasts", () => {
+    for (const fn of ["records_save_field_settings", "records_save_children_setting", "records_confirm_household"]) {
       const body = between(`function public.${fn}(`, "$$;");
       const minutes = Number(body.match(/interval '(\d+) minutes'/)?.[1]);
       expect(minutes * 60_000, fn).toBe(LEASE_MS);
+    }
+  });
+
+  it("reads the household suggestions by the keys the refresh writes", () => {
+    const replace = between("create function public.records_replace_household_suggestions(", "$$;");
+    expect(sorted(recordset(replace, "s"))).toEqual(sorted(Object.keys(SUGGESTION)));
+    const confirm = between("create function public.records_confirm_household(", "$$;");
+    const people = [...recordset(confirm, "p"), ...keysRead(confirm, "p")];
+    expect(sorted([...new Set(people)])).toEqual(sorted(Object.keys(SUGGESTED_PERSON)));
+  });
+
+  it("answers a household confirmation with the outcomes the app reads", () => {
+    const body = between("create function public.records_confirm_household(", "$$;");
+    const answers = [...body.matchAll(/return ([^;]*);/g)].flatMap((m) => quoted(m[1]));
+    expect(sorted([...new Set(answers)])).toEqual(sorted(CONFIRM_HOUSEHOLD_OUTCOMES));
+  });
+
+  it("reads a household copy by the keys the refresh writes", () => {
+    const body = between("create function public.records_apply_household_copy(", "$$;");
+    expect(sorted([...new Set(keysRead(body, "_expected"))])).toEqual(sorted(Object.keys(EXPECTED)));
+    expect(sorted(recordset(body, "v"))).toEqual(sorted(Object.keys(VALUE)));
+  });
+
+  it("reads suggested children by the keys the refresh writes", () => {
+    const body = between("create function public.records_sync_child_suggestions(", "$$;");
+    expect(sorted(recordset(body, "c"))).toEqual(sorted(Object.keys(CHILD)));
+    for (const key of keysRead(body, "c")) expect(Object.keys(CHILD)).toContain(key);
+  });
+
+  it("refuses another household's child with the code the household tab reads", () => {
+    const client = readFileSync("components/household/SuggestedChildren.tsx", "utf8");
+    const code = client.match(/const NOT_AVAILABLE = "([A-Z0-9]{5})"/)?.[1];
+    for (const fn of ["records_add_suggested_child", "records_dismiss_suggested_child"]) {
+      const body = between(`create function public.${fn}(`, "$$;");
+      const codes = [...body.matchAll(/errcode = '([A-Z0-9]{5})'/g)].map((m) => m[1]);
+      expect(codes.length, fn).toBeGreaterThan(0);
+      expect(new Set(codes), fn).toEqual(new Set([code]));
     }
   });
 

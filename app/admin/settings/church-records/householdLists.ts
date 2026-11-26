@@ -2,30 +2,14 @@
 // into words. Every name is two42's own: people's names and households' names
 // here, never the records'.
 import { relLabel } from "@/components/directory/utils";
+import type {
+  HouseholdSuggestion as HouseholdSuggestionRow,
+  HouseholdSuggestionPerson as SuggestedPersonRow,
+  HouseholdsStatus as HouseholdsData,
+} from "@/lib/integrations/records/store";
 import { search } from "./linkLists";
 
-export interface SuggestedPersonRow {
-  profileId: string;
-  name: string;
-  from: { familyId: string; name: string } | null;
-  moves: boolean;
-  relationship: string;
-  relationshipChanges: boolean;
-}
-
-export interface HouseholdSuggestionRow {
-  id: string;
-  ready: boolean;
-  target: { familyId: string; name: string } | { newName: string };
-  people: SuggestedPersonRow[];
-}
-
-export interface HouseholdsData {
-  suggestChildren: boolean;
-  lastRefreshedAt: string | null;
-  householdsUnavailable: boolean;
-  suggestions: HouseholdSuggestionRow[];
-}
+export type { HouseholdSuggestionRow, SuggestedPersonRow, HouseholdsData };
 
 /** A suggestion with the text it's searched by: everyone's name and the households'. */
 type Searchable = HouseholdSuggestionRow & { name: string };
