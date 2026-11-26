@@ -251,7 +251,16 @@ interface HouseholdResolution {
   warnings: string[];
 }
 
-export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): ImportPlan {
+/** People whose name the church's records lock: the database keeps the church's value, so an import leaves it alone. */
+export interface RecordsLocks {
+  lockedNames: ReadonlySet<string>;
+}
+
+export function planImport(
+  fileRows: MemberRow[],
+  snapshot: OrgSnapshot,
+  locks: RecordsLocks = { lockedNames: new Set() }
+): ImportPlan {
   // Before anything reads a cell, so no branch below can store a hidden value.
   const stripped = fileRows.map(withoutHiddenValues);
   const rows = stripped.map(({ row }) => row);
@@ -1008,8 +1017,15 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       values[field] = next;
     };
 
-    diffString("first_name");
-    diffString("last_name");
+    if (locks.lockedNames.has(profile.id)) {
+      const differs = (["first_name", "last_name"] as const).some(
+        (field) => row[field] !== null && row[field] !== (profile[field] ?? "")
+      );
+      if (differs) result.warnings.push("Name is managed by your church's records; left as it is.");
+    } else {
+      diffString("first_name");
+      diffString("last_name");
+    }
     diffString("preferred_name");
     diffString("phone_mobile");
     diffString("phone_home");

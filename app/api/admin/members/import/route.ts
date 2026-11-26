@@ -27,6 +27,7 @@ import { applyWrites } from "@/lib/members/apply";
 import { parseMembers } from "@/lib/members/format";
 import { planImport } from "@/lib/members/import-plan";
 import { loadOrgSnapshot } from "@/lib/members/snapshot";
+import { lockedNameProfiles } from "@/lib/integrations/records/locks";
 import { logError } from "@/lib/log";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -146,8 +147,12 @@ export async function POST(request: Request) {
   const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
 
   let snapshot;
+  let lockedNames;
   try {
-    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId, emails);
+    [snapshot, lockedNames] = await Promise.all([
+      loadOrgSnapshot(gate.supabase, gate.orgId, emails),
+      lockedNameProfiles(gate.supabase, gate.orgId),
+    ]);
   } catch (err) {
     logError("members import: snapshot load failed", err, { route: "/api/admin/members/import" });
     return json({ error: "Failed to load member data" }, 500);
@@ -155,7 +160,7 @@ export async function POST(request: Request) {
 
   let plan;
   try {
-    plan = planImport(parsed.rows, snapshot);
+    plan = planImport(parsed.rows, snapshot, { lockedNames });
   } catch (err) {
     // The planner is pure and sees member data, so log the error TYPE only.
     logError("members import: planner threw", err, { route: "/api/admin/members/import" });
