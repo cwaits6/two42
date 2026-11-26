@@ -6134,7 +6134,9 @@ CREATE TABLE IF NOT EXISTS "public"."suppers" (
     "host_unavailable" boolean DEFAULT false NOT NULL,
     "follows_rotation_date" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "length_minutes" smallint DEFAULT 180 NOT NULL,
+    CONSTRAINT "suppers_length_minutes_allowed" CHECK (("length_minutes" = ANY (ARRAY[90, 120, 150, 180, 210, 240])))
 );
 
 
@@ -6154,6 +6156,10 @@ COMMENT ON COLUMN "public"."suppers"."host_unavailable" IS 'The host said they c
 
 
 COMMENT ON COLUMN "public"."suppers"."follows_rotation_date" IS 'False once the supper is moved on its own; moving its rotation date then leaves it where it is.';
+
+
+
+COMMENT ON COLUMN "public"."suppers"."length_minutes" IS 'How long the supper lasts, in minutes: 1½ to 4 hours in half hours. Changing it alone keeps replies and sends no email; it stays when the supper or its rotation date moves.';
 
 
 
@@ -10859,6 +10865,10 @@ GRANT UPDATE("host_party_id") ON TABLE "public"."suppers" TO "authenticated";
 
 
 GRANT UPDATE("host_unavailable") ON TABLE "public"."suppers" TO "authenticated";
+
+
+
+GRANT UPDATE("length_minutes") ON TABLE "public"."suppers" TO "authenticated";
 
 
 
