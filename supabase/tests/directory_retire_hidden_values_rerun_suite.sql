@@ -1,7 +1,12 @@
--- The second run of directory_retire_hidden_values(), once the app no longer
--- writes the retired flags: a flag set after the first run is cleared with the
--- value it hides, a value under a false flag is kept, the two remaining
--- settings are left alone, and no retired flag is true anywhere afterwards.
+-- The migration that drops the retired directory hide flags sweeps once more
+-- first. This rebuilds the schema it starts from, sets flags the way a direct
+-- API write could have after the previous sweep, and replays the migration: a
+-- value under a true flag is gone, a value under no flag is kept, the two
+-- remaining settings are untouched, and the flags and sweep are gone after.
+--
+-- The migration and the functions it drops are replayed from the statements
+-- the Supabase CLI recorded in supabase_migrations.schema_migrations when it
+-- applied them, so what runs here is the migration file itself.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -14,18 +19,57 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(13);
 
--- The sweep reaches every org, so the stack's own rows are swept first and the
--- counts below see only these fixtures.
-do $$ begin
-  perform public.directory_retire_hidden_values();
+-- Runs every recorded statement of one migration that matches _pattern, in
+-- order, and returns how many ran, so an empty record fails instead of passing.
+create function pg_temp.replay(_version text, _pattern text) returns integer
+  language plpgsql as $$
+declare
+  _stmt text;
+  _n integer := 0;
+begin
+  for _stmt in
+    select s
+      from supabase_migrations.schema_migrations m,
+           unnest(m.statements) with ordinality as u(s, i)
+     where m.version = _version
+       and s ~ _pattern
+     order by i
+  loop
+    execute _stmt;
+    _n := _n + 1;
+  end loop;
+  return _n;
 end $$;
 
--- ── Fixtures: rows as a page on the earlier build left them ─────────────────
+-- ── The schema the drop migration starts from ───────────────────────────────
+alter table public.profiles
+  add column hide_phone_mobile boolean not null default false,
+  add column hide_phone_home boolean not null default false,
+  add column hide_phone_work boolean not null default false,
+  add column hide_address boolean not null default false,
+  add column hide_birthday boolean not null default false,
+  add column hide_birth_year boolean not null default false,
+  add column hide_anniversary boolean not null default false,
+  add column hide_occupation boolean not null default false;
+
+alter table public.family_units
+  add column hide_address boolean not null default false,
+  add column hide_phone_home boolean not null default false;
+
+select is(
+  pg_temp.replay('20261111000000',
+    'create function public\.(family_anniversary_hidden|directory_retire_hidden_values)\('),
+  2,
+  'the gate and the sweep are rebuilt from the statements that created them'
+);
+
+-- ── Fixtures: flags set after the previous sweep ────────────────────────────
 do $$
 declare
   org_a uuid;
   fam_addr uuid;
   fam_anniv uuid;
+  fam_kept uuid;
   e text;
 begin
   org_a := public.provision_organization('Rerun Org', 'owner@rerun.example.test');
@@ -38,87 +82,82 @@ begin
       first_name = e, last_name = 'Fixture', role = 'member', setup_completed = true,
       family_id = null, relationship = 'other', anniversary = null,
       phone_mobile = '+15550000001', phone_work = '+15550000003',
-      occupation = 'Teacher', employer = 'School'
+      address_line1 = '1 Main', city = 'Springfield', birth_month = 4, birth_day = 5,
+      birth_year = 1980, occupation = 'Teacher', employer = 'School'
      where email = e || '@rerun.example.test';
-    perform set_config('rr.' || e, (select id::text from public.profiles where email = e || '@rerun.example.test'), true);
   end loop;
 
-  -- Hidden after the first run, alongside both settings that remain.
-  update public.profiles set hide_phone_work = true, hide_email = true, is_unlisted = true
+  update public.profiles set hide_phone_work = true, hide_birth_year = true, hide_email = true, is_unlisted = true
    where email = 'hid@rerun.example.test';
 
-  -- An address entered over a household flag set after the first run.
   insert into public.family_units (org_id, family_name, address_line1, city, state, postal_code, phone_home, hide_address)
     values (org_a, 'Rerun Address', '9 Elm', 'Springfield', 'IL', '62703', '+15550000002', true)
     returning id into fam_addr;
-  perform set_config('rr.fam_addr', fam_addr::text, true);
 
-  -- A spouse's anniversary flag set after the first run hides the household's.
   insert into public.family_units (org_id, family_name, anniversary_month, anniversary_day, anniversary_year)
     values (org_a, 'Rerun Anniversary', 6, 7, 2008)
     returning id into fam_anniv;
-  perform set_config('rr.fam_anniv', fam_anniv::text, true);
   update public.profiles set family_id = fam_anniv, relationship = 'primary' where email = 'anniv_p@rerun.example.test';
   update public.profiles set family_id = fam_anniv, relationship = 'spouse', hide_anniversary = true
    where email = 'anniv_s@rerun.example.test';
+
+  insert into public.family_units (org_id, family_name, address_line1, city, state, postal_code, phone_home,
+                                   anniversary_month, anniversary_day, anniversary_year)
+    values (org_a, 'Rerun Kept', '3 Oak', 'Springfield', 'IL', '62704', '+15550000004', 8, 9, 2010)
+    returning id into fam_kept;
+
+  perform set_config('rr.org', org_a::text, true);
+  perform set_config('rr.fam_addr', fam_addr::text, true);
+  perform set_config('rr.fam_anniv', fam_anniv::text, true);
+  perform set_config('rr.fam_kept', fam_kept::text, true);
 end $$;
 
 select is(
-  (select phone_work from public.profiles where id = current_setting('rr.hid')::uuid),
-  '+15550000003',
-  'before the run, a value hidden after the first run is still stored'
+  (select count(*)::int from public.profiles
+    where org_id = current_setting('rr.org')::uuid and phone_work is not null and email like '%@rerun.example.test'),
+  4,
+  'before the migration, every fixture still stores its work phone, hidden or not'
 );
 
-create temp table rr_counts as select public.directory_retire_hidden_values() as counts;
-
-select is(
-  (select counts from rr_counts),
-  jsonb_build_object(
-    'household_anniversary', 1, 'claimed_birthday', 0,
-    'hide_phone_mobile', 0, 'hide_phone_home', 0, 'hide_phone_work', 1,
-    'hide_address', 0, 'hide_birth_year', 0, 'hide_birthday', 0,
-    'hide_anniversary', 1, 'hide_occupation', 0,
-    'household_hide_address', 1, 'household_hide_phone_home', 0,
-    'anniversary_moved', 0, 'anniversary_split', 0),
-  'the run changes exactly the rows each flag set after the first run reaches'
+-- ── The migration ───────────────────────────────────────────────────────────
+select ok(
+  pg_temp.replay('20261204000000', '.') > 0,
+  'the drop migration replays from its recorded statements'
 );
 
+-- ── What it deleted and what it kept ────────────────────────────────────────
 select is(
-  (select row(phone_work, hide_phone_work)::text from public.profiles where id = current_setting('rr.hid')::uuid),
-  row(null::text, false)::text,
-  'the hidden number is gone and its flag is false'
+  (select row(phone_work, birth_year)::text from public.profiles where email = 'hid@rerun.example.test'),
+  row(null::text, null::smallint)::text,
+  'a work phone and birth year hidden after the previous sweep are gone'
 );
 
 select is(
-  (select row(phone_mobile, occupation, employer)::text from public.profiles where id = current_setting('rr.hid')::uuid),
-  row('+15550000001', 'Teacher', 'School')::text,
-  'values under that person''s false flags are kept'
+  (select row(phone_mobile, address_line1, birth_month, birth_day, occupation, employer)::text
+     from public.profiles where email = 'hid@rerun.example.test'),
+  row('+15550000001', '1 Main', 4::smallint, 5::smallint, 'Teacher', 'School')::text,
+  'that person''s values under no flag are kept'
 );
 
 select is(
-  (select row(hide_email, is_unlisted)::text from public.profiles where id = current_setting('rr.hid')::uuid),
+  (select row(hide_email, is_unlisted)::text from public.profiles where email = 'hid@rerun.example.test'),
   row(true, true)::text,
   'hide_email and is_unlisted are untouched'
 );
 
 select is(
-  (select row(phone_mobile, phone_work, occupation, employer, hide_email, is_unlisted)::text
-     from public.profiles where id = current_setting('rr.kept')::uuid),
-  row('+15550000001', '+15550000003', 'Teacher', 'School', false, false)::text,
-  'a person with no flag set keeps every value'
+  (select count(*)::int from public.profiles
+    where org_id = current_setting('rr.org')::uuid and email like '%@rerun.example.test'
+      and phone_work = '+15550000003' and birth_year = 1980 and occupation = 'Teacher'),
+  3,
+  'the three people with no flag set keep every value'
 );
 
 select is(
-  (select row(address_line1, city, state, postal_code, hide_address)::text
+  (select row(address_line1, city, state, postal_code, phone_home)::text
      from public.family_units where id = current_setting('rr.fam_addr')::uuid),
-  row(null::text, null::text, null::text, null::text, false)::text,
-  'an address entered over a household flag is gone and the flag is false'
-);
-
-select is(
-  (select phone_home from public.family_units where id = current_setting('rr.fam_addr')::uuid),
-  '+15550000002',
-  'that household''s phone, under a false flag, is kept'
+  row(null::text, null::text, null::text, null::text, '+15550000002')::text,
+  'a household address under a true flag is gone, and its phone under no flag is kept'
 );
 
 select is(
@@ -129,36 +168,33 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.profiles
-    where hide_phone_mobile or hide_phone_home or hide_phone_work or hide_address
-       or hide_birthday or hide_birth_year or hide_anniversary or hide_occupation),
-  0,
-  'no retired flag on profiles is true afterwards'
+  (select row(address_line1, city, state, postal_code, phone_home, anniversary, anniversary_month, anniversary_day, anniversary_year)::text
+     from public.family_units where id = current_setting('rr.fam_kept')::uuid),
+  row('3 Oak', 'Springfield', 'IL', '62704', '+15550000004', '2010-08-09'::date, 8::smallint, 9::smallint, 2010::smallint)::text,
+  'a household with no flag set keeps every value'
 );
 
 select is(
-  (select count(*)::int from public.family_units where hide_address or hide_phone_home),
-  0,
-  'no retired flag on family_units is true afterwards'
-);
-
-select is(
-  public.directory_retire_hidden_values(),
-  jsonb_build_object(
-    'household_anniversary', 0, 'claimed_birthday', 0,
-    'hide_phone_mobile', 0, 'hide_phone_home', 0, 'hide_phone_work', 0,
-    'hide_address', 0, 'hide_birth_year', 0, 'hide_birthday', 0,
-    'hide_anniversary', 0, 'hide_occupation', 0,
-    'household_hide_address', 0, 'household_hide_phone_home', 0,
-    'anniversary_moved', 0, 'anniversary_split', 0),
-  'a further run changes nothing'
-);
-
-select is(
-  (select count(*)::int from public.profiles
-    where email like '%@rerun.example.test' and (hide_email or is_unlisted)),
+  (select count(*)::int from public.family_units
+    where org_id = current_setting('rr.org')::uuid and (address_line1 is not null or anniversary_month is not null)),
   1,
-  'the two remaining settings still hold on the one person who set them'
+  'one fixture household of three keeps an address or anniversary'
+);
+
+-- ── What it dropped ─────────────────────────────────────────────────────────
+select is(
+  (select count(*)::int from information_schema.columns
+    where table_schema = 'public' and table_name in ('profiles', 'family_units')
+      and column_name like 'hide\_%' and column_name <> 'hide_email'),
+  0,
+  'no retired flag column is left'
+);
+
+select is(
+  (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname in ('family_anniversary_hidden', 'directory_retire_hidden_values')),
+  0,
+  'the gate and the sweep are dropped again'
 );
 
 select * from finish();

@@ -993,19 +993,12 @@ PostgREST RPC.
 ## Directory: what's stored is what's shown
 
 Only two directory settings remain: `is_unlisted` and `hide_email` (email stays
-stored because it is how people sign in). The other flags on `profiles`
-(`hide_phone_mobile`, `hide_phone_home`, `hide_phone_work`, `hide_address`,
-`hide_birthday`, `hide_birth_year`, `hide_anniversary`, `hide_occupation`) and on
-`family_units` (`hide_address`, `hide_phone_home`) are retired: the app neither
-reads nor writes them, and the values they hid were deleted by
-`directory_retire_hidden_values()`. That sweep has run twice: once when the
-flags were retired and again after, to catch anything hidden through a page
-still open on the earlier build. The columns, the view gates over them,
-`family_anniversary_hidden()`, the anniversary sync trigger and the sweep itself
-stay until a later release drops them. A flag is still writable through a direct
-API update of one's own row while its column exists, and a value saved under it
-stays hidden by the gate, so that release sweeps once more before it drops the
-gates and the columns.
+stored because it is how people sign in). The other hide settings are gone:
+their columns on `profiles` and `family_units` were dropped, after
+`directory_retire_hidden_values()` had deleted the values they hid, and that
+function went with them. The directory views read every other stored value as
+it is, with no gate, so a value that is stored is shown to everyone who can see
+the person or household.
 
 The app applies `hide_email` by where it reads the address. No request-client
 code reads `profiles.email`; the address has three read paths:
@@ -1041,22 +1034,15 @@ address. A person naming their own `email` is held to its stored value by the
 policy, and the sign-in trigger `handle_auth_user_email_change` and the service
 role are not client roles, so the trigger lets them through.
 
-Two pieces of this cross a boundary worth naming:
-
-- **`family_anniversary_hidden(uuid)`** gates the household's anniversary in both
-  household views. The views are `security_invoker`, so an `EXISTS` over
-  `profiles` inside them runs under the caller's RLS, and an unlisted spouse's row
-  is invisible to other members: the check would fail open, showing the
-  anniversary that spouse hid. The function is a read-only `SECURITY DEFINER` that
-  takes its org from `app_current_org_id()`. It goes when `hide_anniversary` does.
-- **`family_units.phone_profile_id`** points the household phone at a spouse's
-  mobile, by composite FK with `on delete set null (phone_profile_id)`. The views
-  read the number from the owner's profile under the caller's RLS, with the same
-  listed and member filters as `members`, so an unlisted or moved-out owner gives a
-  blank number and a number that shows always has its owner's name beside it. Only
-  that spouse can choose their own number: `family_units_phone_owner_guard` raises
-  `HP001` otherwise, because a `WITH CHECK` cannot compare old and new values.
-  Clearing it is open to anyone the update policy allows.
+One piece of this crosses a boundary worth naming.
+**`family_units.phone_profile_id`** points the household phone at a spouse's
+mobile, by composite FK with `on delete set null (phone_profile_id)`. The views
+read the number from the owner's profile under the caller's RLS, with the same
+listed and member filters as `members`, so an unlisted or moved-out owner gives a
+blank number and a number that shows always has its owner's name beside it. Only
+that spouse can choose their own number: `family_units_phone_owner_guard` raises
+`HP001` otherwise, because a `WITH CHECK` cannot compare old and new values.
+Clearing it is open to anyone the update policy allows.
 
 A pending spouse has no household write path: `is_member()` is false for them, so
 the update policy matches no row and `/api/household` refuses them. The other

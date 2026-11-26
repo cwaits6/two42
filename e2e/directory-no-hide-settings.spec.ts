@@ -25,7 +25,7 @@ const SEED_SQL = `
          anniversary_month = 10, anniversary_day = 3, anniversary_year = 2009
    where id = '${HOUSEHOLD}';
   update public.profiles
-     set phone_mobile = '555-0112', hide_anniversary = false, hide_email = false, is_unlisted = false
+     set phone_mobile = '555-0112', hide_email = false, is_unlisted = false
    where id = '${CHLOE}';
 `;
 
@@ -122,27 +122,15 @@ test.describe("what a member in the same group sees", () => {
     await expect(row.getByText(/Married/)).toHaveCount(0);
   });
 
-  test("a couple where a spouse hid it through the old app is on no filter", async ({ page }) => {
+  test("a stored anniversary shows on the full list, This week and the card", async ({ page }) => {
     runSql(SOON_SQL);
     for (const filter of ["", "?when=week"]) {
       await page.goto(`${ANNIVERSARIES}${filter}`);
       await expect(page.getByRole("link", { name: /Mockingham/ })).toBeVisible();
     }
-
-    runSql(`update public.profiles set hide_anniversary = true where id = '${CHLOE}';`);
-    try {
-      for (const filter of ["", "?when=week", "?when=month"]) {
-        await page.goto(`${ANNIVERSARIES}${filter}`);
-        // The list renders only once the directory has loaded, so this count is real.
-        await expect(page.getByLabel("Show anniversaries from")).toBeVisible();
-        await expect(page.getByRole("link", { name: /Mockingham/ })).toHaveCount(0);
-      }
-      await page.goto(HOUSEHOLD_CARD);
-      await expect(page.getByRole("heading", { name: "Mockingham" })).toBeVisible();
-      await expect(page.getByText(/^Anniversary/)).toHaveCount(0);
-    } finally {
-      runSql(`update public.profiles set hide_anniversary = false where id = '${CHLOE}';`);
-    }
+    await page.goto(HOUSEHOLD_CARD);
+    await expect(page.getByRole("heading", { name: "Mockingham" })).toBeVisible();
+    await expect(page.getByText(/^Anniversary/)).toBeVisible();
   });
 
   test("the email setting takes the email off the card", async ({ page }) => {
