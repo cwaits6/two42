@@ -209,6 +209,10 @@ repository's CI runs it against the hosted project every six hours.
 | `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
 | `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
 
+`refresh-church-records`, which copies details from a connected church's
+records, has no migration schedule: an operator who turns church records on
+schedules it, as the docs site's Edge functions page describes.
+
 ## Deploying to Production
 
 You need a [Supabase](https://supabase.com/dashboard) project, a
@@ -222,7 +226,7 @@ migrations, deploy the functions and set their secrets:
 npx supabase login
 npx supabase link --project-ref <project-ref>
 npx supabase db push --remote
-npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders refresh-church-records
 npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
   SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
 ```

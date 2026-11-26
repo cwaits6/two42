@@ -13,6 +13,8 @@ sources:
   - "lib/members/apply.ts"
   - "lib/integrations/records/enabled.ts"
   - "lib/integrations/records/crypto.ts"
+  - "app/admin/settings/church-records/**"
+  - "app/api/admin/church-records/**"
 ---
 
 ## Invite people from a CSV file
@@ -46,6 +48,36 @@ two42 also has a full member file: one row per person with their contact details
 
 The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
 
-<Callout type="info">
-There is no sync with a church management system yet. two42 can connect to a church's Rock RMS and link people to their records there, but it copies nothing from it, and it stays off unless the operator sets `RECORDS_KEY_SECRET`. The design for the rest is in [`docs/integrations/church-records.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md).
-</Callout>
+## Copy details from your church's records
+
+When the operator has set `RECORDS_KEY_SECRET`, **Church settings → Church records** lets a church admin connect the church's records (Rock RMS) and link people to them. Once connected, the same page chooses what two42 copies into linked people's profiles.
+
+### Connect
+
+The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers** and **DefinedValues** REST controllers, with no edit rights. two42 never writes to Rock.
+
+### What two42 copies
+
+For each of **Name**, **Suffix**, **Title**, **Gender**, **Mobile phone**, **Work phone**, **Birthday**, **Anniversary**, **Photo** and **A child's grade**, choose:
+
+- **Not from your church's records**: two42 doesn't touch it.
+- **From them, locked**: members see **Managed by your church** and can't change it. Only name, suffix, title, gender and a child's grade can be locked.
+- **From them, member can change**: filled in, and a member who changes or clears it keeps their own from then on. They can go back with **Use your church's value**.
+
+Select **Save what two42 copies**. The next refresh fills in what you turned on. A detail two42 already holds a different value for is left as the member's, with your church's value offered to them. The preferred name comes from the nick name, only while a member hasn't set one. The sign-in email, unlisted phone numbers, the texting flag, connection status and your church's own fields are never copied. Addresses and home phones come with households, which aren't copied yet.
+
+Each member who gets a detail filled in sees a one-time notice on **My profile**. What they see is in [Profile](/docs/use/profile#details-from-your-churchs-records).
+
+### Refresh
+
+two42 refreshes every night, reading only people changed in Rock since the last refresh. **Refresh** shows when it last ran and how many linked people still wait for their first copy. Select **Refresh now** to run it straight away.
+
+### Needs review
+
+**Needs review** lists linked people who became inactive in Rock or can't be found there any more, with **Open in Rock RMS** for an inactive person and **Unlink**. Nothing happens to them automatically.
+
+### Disconnecting or unlinking
+
+Unlinking a person, or disconnecting, keeps everything already copied in their profile as ordinary two42 details they can change. Only the link and further updates stop.
+
+The design is in [`docs/integrations/church-records.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md).

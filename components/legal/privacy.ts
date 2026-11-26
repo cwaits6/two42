@@ -37,7 +37,7 @@ export const PROCESSORS: readonly { name: string; does: string }[] = [
 export const PRIVACY: LegalDocument = {
   title: "Privacy policy",
   summary: "How two42 handles the information a church and its members put into it.",
-  lastUpdated: "2026-11-25",
+  lastUpdated: "2026-11-26",
   sections: [
     {
       heading: "What this policy covers",
@@ -69,6 +69,7 @@ export const PRIVACY: LegalDocument = {
           "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
           "Requests to join the church or a group, invitations, and feedback you send.",
           "If your church connects the software it keeps its records in, such as Rock RMS: which person in your church's records is you, once a church admin confirms it, and the key the church uses to reach its records, stored encrypted. To suggest a match, two42 reads names, email addresses and birthdays from your church's records and keeps none of them. two42 never writes to your church's records.",
+          "If your church admin chooses to copy details from those records, two42 copies the ones they pick into your profile: your name, preferred name, title, suffix, gender, mobile and work phone, birthday, your household's anniversary, your photo, and a child's grade. It copies them once you are linked, again every night for people whose records changed, and whenever a church admin asks it to. It keeps which details came from your church's records and your church's last value for each, so you can go back to it. It never copies an email address, a phone number marked unlisted, whether you can receive texts, your connection status or your church's own fields, and it never changes your sign-in email. A detail you change or clear is yours from then on, apart from your name, title, suffix, gender or a child's grade when your church locks them. When you are unlinked, or your church disconnects, what was copied stays in your profile and you can change it.",
           "Private calendar links, if you make them: one for your events, and one for your Supper club suppers. Anyone with a link can see what it shows, including the address of each supper on the Supper club link, so keep them to yourself.",
         ],
         "Your browser keeps a sign-in cookie, a cookie for the last group you opened, and your display choices. two42 sets no advertising or tracking cookies.",
@@ -90,6 +91,7 @@ export const PRIVACY: LegalDocument = {
           "A comment on a prayer request is seen by everyone who can see the request, or, if you choose, only by you and the person who posted the request. With your name hidden, a comment shows no name to anyone: not to other members, leaders or church admins. You, the person who posted the request, and the group's leaders can delete a comment.",
           "A Supper club sign-up is seen by the people in it, the group's leaders, and, once a leader publishes the tables, the people seated at the same table. The same goes for each person's Going or Not going for a supper.",
           "A host's address for the Supper club is seen by the host, the group's leaders, and the people seated at a table that host has a supper for, only once a leader publishes the tables. Allergies and food needs are seen by the people who signed up together, the group's leaders, and the host of each supper they are seated at. Being a church admin gives no extra access to the Supper club.",
+          "Which of your details came from your church's records, and your church's value for each, is seen by you and church admins.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],

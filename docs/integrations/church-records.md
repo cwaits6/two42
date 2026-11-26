@@ -7,8 +7,9 @@ church admins don't have to type what the church already knows. two42 only
 ever **reads** from the records, and works the same for a church that never
 connects them.
 
-This document is the design record. **The baseline** below is built. The rest
-is decided but not built, and each part names its ticket.
+This document is the design record. **The baseline** and **Copy into two42**
+below are built. The rest is decided but not built, and each part names its
+ticket.
 
 ## Decisions
 
@@ -65,7 +66,7 @@ is decided but not built, and each part names its ticket.
 
 A church admin picks one:
 
-- **Copy into two42** (built first, T42-272). Values from the records are
+- **Copy into two42** (built, T42-272; see [Copy into two42](#copy-into-two42-built)). Values from the records are
   stored in two42's own fields. A nightly job asks the records only for people
   changed since the last run. A church admin can also press **Refresh now**.
   This is what makes the directory fast, searchable and viewable offline.
@@ -107,6 +108,9 @@ Rules:
 - **Photos** come from the records and are resized like any upload. A member
   who uploads their own photo keeps it; the records' photo no longer replaces
   it.
+- **No email is copied** (maintainer, 2026-11-26). The records' email is used
+  only for matching, and two42 keeps one email per person, the sign-in
+  address. A separate contact email would be its own ticket.
 
 For each person and field, two42 keeps track of whether the value came from
 the records. That is what makes "Use your church's value" and the Copy-to-Live
@@ -228,9 +232,11 @@ unreadable, and each church admin has to connect again; the links stay.
 | Connect | One person id, to prove the key works | Provider, address, sealed key, its last 4 characters, who connected and when |
 | Suggest | People with the church's last names: id, names, email, birthday, and what decides whether they're linkable | Nothing |
 | Link | The same, for the chosen ids | Profile id, the person's id in the records, who linked and when |
+| Copy | See [Copy into two42](#copy-into-two42-built) | The copied values in the profile, and where each came from |
 
-Values from the records are held in memory for one request and are never
-logged or stored. No phone, address, family, group or giving data is requested.
+Values read to suggest or link are held in memory for one request. Nothing
+read from the records is ever logged. The baseline requests no phone,
+address, family, group or giving data; copying reads listed phones.
 
 ### Where it lives
 
@@ -250,9 +256,20 @@ logged or stored. No phone, address, family, group or giving data is requested.
   helpers").
 - `supabase/tests/church_records_suite.sql` — the database's half of the
   boundary.
+- For copying: `supabase/migrations/20261209000000_church_records_copy.sql`
+  (the settings, sources, person state and refresh tables, the two
+  service-role functions and the member-edit triggers), with
+  `supabase/tests/church_records_copy_suite.sql`; the shared code in
+  `supabase/functions/_shared/` (`records-*.ts`, `rock-client.ts`,
+  `rock-copy.ts`, `name-case.ts`, `phone.ts`), which the `lib/` files
+  re-export; `supabase/functions/refresh-church-records/`; and
+  `lib/integrations/records/` `refresh.ts`, `photo.ts`, `settings.ts`,
+  `labels.ts` and `profileRecords.ts`.
 
-The integration stays a leaf: nothing outside these paths imports it except
-the one link on Church settings.
+The integration stays a leaf: outside these paths only the link on Church
+settings, the profile pages (`app/profile/page.tsx`,
+`app/admin/members/[id]/page.tsx`) and the profile form's labels
+(`lib/integrations/records/labels.ts`) import it.
 
 ### Baseline decisions
 
@@ -285,6 +302,116 @@ the one link on Church settings.
   because providers differ in what an id looks like. Rock's is a number,
   stored as its digits.
 
+## Copy into two42 (built)
+
+T42-272. A church admin chooses a setting for each field under **What two42
+copies** on the church records page; linked people's values are filled in
+and kept up to date.
+
+### How it works
+
+- **Settings** (`records_field_settings`): one row per field the church fills,
+  `locked` or `member`; no row is *Not from your church's records*. Field names
+  are two42's: `name` (first and last), `suffix`, `title`, `gender`,
+  `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's),
+  `photo` and `grade` (the person's own household member row). The preferred
+  name follows `name`, and is never locked. Turning a field off removes its
+  sources, so its values become ordinary two42 data; any change asks the next
+  refresh to copy everyone in full.
+- **Where each value came from** (`records_field_values`): per linked person
+  and field, `records`, `changed` or `cleared`, with the church's last value.
+  It goes with the link, so unlinking or disconnecting leaves the values as
+  ordinary data, and live mode (T42-274) can find what to remove.
+- **Member edits** are marked by `BEFORE UPDATE` triggers on `profiles`,
+  `family_units` and `family_members`, so every screen that saves a profile
+  counts: an edit is `changed`, a clear `cleared`, the church's own value
+  `records` again (which is all **Use your church's value** does). A locked
+  value is kept, not refused, because every profile form sends each column.
+  Only a signed-in person's write counts; the refresh writes as the service
+  role.
+- **The rules** for one person's copy are `planPersonCopy()` in
+  `supabase/functions/_shared/records-copy.ts`:
+  - Locked: two42 holds the church's value, an empty one included.
+  - Member-changeable, first fill: an empty two42 value is filled. One the
+    member already entered is kept and marked `changed`, with the church's
+    value offered back. Turning a field on never replaces what a member
+    entered.
+  - Member-changeable, `records`: follows the records, a removal included.
+  - `changed` or `cleared`: left alone; only the church's value is updated.
+  - Preferred name: filled from the nick name only while empty, and not when
+    the nick name is the first name.
+  - Values are normalized the way the forms save them (names cased, phones
+    E.164), so saving an unchanged form isn't an edit. A value the forms
+    wouldn't accept counts as empty.
+  - Photo: downloaded only to fill an empty photo, or to follow a new one while
+    `records`. Stored at `<org>/profiles/<profile>/records-photo.jpg` in the
+    avatars bucket, never linked to the church's server. A member's own upload
+    is another address, marked `changed`, so it is never replaced.
+- **Refresh** (`refreshOrg()` in `_shared/records-refresh.ts`): nightly in the
+  `refresh-church-records` edge function and on **Refresh now**. It claims the
+  church's refresh so two never overlap, reads every link's existence and
+  status by id for **Needs review**, then copies linked people never copied and
+  people changed since the last mark, 50 at a time, within a time budget. Each
+  copy goes through `records_apply_copy()`, which writes nothing if the
+  member's values changed since they were read. The mark moves on only once
+  everyone changed since it was handled. Details are read only for those
+  people; existence and status are read for everyone linked, because a
+  person deleted or merged in the records leaves no change to find.
+- **Needs review**: linked people who are inactive (or deceased, or not a
+  person record) or can't be found. Nothing happens to them; they aren't
+  copied while listed.
+- **The one-time notice**: set when a copy first fills a value, shown on
+  **My profile** until the member selects **Got it**, never again.
+- **Providers.** Copying is the optional `copy` capability of
+  `RecordsProvider`; the shared code asks whether a provider has it and never
+  names one. Each provider also describes its own connect step. The nightly
+  function finds a provider's copy source in `_shared/records-providers.ts`.
+- **One source for both runtimes.** The edge function can't import `lib/`, so
+  the code both run (the Rock client, the address check and `safeFetch()`, key
+  sealing, name casing, the copy rules and the refresh) lives in
+  `supabase/functions/_shared/`, and `lib/` re-exports it
+  (`allowImportingTsExtensions` lets `lib/` import modules that import each
+  other with `.ts`). The phone normalizer can't be shared as code, so
+  `_shared/phone.ts` uses the same libphonenumber-js release, and both are held
+  to `_shared/phone-fixtures.ts`. A key sealed by the app is opened in both
+  runtimes' tests (`_shared/records-crypto-vector.ts`).
+
+### What is read
+
+| | Read from the records | Stored in two42 |
+|---|---|---|
+| Refresh, every linked person | Id, record type, record status, deceased | Why they need review, and since when |
+| Refresh, changed people | Ids and modified times of people and phone numbers changed since the mark | The mark |
+| Copy | Names, nick name, title, suffix, gender, birthday, anniversary, graduation year, photo id; listed mobile and work phones; the names of title and suffix values | The copied values, where each came from, the church's last value |
+| Photo | The photo, resized by the records to 400 pixels | The photo, in two42's storage |
+
+Never read or copied: email (used only for matching), unlisted phones, the
+texting flag, connection status and the church's own fields. Address and home
+phone come with households (T42-273).
+
+### For the operator
+
+Set `RECORDS_KEY_SECRET` in the edge function secrets as well, the same value
+as the app's, and schedule `refresh-church-records` nightly (no migration
+does): see the docs site's **Edge functions** page. Before it opens a key the
+function checks the runtime refuses a request to a loopback address, and stops
+with a 500 if it doesn't.
+
+### Still open
+
+- **A phone removed in the records** without any other change to the person
+  is seen only when the person next changes, since a deleted phone number row
+  leaves nothing changed to find.
+- **Photos on a real Rock.** Rock serves photos only through its image
+  handler, which follows Rock's own photo security rather than the REST key.
+  Where Rock doesn't let a request without a sign-in see a photo, two42
+  counts it as skipped. Check on a real install.
+- **The hosted Edge Runtime**: the loopback check above, and the time a first
+  copy of a large church takes.
+- **Labels on the household screens.** The anniversary and a child's grade
+  are marked by the triggers, and a locked grade is kept, but the household
+  forms don't show the labels yet.
+
 ## Rock RMS
 
 ### API facts
@@ -299,9 +426,16 @@ the one link on Church settings.
   installs, so they are looked up by Rock's stock Guids: Person record type
   `36CF10D6-C695-413D-8E7C-4546EFEF385E`, Inactive record status
   `1DAD99D5-41A9-4865-8366-F269902B80A4`.
+- `ModifiedDateTime` is in the church's own time zone, so the refresh's mark
+  is Rock's own latest `ModifiedDateTime`, never two42's clock, and is checked
+  against `yyyy-MM-ddTHH:mm:ss[.fffffff]` before it goes into a filter.
+- Phone types are defined values: mobile
+  `407E7E45-7B2E-4FCD-9605-ECB1339F2453`, work
+  `2CC66D5A-F61C-4B74-9AF9-590A9847C13C`. `PhoneNumber.IsUnlisted` marks a
+  private number, which is dropped when read; `IsMessagingEnabled` (the texting
+  flag) is never requested. `Gender` is 0 unknown, 1 male, 2 female.
 - For later work: group member status is 0 inactive, 1 active, 2 pending; a
-  leader is a member whose `GroupTypeRole.IsLeader` is true; and
-  `PhoneNumber.IsUnlisted` marks a private number.
+  leader is a member whose `GroupTypeRole.IsLeader` is true.
 
 ### The REST key's user and role
 
@@ -309,15 +443,41 @@ Recommended setup, following [Permissions](#permissions):
 
 - A **dedicated user** for two42's REST key, used for nothing else.
 - In a **dedicated security role** that has **View** on only the REST
-  controllers two42 reads, and **no edit or write permission** anywhere. For
-  the baseline that is **People** and **DefinedValues**.
+  controllers two42 reads, and **no edit or write permission** anywhere.
+  two42 needs no edit or write permission at all.
+
+The controllers, from the requests the code makes
+(`supabase/functions/_shared/rock-client.ts` and `rock-copy.ts`, every one a
+`GET`):
+
+| REST controller | Read for | Requests |
+|---|---|---|
+| **People** | Connecting, suggesting, linking, copying, review | `GET /api/People` with `$select` of the fields in the tables above |
+| **DefinedValues** | Record type and status, phone types, and the names of titles and suffixes | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
+| **PhoneNumbers** | Copying phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId` or `ModifiedDateTime`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId` |
+
+Photos aren't read through the REST API: Rock has no endpoint for them. They
+come from `GetImage.ashx?id=<PhotoId>&maxwidth=400&maxheight=400&format=jpg`,
+which never reads the REST key, so two42 doesn't send it there. The role needs
+nothing for photos; Rock's own photo security decides whether one is given.
+
+To set it up in Rock:
+
+1. Under Admin Tools › Settings › Security Roles, add a role, such as
+   "two42 read-only", with no members but the user below.
+2. Under Admin Tools › Settings › REST Controllers, open **People**,
+   **DefinedValues** and **PhoneNumbers** in turn, and on each, under
+   Security, allow **View** for the role. Grant nothing else, and no **Edit**
+   or **Administrate**.
+3. Under Admin Tools › Settings › REST Keys, add a key, active, on a new user
+   for two42 alone, and add that user to the role.
 
 On Rock's public demo, a key whose user had no role was refused with 401, and
 adding the user to **RSR - Staff Workers** was enough. That role grants far
-more than two42 needs, so don't use it for a real church. The exact minimum is
-confirmed by removing each permission in turn and checking what still works;
-T42-272 tracks that, and each later feature adds the controllers it reads to
-this list.
+more than two42 needs, so don't use it for a real church. The minimum above
+comes from the requests the code makes; it is still to be confirmed on a test
+Rock by removing each permission in turn and checking what still works. Each
+later feature adds the controllers it reads to this list.
 
 ### Checked against a real Rock
 
