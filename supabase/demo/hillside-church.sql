@@ -102,7 +102,8 @@ BEGIN
 
   CREATE TEMP TABLE sample_people (
     seq serial PRIMARY KEY, surname text NOT NULL REFERENCES sample_households (surname), first_name text NOT NULL,
-    relationship text NOT NULL, has_account boolean NOT NULL, birth_month smallint, birth_day smallint, birth_year smallint
+    relationship text NOT NULL, has_account boolean NOT NULL, birth_month smallint, birth_day smallint, birth_year smallint,
+    gender text, graduation_year smallint
   ) ON COMMIT DROP;
   INSERT INTO sample_people (surname, first_name, relationship, has_account, birth_month, birth_day, birth_year) VALUES
     ('Bennett',  'Sarah',  'primary', true,  3,  14, 1986),
@@ -133,6 +134,17 @@ BEGIN
     ('Reyes',    'Carlos', 'spouse',  true,  3,  31, 1987),
     ('Reyes',    'Lucia',  'child',   false, 6,  21, 2014),
     ('Reyes',    'Mateo',  'child',   false, 10, 10, 2017);
+  UPDATE sample_people SET gender = 'male'
+    WHERE has_account AND first_name IN ('Tom', 'David', 'Peter', 'Daniel', 'Ben', 'Mark', 'Carlos');
+  UPDATE sample_people SET gender = 'female'
+    WHERE has_account AND first_name IN ('Sarah', 'Anna', 'Claire', 'Elena', 'Linh', 'Ada', 'Ruth', 'Joan', 'Maria');
+  UPDATE sample_people s SET graduation_year = v.graduation_year
+    FROM (VALUES ('Bennett', 'Ella', 2034), ('Bennett', 'Sam', 2037), ('Carter', 'Luke', 2027),
+                 ('Hughes', 'Nora', 2036), ('Nguyen', 'Mia', 2035), ('Parker', 'May', 2033),
+                 ('Parker', 'Theo', 2036), ('Sullivan', 'Owen', 2028), ('Reyes', 'Lucia', 2032),
+                 ('Reyes', 'Mateo', 2035))
+           AS v (surname, first_name, graduation_year)
+    WHERE s.surname = v.surname AND s.first_name = v.first_name;
 
   FOR _household IN SELECT * FROM sample_households ORDER BY seq LOOP
     _family_id := ('5a3e0000-0000-0000-0000-00000000f' || lpad(_household.seq::text, 3, '0'))::uuid;
@@ -143,10 +155,10 @@ BEGIN
 
     FOR _person IN SELECT * FROM sample_people WHERE surname = _household.surname ORDER BY seq LOOP
       IF NOT _person.has_account THEN
-        INSERT INTO public.family_members (id, org_id, family_id, first_name, last_name, relationship, is_class_member, birth_month, birth_day, birth_year)
+        INSERT INTO public.family_members (id, org_id, family_id, first_name, last_name, relationship, is_class_member, birth_month, birth_day, birth_year, graduation_year)
         VALUES (('5a3e0000-0000-0000-0000-00000000d' || lpad(_person.seq::text, 3, '0'))::uuid, _org, _family_id,
                 _person.first_name, _household.surname, _person.relationship, _person.relationship <> 'child',
-                _person.birth_month, _person.birth_day, _person.birth_year)
+                _person.birth_month, _person.birth_day, _person.birth_year, _person.graduation_year)
         ON CONFLICT (id) DO NOTHING;
         CONTINUE;
       END IF;
@@ -179,7 +191,7 @@ BEGIN
       SET family_id = _family_id, relationship = _person.relationship,
           phone_mobile = '555-02' || lpad(_person.seq::text, 2, '0'),
           birth_month = _person.birth_month, birth_day = _person.birth_day, birth_year = _person.birth_year,
-          setup_completed = true, approved_at = now()
+          gender = _person.gender, setup_completed = true, approved_at = now()
       WHERE id = _user_id AND org_id = _org;
 
       FOREACH _group_name IN ARRAY _household.groups LOOP

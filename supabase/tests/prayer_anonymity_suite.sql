@@ -174,7 +174,7 @@ select is(
 select columns_are('public', 'prayer_wall', array[
   'id', 'body', 'is_anonymous', 'is_answered', 'created_at', 'mine', 'first_name', 'last_name',
   'preferred_name', 'avatar_url', 'praying_count', 'i_am_praying', 'org_id', 'group_id',
-  'body_ciphertext', 'author_hash'
+  'body_ciphertext', 'author_hash', 'suffix'
 ], 'prayer_wall keeps its columns and has no author column');
 select is(
   (select count(*)::int

@@ -235,7 +235,11 @@ CREATE TEMP TABLE seed_people (
   has_account  boolean NOT NULL,
   birth_month  smallint,
   birth_day    smallint,
-  birth_year   smallint
+  birth_year   smallint,
+  gender          text,
+  title           text,
+  suffix          text,
+  graduation_year smallint
 );
 
 INSERT INTO seed_people (surname, first_name, relationship, has_account, birth_month, birth_day, birth_year) VALUES
@@ -270,6 +274,21 @@ INSERT INTO seed_people (surname, first_name, relationship, has_account, birth_m
   ('Nullington',  'Walter',  'primary', true,  1,  1,  1938),
   ('Nullington',  'Edith',   'spouse',  false, 12, 12, 1940);
 
+-- Ruth has no gender, so the directory's Male and Female filters each leave
+-- her out. A grade is worked out from the graduation year on the day it is
+-- shown, so no test may assert a grade's text.
+UPDATE seed_people SET gender = 'male'
+  WHERE has_account AND first_name IN ('Noah', 'Ethan', 'Owen', 'Henry', 'Caleb', 'Isaac', 'Leo', 'Oliver', 'Walter');
+UPDATE seed_people SET gender = 'female'
+  WHERE has_account AND first_name IN ('Ava', 'Mia', 'Grace', 'Chloe', 'Zoe', 'Hannah', 'Amelia', 'Ivy');
+UPDATE seed_people SET title = 'Dr.', suffix = 'Jr.' WHERE surname = 'Dummyfield' AND first_name = 'Caleb';
+UPDATE seed_people s SET graduation_year = v.graduation_year
+  FROM (VALUES ('Sampleton', 'Lily', 2035), ('Sampleton', 'Max', 2038), ('Fakeworth', 'Ella', 2036),
+               ('Mockingham', 'Jack', 2031), ('Mockingham', 'Sophie', 2033), ('Mockingham', 'Ben', 2036),
+               ('Loremsworth', 'Eli', 2039), ('Stubbins', 'June', 2032), ('Stubbins', 'Theo', 2034))
+         AS v (surname, first_name, graduation_year)
+  WHERE s.surname = v.surname AND s.first_name = v.first_name;
+
 DO $$
 DECLARE
   _org CONSTANT uuid := '00000000-0000-0000-0000-000000000001';
@@ -290,10 +309,10 @@ BEGIN
 
     FOR _person IN SELECT * FROM seed_people WHERE surname = _household.surname ORDER BY seq LOOP
       IF NOT _person.has_account THEN
-        INSERT INTO public.family_members (id, org_id, family_id, first_name, last_name, relationship, is_class_member, birth_month, birth_day, birth_year)
+        INSERT INTO public.family_members (id, org_id, family_id, first_name, last_name, relationship, is_class_member, birth_month, birth_day, birth_year, graduation_year)
         VALUES (('d0000000-0000-0000-0000-' || lpad(_person.seq::text, 12, '0'))::uuid, _org, _family_id,
                 _person.first_name, _household.surname, _person.relationship, _person.relationship <> 'child',
-                _person.birth_month, _person.birth_day, _person.birth_year)
+                _person.birth_month, _person.birth_day, _person.birth_year, _person.graduation_year)
         ON CONFLICT (id) DO NOTHING;
         CONTINUE;
       END IF;
@@ -330,6 +349,9 @@ BEGIN
           birth_month = _person.birth_month,
           birth_day = _person.birth_day,
           birth_year = _person.birth_year,
+          gender = _person.gender,
+          title = _person.title,
+          suffix = _person.suffix,
           setup_completed = true,
           approved_at = now()
       WHERE id = _user_id AND org_id = _org;
