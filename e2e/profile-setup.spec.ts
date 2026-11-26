@@ -79,6 +79,9 @@ test("a member who hasn't finished setup is sent to it, adds a household and lan
   await page.getByLabel("First name").fill(NEWCOMER.first);
   await page.getByLabel("Last name").fill(NEWCOMER.last);
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("button", { name: "Male", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Female", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Skip" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Find my household" }).click();
   await page.getByRole("button", { name: "Add household", exact: true }).click();

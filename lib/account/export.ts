@@ -28,7 +28,7 @@ type PrayerRow = Pick<
 > & { groups: { name: string } | null };
 
 const PROFILE_COLUMNS =
-  "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
+  "first_name, last_name, preferred_name, title, suffix, gender, email, phone, phone_mobile, phone_home, phone_work, " +
   "address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, " +
   "anniversary, occupation, employer, bio, relationship, role, is_unlisted, hide_email, " +
   "email_announcements, email_event_reminders, email_supper_club, created_at";
@@ -38,7 +38,7 @@ const HOUSEHOLD_COLUMNS =
   "anniversary_month, anniversary_day, anniversary_year";
 
 const HOUSEHOLD_ENTRY_COLUMNS =
-  "first_name, last_name, preferred_name, relationship, birth_month, birth_day, birth_year, is_class_member";
+  "first_name, last_name, preferred_name, relationship, birth_month, birth_day, birth_year, graduation_year, is_class_member";
 
 /** Null when the person has no profile in this org. Throws on any failed read, never a partial file. */
 export async function buildAccountExport(orgId: string, personId: string) {

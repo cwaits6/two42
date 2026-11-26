@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { memberNames } from "@/lib/nameField";
+import { parseGraduationYear } from "@/lib/grade";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
 
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ fieldErrors }, { status: 400 });
   }
   if (!relationship) return NextResponse.json({ error: "relationship is required" }, { status: 400 });
+  const graduationYear = parseGraduationYear(body.graduation_year ?? null);
+  if (graduationYear === undefined) {
+    return NextResponse.json({ fieldErrors: { graduation_year: "Choose a grade." } }, { status: 400 });
+  }
 
   const { data, error } = await supabase
     .from("family_members")
@@ -86,6 +91,7 @@ export async function POST(request: Request) {
       birth_month: birth_month ? Number(birth_month) : null,
       birth_day: birth_day ? Number(birth_day) : null,
       birth_year: birth_year ? Number(birth_year) : null,
+      graduation_year: graduationYear,
       is_class_member: is_class_member ? Boolean(is_class_member) : false,
     })
     .select()

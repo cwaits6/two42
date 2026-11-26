@@ -108,6 +108,7 @@ describe("finishing the setup wizard", () => {
   it("sends no retired hide setting with the values they covered", async () => {
     await mount({ ...PROFILE, birth_month: null, birth_day: null, birth_year: null });
     await click("Continue");
+    await click("Continue");
     await type("phone_mobile", "(512) 555-0199");
     await click("Continue");
     await click("Continue");
@@ -124,6 +125,7 @@ describe("adding a household in the setup wizard", () => {
   it("creates it through create_own_household and finishes in it", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ matches: [] })));
     await mount({ ...PROFILE, family_id: null });
+    await click("Continue");
     await click("Continue");
     await click("Continue");
     await click("Find my household");
@@ -151,6 +153,7 @@ describe("choosing No date in the setup wizard", () => {
     await click("Continue");
     await click("Continue");
     await click("Continue");
+    await click("Continue");
     await click("Finish setup");
 
     const cleared = { birth_month: null, birth_day: null, birth_year: null };
@@ -164,6 +167,7 @@ describe("choosing No date in the setup wizard", () => {
     await click("Continue");
     await click("Continue");
     await click("Continue");
+    await click("Continue");
     await click("Finish setup");
 
     expect(writes.map((w) => w.table)).toEqual(["profiles", "profiles"]);
@@ -174,6 +178,7 @@ describe("choosing No date in the setup wizard", () => {
     failing.table = "family_members";
     await mount();
     await choose("birth_month", "No date");
+    await click("Continue");
     await click("Continue");
     await click("Continue");
     await click("Continue");
@@ -191,6 +196,7 @@ describe("choosing No date in the setup wizard", () => {
     await click("Continue");
     await click("Continue");
     await click("Continue");
+    await click("Continue");
     await click("Finish setup");
 
     expect(toast.info).toHaveBeenCalledWith(
@@ -205,6 +211,7 @@ describe("choosing No date in the setup wizard", () => {
     await click("Continue");
     await click("Continue");
     await click("Continue");
+    await click("Continue");
     await click("Finish setup");
 
     expect(writes.map((w) => w.table)).toEqual(["profiles", "profiles"]);
@@ -212,6 +219,7 @@ describe("choosing No date in the setup wizard", () => {
 
   it("clears the whole anniversary, and writes none", async () => {
     await mount();
+    await click("Continue");
     await click("Continue");
     await click("Continue");
     await click("Add spouse");
@@ -230,5 +238,30 @@ describe("choosing No date in the setup wizard", () => {
 
     expect(writes.some((w) => w.table === "family_units")).toBe(false);
     expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+  });
+});
+
+describe("the Gender step", () => {
+  it("saves no gender when they skip it", async () => {
+    await mount({ ...PROFILE, gender: "male" });
+    await click("Continue");
+    await click("Skip");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.find((w) => w.table === "profiles")!.values).toMatchObject({ gender: null });
+  });
+
+  it("saves the choice they press", async () => {
+    await mount({ ...PROFILE, gender: null });
+    await click("Continue");
+    await click("Female");
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.find((w) => w.table === "profiles")!.values).toMatchObject({ gender: "female" });
   });
 });

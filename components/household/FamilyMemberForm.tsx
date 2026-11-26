@@ -29,6 +29,8 @@ import {
 } from "@/components/profile/birthday";
 import { useRelabelToChild } from "@/components/household/useRelabelToChild";
 import { isChildWithoutAccount } from "@/lib/household";
+import { calendarDate } from "@/components/directory/utils";
+import { GRADES, gradeFor, gradeLabel, graduationYearFor } from "@/lib/grade";
 import { titleCaseName } from "@/lib/sanitize";
 import { nameFieldError, type MemberNameErrors } from "@/lib/nameField";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
@@ -44,19 +46,28 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+const NO_GRADE = "none";
+
+const GRADE_ITEMS = [
+  { value: NO_GRADE, label: "No grade" },
+  ...GRADES.map((g) => ({ value: String(g), label: gradeLabel(g) })),
+];
+
 type FieldErrors = BirthdayErrors & MemberNameErrors;
 
 interface Props {
   /** null = creating new member */
   member: FamilyMember | null;
   family: FamilyUnit;
+  /** The church's calendar date, YYYY-MM-DD; a grade is saved as the graduation year it implies. */
+  today: string;
   onSaved?: () => void;
   onCancel?: () => void;
   /** Called after an avatar-only update, which doesn't close the sheet like onSaved does */
   onChanged?: () => void;
 }
 
-export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged }: Props) {
+export function FamilyMemberForm({ member, family, today, onSaved, onCancel, onChanged }: Props) {
   // Last name defaults to the household surname unless marked different, as
   // ProfileForm does for members with an account. A blank
   // existing last name is treated as "not yet set" rather than "different",
@@ -74,6 +85,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const [birthMonth, setBirthMonth] = useState(member?.birth_month?.toString() ?? "");
   const [birthDay, setBirthDay] = useState(member?.birth_day?.toString() ?? "");
   const [birthYear, setBirthYear] = useState(member?.birth_year?.toString() ?? "");
+  const todayDate = calendarDate(today);
+  const [grade, setGrade] = useState(
+    () => gradeFor(member?.graduation_year, calendarDate(today))?.toString() ?? NO_GRADE,
+  );
   const [isClassMember, setIsClassMember] = useState(member?.is_class_member ?? false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(member?.avatar_url ?? null);
 
@@ -202,6 +217,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       preferred_name: titleCaseName(preferredName) || null,
       relationship,
       ...birthdayColumns(birthday),
+      graduation_year:
+        relationship === "child" && grade !== NO_GRADE
+          ? graduationYearFor(Number(grade), todayDate)
+          : null,
       is_class_member: isClassMember,
     };
 
@@ -378,6 +397,29 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
               </SelectContent>
             </Select>
           </div>
+
+          {relationship === "child" && (
+            <div className="space-y-2">
+              <Label htmlFor="grade" className="text-base">
+                Grade <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Select items={GRADE_ITEMS} value={grade} onValueChange={(v) => setGrade(v as string)}>
+                <SelectTrigger id="grade" className="w-full text-base py-5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GRADE_ITEMS.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-base text-muted-foreground">
+                Moves up on its own each August.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

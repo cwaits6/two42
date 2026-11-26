@@ -12,6 +12,8 @@ import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
 import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { logError } from "@/lib/log";
+import { todayIn } from "@/lib/serving/dates";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = () => pageTitle("My profile");
 
@@ -116,11 +118,14 @@ export default async function ProfilePage() {
   // Private buckets: exchange every stored avatar/photo URL for a
   // signed URL in one batch before the data reaches client renders. The
   // upload paths keep persisting raw URLs — this only touches what's shown.
-  const signed = await mintSignedUrls([
+  const [signed, timeZone] = await Promise.all([
+    mintSignedUrls([
     profile.avatar_url,
     family?.photo_url,
     ...householdProfiles.map((p) => p.avatar_url),
     ...familyMembers.map((fm) => fm.avatar_url),
+    ]),
+    getOrgTimeZone(),
   ]);
   profile.avatar_url = signed[0];
   if (family) family.photo_url = signed[1];
@@ -140,6 +145,7 @@ export default async function ProfilePage() {
         family={family}
         householdProfiles={householdProfiles}
         familyMembers={familyMembers}
+        today={todayIn(timeZone)}
       />
     </PageContainer>
   );

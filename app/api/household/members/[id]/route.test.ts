@@ -90,3 +90,29 @@ describe("/api/household/members/[id] names", () => {
     expect(db.updates).toEqual([]);
   });
 });
+
+describe("/api/household/members/[id] grade", () => {
+  const patch = (body: unknown) =>
+    PATCH(new Request("http://localhost/api/household/members/fm-1", { method: "PATCH", body: JSON.stringify(body) }), params);
+
+  it("saves a graduation year and clears one with null", async () => {
+    db.answers = { profiles: [primary, primary], family_members: [own, saved, own, saved] };
+    expect((await patch({ graduation_year: 2036 })).status).toBe(200);
+    expect((await patch({ graduation_year: null })).status).toBe(200);
+    expect(db.updates).toEqual([{ graduation_year: 2036 }, { graduation_year: null }]);
+  });
+
+  it("leaves the grade alone when the body has none", async () => {
+    db.answers = { profiles: [primary], family_members: [own, saved] };
+    await patch({ first_name: "Ruth" });
+    expect(db.updates).toEqual([{ first_name: "Ruth" }]);
+  });
+
+  it("refuses a year out of range and saves nothing", async () => {
+    db.answers = { profiles: [primary], family_members: [own, saved] };
+    const res = await patch({ graduation_year: 1999 });
+    expect(res.status).toBe(400);
+    expect((await res.json()).fieldErrors).toEqual({ graduation_year: "Choose a grade." });
+    expect(db.updates).toEqual([]);
+  });
+});
