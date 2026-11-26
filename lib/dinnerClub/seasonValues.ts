@@ -92,7 +92,7 @@ function daysBetween(from: string, to: string): number {
 
 /**
  * The next season's values from an ended one: the same format, how often,
- * table size and settings, starting the day after it ended and running as
+ * table size and settings, starting the day after its end date and running as
  * long. The title and sign-up close date are the leader's to set.
  */
 export function nextSeasonValues(previous: SeasonRow): SeasonValues {
