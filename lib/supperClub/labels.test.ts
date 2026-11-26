@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SUPPER_LENGTH_OPTIONS, isSupperLength, supperEndsAt, supperLengthLabel, supperOpen } from "./labels";
+import { SUPPER_LENGTHS, SUPPER_LENGTH_OPTIONS, isSupperLength, supperEndsAt, supperLengthLabel, supperOpen } from "./labels";
 
 const NOW = new Date("2027-03-01T12:00:00Z");
 
@@ -28,6 +29,12 @@ describe("supper length", () => {
       { value: "240", label: "4 hours" },
     ]);
     expect(supperLengthLabel(60)).toBe("1 hour");
+  });
+
+  it("offers exactly the lengths the suppers column accepts", () => {
+    const migration = readFileSync("supabase/migrations/20261206000000_supper_length.sql", "utf8");
+    const list = migration.match(/constraint suppers_length_minutes_allowed check \(\w+ in \(([\d, ]+)\)\)/)?.[1];
+    expect(list?.split(",").map(Number)).toEqual([...SUPPER_LENGTHS]);
   });
 
   it("accepts only the lengths the database allows", () => {
