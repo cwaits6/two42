@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const send = vi.fn().mockResolvedValue({ data: { id: "test" }, error: null });
 vi.mock("resend", () => ({
-  // A regular function, not an arrow: getResend() calls `new Resend(...)`,
+  // A regular function, not an arrow: sendEmail() calls `new Resend(...)`,
   // and an arrow-function mock implementation has no [[Construct]] to invoke.
   Resend: vi.fn().mockImplementation(function () {
     return { emails: { send } };
@@ -45,6 +45,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     });
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 
@@ -60,6 +61,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     });
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 
@@ -75,6 +77,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     });
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 });

@@ -1,6 +1,6 @@
 // Unit tests for the HTML-escaping boundary in email bodies, and for the
 // per-org From: address wiring at each send call site. escapeHtml is a pure
-// string transform — getResend() is lazy, so
+// string transform — the Resend client is made per send, so
 // importing the module alone sends nothing. The send-site tests below mock
 // the `resend` package and pass an explicit `branding` object, bypassing
 // resolveEmailBranding() entirely — no Supabase mocking needed.
@@ -10,7 +10,7 @@ import { escapeHtml } from "@/supabase/functions/_shared/email-html";
 
 const send = vi.fn().mockResolvedValue({ data: { id: "test" }, error: null });
 vi.mock("resend", () => ({
-  // A regular function, not an arrow: getResend() calls `new Resend(...)`,
+  // A regular function, not an arrow: sendEmail() calls `new Resend(...)`,
   // and an arrow-function mock implementation has no [[Construct]] to invoke.
   Resend: vi.fn().mockImplementation(function () {
     return { emails: { send } };
@@ -73,6 +73,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     await sendInviteEmail("a@b.org", "Jane", "https://x/y", BRANDING);
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 
@@ -80,6 +81,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     await sendFamilyInviteEmail("a@b.org", "Jane", "Sam", "https://x/y", BRANDING);
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 
@@ -87,6 +89,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     await sendFeedbackEmail(["a@b.org"], "Jane", null, "idea", "hi", BRANDING);
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+      { idempotencyKey: expect.any(String) },
     );
   });
 

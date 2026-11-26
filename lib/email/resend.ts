@@ -1,4 +1,3 @@
-import { Resend } from "resend";
 import {
   formatFromHeader,
   resolveRequestEmailBranding,
@@ -16,10 +15,7 @@ import {
   strong,
 } from "@/supabase/functions/_shared/email-html";
 import { logError } from "@/lib/log";
-
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
-}
+import { sendEmail } from "@/lib/email/send";
 
 export async function sendInviteEmail(
   email: string,
@@ -29,7 +25,7 @@ export async function sendInviteEmail(
 ) {
   const b = branding ?? (await resolveRequestEmailBranding());
   const safeMagicLink = sanitizeLink(magicLink);
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -62,7 +58,7 @@ export async function sendMemberInviteEmail(
   const b = branding;
   const safeSetupLink = sanitizeLink(setupLink);
 
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -115,7 +111,7 @@ export async function sendFamilyInviteEmail(
   const b = branding ?? (await resolveRequestEmailBranding());
   const safeJoinLink = sanitizeLink(joinLink);
 
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -151,7 +147,7 @@ export async function sendGroupInviteEmail(
   const b = branding;
   const safeSetupLink = sanitizeLink(setupLink);
 
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -186,7 +182,7 @@ export async function sendFeedbackEmail(
   // the sender directly by replying to this email.
   const replyTo = senderEmail ?? b.replyTo;
 
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to,
     ...(replyTo ? { replyTo } : {}),

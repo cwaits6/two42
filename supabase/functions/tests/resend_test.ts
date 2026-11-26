@@ -4,6 +4,9 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   eventReminderIdempotencyKey,
+  MAX_RETRY_WAIT_MS,
+  MAX_SEND_ATTEMPTS,
+  rateLimitWaitMs,
   resendOutcome,
   sendThroughResend,
   servingReminderIdempotencyKey,
@@ -12,13 +15,27 @@ import {
 const SEND = { apiKey: "re_test", payload: { to: "ann@example.test" }, refId: "ann" };
 
 function answering(status: number, body = "") {
+  return answeringInTurn({ status, body });
+}
+
+/** Answers each request with the next of these, and the last one from then on. */
+function answeringInTurn(...answers: Array<{ status: number; body?: string; retryAfter?: string }>) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const fetchFn = ((url: string, init: RequestInit) => {
+    const { status, body = "", retryAfter } = answers[Math.min(calls.length, answers.length - 1)];
     calls.push({ url, init });
-    return Promise.resolve(new Response(body, { status }));
+    const headers = retryAfter === undefined ? undefined : { "retry-after": retryAfter };
+    return Promise.resolve(new Response(body, { status, headers }));
   }) as unknown as typeof fetch;
   return { fetchFn, calls };
 }
+
+function sleeper() {
+  const waits: number[] = [];
+  return { waits, sleep: (ms: number) => (waits.push(ms), Promise.resolve()) };
+}
+
+const RATE_LIMITED = { status: 429, body: '{"name":"rate_limit_exceeded"}', retryAfter: "2" };
 
 Deno.test("an accepted send is sent", async () => {
   const { fetchFn, calls } = answering(200, '{"id":"abc"}');
@@ -35,15 +52,52 @@ Deno.test("a send can time out", async () => {
   assertEquals(calls[0].init.signal instanceof AbortSignal, true);
 });
 
-Deno.test("no key means no header", async () => {
+Deno.test("a send with no key of its own gets one", async () => {
   const { fetchFn, calls } = answering(200);
   await sendThroughResend(SEND, fetchFn);
-  assertEquals(new Headers(calls[0].init.headers).has("Idempotency-Key"), false);
+  assertEquals(new Headers(calls[0].init.headers).get("Idempotency-Key")?.length, 36);
 });
 
-Deno.test("a rate limit stops the firing rather than retrying", async () => {
-  const { fetchFn } = answering(429, '{"name":"rate_limit_exceeded"}');
-  assertEquals(await sendThroughResend(SEND, fetchFn), "rate_limited");
+Deno.test("a rate limit is retried once after the stated wait, under the same key and body, and sent once", async () => {
+  const { fetchFn, calls } = answeringInTurn(RATE_LIMITED, { status: 200, body: '{"id":"abc"}' });
+  const { waits, sleep } = sleeper();
+  assertEquals(await sendThroughResend({ ...SEND, idempotencyKey: "k" }, fetchFn, sleep), "sent");
+  assertEquals(waits, [2000]);
+  assertEquals(calls.length, 2);
+  assertEquals(new Headers(calls[1].init.headers).get("Idempotency-Key"), "k");
+  assertEquals(calls[1].init.body, calls[0].init.body);
+});
+
+Deno.test("a keyless send keeps its key across a retry", async () => {
+  const { fetchFn, calls } = answeringInTurn(RATE_LIMITED, { status: 200 });
+  await sendThroughResend(SEND, fetchFn, sleeper().sleep);
+  const key = new Headers(calls[0].init.headers).get("Idempotency-Key");
+  assertEquals(new Headers(calls[1].init.headers).get("Idempotency-Key"), key);
+});
+
+Deno.test("a rate limit that outlasts its tries stops the firing", async () => {
+  const { fetchFn, calls } = answeringInTurn(RATE_LIMITED);
+  const { waits, sleep } = sleeper();
+  assertEquals(await sendThroughResend(SEND, fetchFn, sleep), "rate_limited");
+  assertEquals(calls.length, MAX_SEND_ATTEMPTS);
+  assertEquals(waits.length, MAX_SEND_ATTEMPTS - 1);
+});
+
+for (const name of ["daily_quota_exceeded", "monthly_quota_exceeded"]) {
+  Deno.test(`a ${name} is not retried and stops the firing`, async () => {
+    const { fetchFn, calls } = answeringInTurn({ status: 429, body: `{"name":"${name}"}`, retryAfter: "1" });
+    const { waits, sleep } = sleeper();
+    assertEquals(await sendThroughResend(SEND, fetchFn, sleep), "rate_limited");
+    assertEquals(calls.length, 1);
+    assertEquals(waits, []);
+  });
+}
+
+Deno.test("a rate limit waits a second when Resend states no time, and not at all past the bound", () => {
+  assertEquals(rateLimitWaitMs(429, '{"name":"rate_limit_exceeded"}', null), 1000);
+  assertEquals(rateLimitWaitMs(429, "", String(MAX_RETRY_WAIT_MS / 1000)), MAX_RETRY_WAIT_MS);
+  assertEquals(rateLimitWaitMs(429, "", String(MAX_RETRY_WAIT_MS / 1000 + 1)), null);
+  assertEquals(rateLimitWaitMs(500, "", "1"), null);
 });
 
 Deno.test("a key whose first send went out with a different body counts as sent", async () => {

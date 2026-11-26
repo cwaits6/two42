@@ -94,8 +94,9 @@ export interface Recipient {
 /**
  * sent: Resend accepted it, or had already accepted it under the same key.
  * retry: Resend refused it or it never left; its claim is released for a
- * later firing. rate_limited: Resend asked for a pause; this and every
- * remaining claim are released and the firing stops sending.
+ * later firing. rate_limited: Resend's rate limit outlasted the retries
+ * sendThroughResend() gives it, or a daily or monthly quota was reached;
+ * this and every remaining claim are released and the firing stops sending.
  */
 export type SendOutcome = "sent" | "retry" | "rate_limited";
 
