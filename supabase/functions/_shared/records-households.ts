@@ -165,6 +165,10 @@ export interface SuggestedPerson {
 export const CONFIRM_HOUSEHOLD_OUTCOMES = ["confirmed", "stale", "gone", "busy"] as const;
 export type ConfirmHouseholdOutcome = (typeof CONFIRM_HOUSEHOLD_OUTCOMES)[number];
 
+/** What records_save_field_settings() and records_save_children_setting() answer; their SQL bodies return exactly these. */
+export const SAVE_SETTING_OUTCOMES = ["saved", "busy"] as const;
+export type SaveSettingOutcome = (typeof SAVE_SETTING_OUTCOMES)[number];
+
 export interface HouseholdSuggestion {
   external_family_id: string;
   /** The household to put them in, or null for a new one named family_name. */

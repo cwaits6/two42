@@ -15,6 +15,8 @@ import type { RecordsCredentials, RecordsProvider } from "./types";
 import {
   CONFIRM_HOUSEHOLD_OUTCOMES,
   type ConfirmHouseholdOutcome,
+  SAVE_SETTING_OUTCOMES,
+  type SaveSettingOutcome,
   type SuggestedPerson,
 } from "@/supabase/functions/_shared/records-households";
 
@@ -179,7 +181,7 @@ export async function saveFieldSettings(
   orgId: string,
   settings: FieldSettings,
   updatedBy: string,
-): Promise<"saved" | "busy"> {
+): Promise<SaveSettingOutcome> {
   const service = await createServiceClient();
   const { data, error } = await service.rpc("records_save_field_settings", {
     _org_id: orgId,
@@ -187,8 +189,9 @@ export async function saveFieldSettings(
     _updated_by: updatedBy,
   });
   if (error) throw new RecordsStoreError("records field settings write failed", { cause: error });
-  if (data !== "saved" && data !== "busy") throw new RecordsStoreError("records field settings write gave no answer");
-  return data;
+  const answer = SAVE_SETTING_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records field settings write gave no answer");
+  return answer;
 }
 
 export interface ReviewPerson {
@@ -414,7 +417,7 @@ export async function readyHouseholdSuggestions(orgId: string, ids: readonly str
  * Turning children off removes every suggested child nobody has decided on.
  * "busy" when a refresh is running: nothing was saved, because that run would keep the old switch.
  */
-export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy: string): Promise<"saved" | "busy"> {
+export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy: string): Promise<SaveSettingOutcome> {
   const service = await createServiceClient();
   const { data, error } = await service.rpc("records_save_children_setting", {
     _org_id: orgId,
@@ -422,8 +425,9 @@ export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy:
     _updated_by: updatedBy,
   });
   if (error) throw new RecordsStoreError("records children setting write failed", { cause: error });
-  if (data !== "saved" && data !== "busy") throw new RecordsStoreError("records children setting write gave no answer");
-  return data;
+  const answer = SAVE_SETTING_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records children setting write gave no answer");
+  return answer;
 }
 
 

@@ -20,6 +20,7 @@ import {
   HOUSEHOLD_FIELDS,
   type HouseholdSuggestion,
   type HouseholdValueRow,
+  SAVE_SETTING_OUTCOMES,
   type SuggestedPerson,
 } from "@/supabase/functions/_shared/records-households";
 import {
@@ -50,16 +51,14 @@ function table(name: string): string {
 
 /** The column names of the jsonb_to_recordset(...) as <alias>(...) in a body. */
 function recordset(body: string, alias: string): string[] {
-  const start = body.search(new RegExp(`jsonb_to_recordset\\([^;]*?\\)\\s+as\\s+${alias}\\(`));
-  expect(start, alias).toBeGreaterThanOrEqual(0);
-  const open = body.indexOf(`as ${alias}(`, start) + `as ${alias}(`.length;
-  const columns = body.slice(open, body.indexOf(")", open));
-  return columns.split(",").map((c) => c.trim().split(/\s+/)[0]);
+  const match = [...body.matchAll(/jsonb_to_recordset\([^;]*?\)\s+as\s+(\w+)\(([^)]*)\)/g)].find((m) => m[1] === alias);
+  expect(match, alias).toBeDefined();
+  return (match?.[2] ?? "").split(",").map((c) => c.trim().split(/\s+/)[0]);
 }
 
 /** The keys a body reads off a jsonb value: <name> ->> 'key' and <name> -> 'key'. */
 const keysRead = (body: string, name: string) =>
-  [...body.matchAll(new RegExp(`${name} ->>? '([a-z_0-9]+)'`, "g"))].map((m) => m[1]);
+  [...body.matchAll(/(\w+) ->>? '([a-z_0-9]+)'/g)].filter((m) => m[1] === name).map((m) => m[2]);
 
 // Typed literals: each lists exactly its type's keys, or the type check fails.
 const SUGGESTED_PERSON: SuggestedPerson = { profile_id: "p", from_family_id: null, relationship: "primary" };
@@ -224,6 +223,14 @@ describe("the households migration agrees with the household rules", () => {
     const body = between("create function public.records_confirm_household(", "$$;");
     const answers = [...body.matchAll(/return ([^;]*);/g)].flatMap((m) => quoted(m[1]));
     expect(sorted([...new Set(answers)])).toEqual(sorted(CONFIRM_HOUSEHOLD_OUTCOMES));
+  });
+
+  it("answers a settings save and the children switch with the outcomes the app reads", () => {
+    for (const fn of ["records_save_field_settings", "records_save_children_setting"]) {
+      const body = between(`function public.${fn}(`, "$$;");
+      const answers = [...body.matchAll(/return ([^;]*);/g)].flatMap((m) => quoted(m[1]));
+      expect(sorted([...new Set(answers)]), fn).toEqual(sorted(SAVE_SETTING_OUTCOMES));
+    }
   });
 
   it("reads a household copy by the keys the refresh writes", () => {
