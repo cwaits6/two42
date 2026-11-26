@@ -19,6 +19,7 @@ What was added or run.
 ## Checklist
 
 - [ ] `npm run lint` and `npm run guard:tenancy` pass locally
+- [ ] Docs: the matching `docs-site/content/docs/` page is updated in this PR, or the PR carries the `docs-not-needed` label
 - [ ] New service-role client or `SECURITY DEFINER` function → documented in `docs/security/service-role-inventory.md`
 
 <!-- Schema change — delete this block if the PR adds no migration. -->

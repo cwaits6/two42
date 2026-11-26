@@ -26,6 +26,7 @@ What changed, and why this is the right place to fix it.
 ## Checklist
 
 - [ ] `npm run lint` and `npm run guard:tenancy` pass locally
+- [ ] Docs: the matching `docs-site/content/docs/` page is updated in this PR, or the PR carries the `docs-not-needed` label
 - [ ] User-visible error and empty states still distinguish "failed" from "nothing here"
 
 <!-- Schema change — delete this block if the PR adds no migration. -->

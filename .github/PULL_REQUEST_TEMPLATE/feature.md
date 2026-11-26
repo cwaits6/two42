@@ -29,6 +29,7 @@ What was added or run. If this moves a boundary a signed-in member can see (RLS 
 ## Checklist
 
 - [ ] `npm run lint` and `npm run guard:tenancy` pass locally
+- [ ] Docs: the matching `docs-site/content/docs/` page is updated in this PR, or the PR carries the `docs-not-needed` label
 - [ ] Copy uses the terms in `CONTEXT.md`
 - [ ] Empty, loading, and error states exist and read differently from each other
 - [ ] New service-role client or `SECURITY DEFINER` function → documented in `docs/security/service-role-inventory.md`

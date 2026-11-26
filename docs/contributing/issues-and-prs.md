@@ -105,6 +105,8 @@ PR       fix(directory): keep member rows on one line on phones
 
 **Body** starts with `Closes T42-NN`.
 
+**Docs** ship in the same PR: a change to anything a member, leader, church admin or operator sees, or to a setup step, updates the matching page under `docs-site/content/docs/`, using the app's own copy. A change nobody can see gets the `docs-not-needed` label instead. The `Docs freshness` check names each page whose `sources` the change touched; [`docs-site/README.md`](../../docs-site/README.md) explains it.
+
 Pick the template by the ticket's Type label:
 
 | Type | Template |
