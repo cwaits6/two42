@@ -408,6 +408,24 @@ Deno.test("a copy whose anniversary was held for the household counts only what 
   assertEquals(result.pending, 0);
 });
 
+Deno.test("a copy whose anniversary was held still counts the person's own writes", async () => {
+  const HOME = "00000000-0000-0000-0000-0000000000f1";
+  const empty = { anniversary_month: null, anniversary_day: null, anniversary_year: null };
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    settings: [{ field: "anniversary", mode: "member" }, { field: "phone_mobile", mode: "member" }],
+    states: [],
+    profiles: [{ id: P1, family_id: HOME, first_name: "Kept", last_name: "Name", phone_mobile: null }],
+    familyUnits: [{ id: HOME, ...empty }],
+    apply: () => ({ data: "held", error: null }),
+  });
+  const { source } = fakeSource();
+  const married = { ...CHURCH, anniversary: { month: 6, day: 14, year: 2001 } };
+  const result = await refreshOrg(db, { ...options({ ...source, peopleForCopy: () => Promise.resolve([married]) }) });
+  assertEquals(rpcs[0]._profile, { phone_mobile: "+15125550123" });
+  assertEquals(result.copied, 1);
+});
+
 Deno.test("the nightly run shares one budget: a church reached after it is spent isn't started, and any unfinished church fails the run", async () => {
   const org = (n: number) => ({ id: `org-${n}`, name: "", timezone: "UTC", branding: null, org_email_domains: [] });
   const done = (over: Partial<Awaited<ReturnType<typeof refreshOrg>>> = {}) => ({

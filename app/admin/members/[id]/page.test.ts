@@ -49,6 +49,7 @@ vi.mock("@/lib/supabase/server", () => ({
           filters[column] = value;
           return chain;
         },
+        in: () => chain,
         order: () => chain,
         returns: () => chain,
         single: async () => ({
@@ -60,6 +61,7 @@ vi.mock("@/lib/supabase/server", () => ({
           return { data: { id: filters.id, role: "member", first_name: "Ada", last_name: "Test" }, error: null };
         },
         then: (resolve: (value: unknown) => void) => {
+          if (table.startsWith("records_")) return resolve({ data: [], error: null });
           if (table !== "profiles") return resolve(db.failed === "households" ? READ_FAILED : { data: [], error: null });
           if (db.failedCount) return resolve(db.failedCount);
           // A count that loses its role filter counts everyone in the church.

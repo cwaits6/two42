@@ -12,7 +12,7 @@ import {
   VALUE_STATES,
   type ValueField,
 } from "@/supabase/functions/_shared/records-copy";
-import { LEASE_MS } from "@/supabase/functions/_shared/records-refresh";
+import { APPLY_OUTCOMES, LEASE_MS } from "@/supabase/functions/_shared/records-refresh";
 
 const sql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
 
@@ -69,6 +69,12 @@ describe("the copy migration agrees with the copy rules", () => {
     const excluded = quoted(body.slice(body.indexOf("v.field not in ("), body.indexOf("loop")));
     const elsewhere = (Object.keys(FIELD_TABLE) as ValueField[]).filter((f) => FIELD_TABLE[f] !== "profile");
     expect(sorted(excluded)).toEqual(sorted(elsewhere));
+  });
+
+  it("answers a copy with the outcomes the refresh reads", () => {
+    const body = between("create function public.records_apply_copy(", "$$;");
+    const answers = [...body.matchAll(/return ([^;]*);/g)].flatMap((m) => quoted(m[1]));
+    expect(sorted([...new Set(answers)])).toEqual(sorted(APPLY_OUTCOMES));
   });
 
   it("writes and watches the same household and grade columns a copy plans", () => {

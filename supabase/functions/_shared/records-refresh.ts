@@ -86,6 +86,10 @@ export type ApplyCopyArgs = {
   _filled: ValueField[];
 };
 
+/** What records_apply_copy() answers; its SQL body returns exactly these. */
+export const APPLY_OUTCOMES = ["applied", "held", "stale", "gone", "unlinked"] as const;
+export type ApplyOutcome = (typeof APPLY_OUTCOMES)[number];
+
 /** The narrow slice of the Supabase client this module needs. */
 export interface RecordsRefreshClient {
   from(table: "records_refresh_state"): Table<RefreshStateRow>;
@@ -96,7 +100,7 @@ export interface RecordsRefreshClient {
   from(table: "profiles"): Table<ProfileRow>;
   from(table: "family_units"): Table<HouseholdRow>;
   from(table: "family_members"): Table<GradeRow>;
-  rpc(fn: "records_apply_copy", args: ApplyCopyArgs): PromiseLike<{ data: string | null; error: QueryError }>;
+  rpc(fn: "records_apply_copy", args: ApplyCopyArgs): PromiseLike<{ data: ApplyOutcome | null; error: QueryError }>;
 }
 
 export interface RefreshOptions {
