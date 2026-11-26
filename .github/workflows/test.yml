@@ -159,11 +159,13 @@ jobs:
           test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
 
       # The app seals prayer requests with these, and the specs open what it
-      # stored with the same keys. Fresh for each run, like the stack.
-      - name: Generate the prayer keys
+      # stored with the same keys. RECORDS_KEY_SECRET turns on the church
+      # records pages the church records spec opens. Fresh for each run, like
+      # the stack.
+      - name: Generate the prayer keys and the records secret
         if: steps.changes.outputs.run == 'true'
         run: |
-          for name in PRAYER_BODY_KEY PRAYER_AUTHOR_KEY; do
+          for name in PRAYER_BODY_KEY PRAYER_AUTHOR_KEY RECORDS_KEY_SECRET; do
             key=$(openssl rand -base64 32)
             echo "::add-mask::$key"
             echo "$name=$key" >> "$GITHUB_ENV"

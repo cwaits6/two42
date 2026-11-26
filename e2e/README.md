@@ -97,6 +97,13 @@ through the same container in `beforeAll`; one test puts the church admin on
 the waiting list and deletes that party when it ends. `afterAll` deletes the
 rotation, which takes every row under it, turns the switch back off and removes
 Isaac's calendar link.
+`church-records-copy.spec.ts` makes no call to any church's records: it writes a
+fixture connection (`https://records.example.test`, a dummy sealed key), Isaac's link,
+the church's settings (name locked, mobile phone member-changeable), where his name and
+mobile number came from, and his one-time notice through the same container in
+`beforeAll`; `afterAll` deletes the connection, which takes the rest, and the
+settings, and puts his seeded mobile number back. It needs `RECORDS_KEY_SECRET` for
+the app under test (from the environment or `.env.local`), which the CI job generates.
 
 ## Personas
 
@@ -160,6 +167,7 @@ not covered here.
 | `profile-setup.spec.ts`             | A member who hasn't finished setup is sent from sign-in and from Home, the directory, a group page and My profile to profile setup; the Gender step offers Male and Female and they skip it; with no household under their last name they add one, finish, land on Home and are no longer sent back, and their household is listed under Households with their name; they are removed in afterAll |
 | `directory-gender-filter.spec.ts`   | In `/directory` and Group B's directory, a one-group member's Male, Female and All options each show as many people as their count; Male lists only the seeded men in the group and Female only the women, someone with no gender is under All alone, and someone in another group is under none; nothing is written |
 | `supper-club.spec.ts`               | A guest at a published table sees their own host's address and not another table's; on Home they see their next supper, with their host's address and what they bring and nothing of another table's, while a member of the group at no table and a member of a group with the Supper club off see no supper on Home, nor does anyone once it is turned off; the group calendar shows no supper; their calendar link carries their own supper's address and not another table's, privately, and once reset the old link returns nothing; a guest sees what their own party brings and not another table's; a member of the group at no table sees no address; a waitlisted party sees no table, no address and no list; someone outside the group gets a 404; Supper club is in the menu only of the group that turned it on, and turned off the page is a 404 while the rotation is kept |
+| `church-records-copy.spec.ts`       | A member whose church copied their details sees the one-time notice until Got it, and never again after a reload; a locked name shows as text with "Managed by your church" and no First name or Last name field; a mobile number they changed shows "Changed in two42" and Use your church's value puts the church's number back, labelled "From your church's records" |
 
 ## Adding a spec
 
