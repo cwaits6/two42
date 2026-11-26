@@ -214,12 +214,15 @@ export function dinnerReminderEmail(opts: {
   hostNames: string | null;
   address: string | null;
   coming: string[];
+  /** What the person's party brings, when the host has said. */
+  bringing: string | null;
   pageUrl: string;
 }): RenderedEmail {
   const facts: [string, string][] = [["When", opts.dateLabel]];
   if (opts.hostNames) facts.push(["Host", opts.hostNames]);
   if (opts.address) facts.push(["Where", opts.address]);
   if (opts.coming.length > 0) facts.push(["Who's coming", opts.coming.join(", ")]);
+  if (opts.bringing) facts.push(["You're bringing", opts.bringing]);
   return {
     subject: `Reminder: ${opts.seasonTitle} dinner on ${opts.dateLabel}`,
     html: emailLayout(

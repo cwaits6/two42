@@ -116,7 +116,9 @@ function score(slots: Slot[], rules: SeatRules): number {
   return total;
 }
 
-const ATTEMPTS = 6;
+// Twelve starts find a seating with no repeat tablemates, where one exists,
+// on seeds where six did not; a large season still shuffles well under a second.
+const ATTEMPTS = 12;
 
 /**
  * Seats the movable parties several times from different seeded starts and
@@ -580,6 +582,129 @@ export function setTableHost(draft: Draft, key: string, partyId: string, seasonD
   );
 }
 
+/** Swaps who hosts two dates at one table, as when a host can't take their turn. */
+export function swapHostTurns(draft: Draft, key: string, dateA: string, dateB: string): Draft {
+  const t = draft.tables.find((x) => x.key === key);
+  const a = t?.hosts.find((h) => h.seasonDateId === dateA)?.partyId;
+  const b = t?.hosts.find((h) => h.seasonDateId === dateB)?.partyId;
+  if (!a || !b || dateA === dateB) return draft;
+  return setTableHost(setTableHost(draft, key, b, dateA), key, a, dateB);
+}
+
+/** The dates a table sits on: its own when tables change each dinner, every date otherwise. */
+function tableDates(t: DraftTable, dateIds: readonly string[]): string[] {
+  return t.seasonDateId ? [t.seasonDateId] : [...dateIds];
+}
+
+/**
+ * Free seats at a table: the fewest seats of the hosts of its dinners still
+ * to come (all its dinners when `futureDateIds` is not given), or the table
+ * size when none has a host yet. A held dinner's host no longer limits it.
+ */
+export function freeSeats(
+  t: DraftTable,
+  parties: Map<string, ShuffleParty>,
+  tableSizeMax: number,
+  futureDateIds?: ReadonlySet<string>
+): number {
+  const hosts = futureDateIds ? t.hosts.filter((h) => futureDateIds.has(h.seasonDateId)) : t.hosts;
+  return (tableSeats({ ...t, hosts }, parties) ?? tableSizeMax) - partyPeople(t, parties);
+}
+
+/**
+ * Tables a party could join: with a dinner still to come, room for the whole
+ * party, and the party not already seated on that table's date.
+ */
+export function tablesWithRoom(
+  draft: Draft,
+  party: ShuffleParty,
+  parties: Map<string, ShuffleParty>,
+  tableSizeMax: number,
+  dateIds: readonly string[],
+  futureDateIds: ReadonlySet<string>
+): DraftTable[] {
+  return draft.tables.filter(
+    (t) =>
+      tableDates(t, dateIds).some((d) => futureDateIds.has(d)) &&
+      freeSeats(t, parties, tableSizeMax, futureDateIds) >= party.size &&
+      !draft.tables.some((o) => o.seasonDateId === t.seasonDateId && o.partyIds.includes(party.id))
+  );
+}
+
+/** Seats a party at one table and changes no other. */
+export function seatParty(draft: Draft, partyId: string, toKey: string): Draft {
+  const to = draft.tables.find((t) => t.key === toKey);
+  if (!to || draft.tables.some((t) => t.seasonDateId === to.seasonDateId && t.partyIds.includes(partyId))) return draft;
+  return withTables(
+    draft,
+    draft.tables.map((t) => (t.key === toKey ? { ...t, partyIds: [...t.partyIds, partyId] } : t))
+  );
+}
+
+/**
+ * When a host can't host one dinner and tables change each dinner: spreads
+ * that table's guests across the same night's other tables with room and
+ * drops the table. Couples go first, then singles; each to the table with
+ * the most free seats, then the fewest people they already shared a table
+ * with this season or before, then the earlier table. The host is left off
+ * that night for the leader to seat. When any guest has no table with room,
+ * nothing moves: dropping the table would leave that guest without a seat, or
+ * the night without a table, and the draft is returned unchanged;
+ * `noOtherTable` tells a night with no other table from one without room.
+ */
+export function moveGuests(
+  draft: Draft,
+  tableKey: string,
+  parties: Map<string, ShuffleParty>,
+  tableSizeMax: number,
+  pastPairs: [string, string][]
+): { draft: Draft; unplaced: string[]; noOtherTable: boolean } {
+  const from = draft.tables.find((t) => t.key === tableKey);
+  if (!from?.seasonDateId) return { draft, unplaced: [], noOtherTable: false };
+  const seen = seenFrom(pastPairs);
+  for (const t of draft.tables) {
+    if (t.seasonDateId === from.seasonDateId) continue;
+    for (let a = 0; a < t.partyIds.length; a++) {
+      for (let b = a + 1; b < t.partyIds.length; b++) seen.add(pairKey(t.partyIds[a], t.partyIds[b]));
+    }
+  }
+  const hostIds = new Set(from.hosts.map((h) => h.partyId));
+  const guests = from.partyIds.filter((id) => !hostIds.has(id));
+  const order = [
+    ...guests.filter((id) => parties.get(id)?.size === 2),
+    ...guests.filter((id) => parties.get(id)?.size !== 2),
+  ];
+  let tables = draft.tables.filter((t) => t.key !== tableKey);
+  if (!tables.some((t) => t.seasonDateId === from.seasonDateId)) return { draft, unplaced: guests, noOtherTable: true };
+  const unplaced: string[] = [];
+  for (const id of order) {
+    const size = parties.get(id)?.size ?? 1;
+    const rank = (t: DraftTable) => ({
+      free: freeSeats(t, parties, tableSizeMax),
+      repeats: t.partyIds.filter((other) => seen.has(pairKey(id, other))).length,
+    });
+    let best: DraftTable | null = null;
+    let bestRank = { free: -Infinity, repeats: Infinity };
+    for (const t of tables) {
+      if (t.seasonDateId !== from.seasonDateId) continue;
+      const r = rank(t);
+      if (r.free < size) continue;
+      if (r.free > bestRank.free || (r.free === bestRank.free && r.repeats < bestRank.repeats)) {
+        best = t;
+        bestRank = r;
+      }
+    }
+    if (!best) {
+      unplaced.push(id);
+      continue;
+    }
+    const target = best.key;
+    tables = tables.map((t) => (t.key === target ? { ...t, partyIds: [...t.partyIds, id] } : t));
+  }
+  if (unplaced.length > 0) return { draft, unplaced, noOtherTable: false };
+  return { draft: withTables(draft, tables), unplaced, noOtherTable: false };
+}
+
 export interface PublishedTable {
   id: string;
   seasonDateId: string | null;
@@ -636,12 +761,28 @@ export function parseDraft(body: unknown): Draft | null {
 }
 
 /**
+ * The host of a table kept all season with one host: the one hosting the most
+ * dates, ties to the earliest. A published table keeps each date's own host,
+ * since one dinner may have a stand-in, and gives this host to a date with none.
+ */
+function oneHost(hosts: (string | null)[], published: boolean): { host: string | null; perDate: boolean } {
+  const counts = new Map<string, number>();
+  hosts.forEach((id) => id && counts.set(id, (counts.get(id) ?? 0) + 1));
+  let host: string | null = null;
+  for (const id of hosts) {
+    if (id && (host === null || (counts.get(id) ?? 0) > (counts.get(host) ?? 0))) host = id;
+  }
+  return { host: published ? host : (hosts.find((id) => id !== null) ?? null), perDate: published };
+}
+
+/**
  * A saved draft brought up to the season as it is now, or null when it was
  * saved under a format with the other table shape. Dates and parties change
  * after a draft is saved, and publish refuses a draft naming a date or party
  * that is gone. Parties no longer signed up leave their tables; a table kept
  * all season gets one host entry per current date, and with one host all
- * season every date takes that host; a date's tables go with the date.
+ * season every date takes that host, except on a published table, where a
+ * date keeps its own; a date's tables go with the date.
  */
 export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], partyIds: string[]): Draft | null {
   const perDate = format === "new_tables";
@@ -657,11 +798,24 @@ export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], 
         return partyId && seated.includes(partyId) ? partyId : null;
       };
       const kept = perDate ? [t.seasonDateId as string] : dateIds;
-      const tableHost = format === "same_table_one_host" ? (kept.map(hostOn).find((id) => id !== null) ?? null) : undefined;
+      const tableHost = format === "same_table_one_host" ? oneHost(kept.map(hostOn), t.tableId !== null) : undefined;
       return {
         ...t,
         partyIds: seated,
-        hosts: kept.map((d) => ({ seasonDateId: d, partyId: tableHost === undefined ? hostOn(d) : tableHost })),
+        hosts: kept.map((d) => ({
+          seasonDateId: d,
+          // On a published table a date with no host yet (one added since)
+          // takes the table's host; a date whose host withdrew waits for the
+          // leader to pick, rather than going to a one-dinner stand-in.
+          partyId:
+            tableHost === undefined
+              ? hostOn(d)
+              : tableHost.perDate
+                ? t.hosts.find((h) => h.seasonDateId === d)?.partyId
+                  ? hostOn(d)
+                  : tableHost.host
+                : tableHost.host,
+        })),
       };
     })
     .filter((t) => t.partyIds.length > 0);

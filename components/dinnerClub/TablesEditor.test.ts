@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Draft } from "@/lib/dinnerClub/shuffle";
+import { dinnerKey, type Draft } from "@/lib/dinnerClub/shuffle";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -50,7 +50,7 @@ const fitted: Draft = {
 
 let root: Root | null = null;
 
-async function mount() {
+async function mount(over: Record<string, unknown> = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -74,6 +74,10 @@ async function mount() {
         names: { h1: "Hosts", c1: "Guests" },
         initialDraft: fitted,
         heldDinners: [],
+        futureDateIds: ["d1", "d2"],
+        cantHost: {},
+        pastPairs: [],
+        ...over,
       }),
     ),
   );
@@ -119,5 +123,99 @@ describe("TablesEditor publish", () => {
     await click("Publish changes");
     expect(calls).toEqual(["save dinner_drafts s season_id"]);
     expect(toast.error).toHaveBeenCalled();
+  });
+});
+
+// The regular host h1 can't host the first dinner and s1 stands in for it,
+// so each hosts one of the table's two dinners.
+const standIn: Draft = {
+  version: 1,
+  seed: 0,
+  tables: [
+    {
+      key: "T1",
+      tableId: "T1",
+      seasonDateId: null,
+      partyIds: ["h1", "s1", "c1"],
+      hosts: [
+        { seasonDateId: "d1", partyId: "s1" },
+        { seasonDateId: "d2", partyId: "h1" },
+      ],
+    },
+  ],
+};
+
+describe("TablesEditor can't host", () => {
+  async function mountStandIn(published = false) {
+    await mount({
+      parties: [
+        { id: "h1", size: 2, canHost: true, seats: 8, preferredDateId: null, unavailableDateIds: [] },
+        { id: "s1", size: 2, canHost: true, seats: 8, preferredDateId: null, unavailableDateIds: [] },
+        { id: "c1", size: 2, canHost: false, seats: null, preferredDateId: null, unavailableDateIds: [] },
+      ],
+      names: { h1: "Hosts", s1: "Stand-ins", c1: "Guests" },
+      initialDraft: standIn,
+      // Publishing the stand-in clears the dinner's can't-host flag.
+      cantHost: published ? {} : { [dinnerKey("T1", "d1")]: "h1" },
+    });
+  }
+
+  function optionsOf(id: string) {
+    const field = document.querySelector(`label[for="${id}"]`)?.parentElement;
+    return Array.from(field?.querySelectorAll("button") ?? []);
+  }
+
+  function pressed(id: string) {
+    return optionsOf(id)
+      .filter((b) => b.getAttribute("aria-pressed") === "true")
+      .map((b) => b.textContent);
+  }
+
+  async function pick(id: string, label: string) {
+    const option = optionsOf(id).find((b) => b.textContent === label);
+    await act(async () => option!.click());
+  }
+
+  const savedHosts = () => (saved.body as Draft).tables[0].hosts;
+
+  it("names the published host as the one who can't host, and the stand-in as hosting instead", async () => {
+    await mountStandIn();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Hosts can't host on First.");
+    expect(text).toContain("Stand-ins hosts instead. Publish to tell the table.");
+    expect(text).not.toContain("Stand-ins can't host");
+  });
+
+  it("leaves the host who can't host out of the stand-in choices", async () => {
+    await mountStandIn();
+    const choices = optionsOf("standin-T1-d1").map((b) => b.textContent);
+    expect(choices).toEqual(["Stand-ins"]);
+  });
+
+  it("keeps the regular host as the table's host while a stand-in waits to be published", async () => {
+    await mountStandIn();
+    expect(pressed("host-T1")).toEqual(["Hosts"]);
+  });
+
+  it("keeps the stand-in when the table's host is picked again before publishing", async () => {
+    await mountStandIn();
+    await pick("host-T1", "Hosts");
+    expect(savedHosts()).toEqual(standIn.tables[0].hosts);
+  });
+
+  it("shows each dinner's host once a published stand-in hosts one of them", async () => {
+    await mountStandIn(true);
+    expect(document.querySelector('label[for="host-T1"]')).toBeNull();
+    expect(pressed("host-T1-d1")).toEqual(["Stand-ins"]);
+    expect(pressed("host-T1-d2")).toEqual(["Hosts"]);
+  });
+
+  it("changes only the picked dinner's host once a published stand-in hosts one of them", async () => {
+    await mountStandIn(true);
+    await pick("host-T1-d2", "Stand-ins");
+    expect(savedHosts()).toEqual([
+      { seasonDateId: "d1", partyId: "s1" },
+      { seasonDateId: "d2", partyId: "s1" },
+    ]);
   });
 });

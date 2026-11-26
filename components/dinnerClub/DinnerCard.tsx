@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
@@ -10,6 +12,7 @@ import { DINNER_HOURS } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, REPLY_OPTIONS, type ReplyStatus } from "@/lib/dinnerClub/labels";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
+import { BringListDialog, type BringGuest } from "./BringListDialog";
 import { MoveDinnerButton } from "./MoveDinnerButton";
 
 export interface DinnerCardProps {
@@ -31,6 +34,17 @@ export interface DinnerCardProps {
   canMove: boolean;
   /** For the host: the food needs of the parties with someone going. */
   foodNotes: { names: string; notes: string }[];
+  /** What the person's party brings, when the season's hosts say. */
+  bringing: string | null;
+  /** The host said they can't host this dinner. */
+  hostUnavailable: boolean;
+  /** For the host while the season's hosts say what guests bring. */
+  bringList: {
+    dinner: { id: string; seasonId: string; groupId: string; tableId: string; label: string };
+    guests: BringGuest[];
+    earlier: Record<string, string[]>;
+    dinnerIndex: number;
+  } | null;
 }
 
 export function DinnerCard(props: DinnerCardProps) {
@@ -43,6 +57,7 @@ export function DinnerCard(props: DinnerCardProps) {
     setReplies(props.replies);
   }
   const [saving, setSaving] = useState(false);
+  const [cantHost, setCantHost] = useState(false);
   const going = props.atTable.filter((p) => replies[p.id] === "going");
   const notGoing = props.atTable.filter((p) => replies[p.id] === "not_going");
   const noReply = props.atTable.length - going.length - notGoing.length;
@@ -61,6 +76,21 @@ export function DinnerCard(props: DinnerCardProps) {
       toast.error(failureMessage("save the reply"));
       return;
     }
+    router.refresh();
+  }
+
+  async function setHostUnavailable(value: boolean) {
+    const { data, error } = await createClient()
+      .from("dinners")
+      .update({ host_unavailable: value })
+      .eq("id", props.dinnerId)
+      .select("id");
+    if (error || !data?.length) {
+      toast.error(failureMessage("save that"));
+      return;
+    }
+    setCantHost(false);
+    toast.success(value ? "The leader will sort out this dinner." : "You're hosting this dinner.");
     router.refresh();
   }
 
@@ -88,6 +118,12 @@ export function DinnerCard(props: DinnerCardProps) {
             <dt className="text-base text-muted-foreground">At the table</dt>
             <dd>{props.atTable.map((p) => p.name).join(", ")}</dd>
           </div>
+          {props.bringing && (
+            <div>
+              <dt className="text-base text-muted-foreground">You&apos;re bringing</dt>
+              <dd className="font-semibold">{props.bringing}</dd>
+            </div>
+          )}
         </dl>
 
         {props.open &&
@@ -112,6 +148,20 @@ export function DinnerCard(props: DinnerCardProps) {
             <p className="text-lg">
               {notGoing.length} not going · {noReply} no reply yet
             </p>
+            {props.bringList?.guests.some((g) => g.item) && (
+              <div className="space-y-1">
+                <p className="text-lg font-medium">What guests bring</p>
+                <ul className="space-y-1 text-lg">
+                  {props.bringList.guests
+                    .filter((g) => g.item)
+                    .map((g) => (
+                      <li key={g.partyId}>
+                        {g.names}: {g.item}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
             {props.foodNotes.length > 0 && (
               <div className="space-y-1">
                 <p className="text-lg font-medium">Food needs</p>
@@ -127,9 +177,26 @@ export function DinnerCard(props: DinnerCardProps) {
           </div>
         )}
 
+        {props.isHost && props.open && props.hostUnavailable && (
+          <p role="status" className="rounded-xl border border-border bg-muted p-4 text-lg">
+            You said you can&apos;t host this dinner. The leader will sort it out.
+          </p>
+        )}
+
         {props.open && (
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             {props.canMove && <MoveDinnerButton dinnerId={props.dinnerId} startsAt={props.startsAt} zone={props.zone} />}
+            {props.bringList && <BringListDialog {...props.bringList} />}
+            {props.isHost &&
+              (props.hostUnavailable ? (
+                <Button variant="outline" size="lg" onClick={() => setHostUnavailable(false)}>
+                  I can host after all
+                </Button>
+              ) : (
+                <Button variant="outline" size="lg" onClick={() => setCantHost(true)}>
+                  Can&apos;t host this dinner
+                </Button>
+              ))}
             <AddToCalendarButton
               eventTitle={`${props.seasonTitle}: dinner`}
               startTime={props.startsAt}
@@ -140,6 +207,16 @@ export function DinnerCard(props: DinnerCardProps) {
             />
           </div>
         )}
+        <ConfirmDialog
+          open={cantHost}
+          onOpenChange={setCantHost}
+          title="Can't host this dinner?"
+          description="The leader is told and finds another host, moves the dinner or moves the guests. Your table hears once it's sorted."
+          confirmLabel="Can't host"
+          pendingLabel="Saving…"
+          confirmVariant="default"
+          onConfirm={() => setHostUnavailable(true)}
+        />
       </CardContent>
     </Card>
   );

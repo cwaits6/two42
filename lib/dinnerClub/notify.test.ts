@@ -58,8 +58,8 @@ const person = (id: string, extra: Row = {}): Row => ({
 function seed(): Record<string, Row[]> {
   return {
     dinner_seasons: [
-      { org_id: ORG, id: "s1", group_id: "g1", title: "Supper Club" },
-      { org_id: OTHER_ORG, id: "s1", group_id: "g9", title: "Other Supper" },
+      { org_id: ORG, id: "s1", group_id: "g1", title: "Supper Club", status: "published" },
+      { org_id: OTHER_ORG, id: "s1", group_id: "g9", title: "Other Supper", status: "published" },
     ],
     dinners: [
       { org_id: ORG, id: "d1", table_id: "t1", season_id: "s1", group_id: "g1", starts_at: NEW, host_party_id: "p-host" },
@@ -146,6 +146,12 @@ function fakeClient(rows: Record<string, Row[]>) {
   return { client, chains };
 }
 
+function ended(): Record<string, Row[]> {
+  const rows = seed();
+  rows.dinner_seasons = rows.dinner_seasons.map((s) => ({ ...s, status: "ended" }));
+  return rows;
+}
+
 const sentTo = () => send.mock.calls.map(([msg]) => (msg as { to: string }).to).sort();
 
 describe("notifyDinnersMoved", () => {
@@ -184,6 +190,16 @@ describe("notifyDinnersMoved", () => {
 
     expect(send).not.toHaveBeenCalled();
     expect(result).toEqual({ sent: 0, failed: 0, capped: true });
+  });
+
+  it("sends nothing for a dinner of an ended season", async () => {
+    createServiceClient.mockResolvedValue(fakeClient(ended()).client);
+
+    const result = await notifyDinnersMoved(ORG, [{ dinnerId: "d1", oldStartsAt: OLD }], "mover");
+
+    expect(send).not.toHaveBeenCalled();
+    expect(reserveEmailQuota).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, failed: 0, capped: false });
   });
 
   it("counts a send the email provider rejects as failed and keeps going", async () => {
@@ -226,6 +242,12 @@ describe("notifyTablesPublished", () => {
     expect(result).toEqual({ sent: 3, failed: 0, capped: false });
     expect(chains.length).toBeGreaterThan(0);
     for (const chain of chains) expect(chain.orgIds, chain.table).toEqual([ORG]);
+  });
+
+  it("sends nothing for an ended season", async () => {
+    createServiceClient.mockResolvedValue(fakeClient(ended()).client);
+    expect(await notifyTablesPublished(ORG, "s1", ["mover", "partner", "gina"])).toEqual({ sent: 0, failed: 0, capped: false });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("sends nothing when nobody is named", async () => {

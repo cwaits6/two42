@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
+import { pastPairsFromHistory } from "./history";
 import {
   blocksPublish,
   dinnerKey,
   draftFromPublished,
   draftWarnings,
   fitDraft,
+  freeSeats,
   hostsNeeded,
+  moveGuests,
   moveParty,
   pairKey,
   parseDraft,
   partyPeople,
+  seatParty,
   setTableHost,
   shuffle,
+  swapHostTurns,
   swapParties,
+  tablesWithRoom,
   tooFewHosts,
   type Draft,
   type ShuffleInput,
@@ -539,5 +545,243 @@ describe("shuffle, hosts whose seats add up but don't fit whole parties", () => 
         expect(partyPeople(t, seats)).toBeLessThanOrEqual(host.seats!);
       }
     }
+  });
+});
+
+describe("when plans change after publishing", () => {
+  const published = (tables: { id: string; date?: string; partyIds: string[]; hosts: [string, string | null][] }[]) =>
+    tables.map((t, i) => ({
+      id: t.id,
+      seasonDateId: t.date ?? null,
+      position: i + 1,
+      partyIds: t.partyIds,
+      hosts: t.hosts.map(([seasonDateId, partyId]) => ({ seasonDateId, partyId })),
+    }));
+
+  it("moves a cancelled table's guests to that night's other tables with room, and leaves the other nights alone", () => {
+    const parties = [
+      party("h1", 2, { seats: 8 }),
+      party("h2", 2, { seats: 8 }),
+      party("h3", 2, { seats: 8 }),
+      party("c1", 2),
+      party("c2", 2),
+      party("s1", 1),
+    ];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A1", date: "d1", partyIds: ["h1", "c1"], hosts: [["d1", "h1"]] },
+        { id: "B1", date: "d1", partyIds: ["h2", "c2", "s1"], hosts: [["d1", "h2"]] },
+        { id: "A2", date: "d2", partyIds: ["h1", "c2"], hosts: [["d2", "h1"]] },
+        { id: "B2", date: "d2", partyIds: ["h2", "c1", "s1"], hosts: [["d2", "h2"]] },
+        { id: "C2", date: "d2", partyIds: ["h3"], hosts: [["d2", "h3"]] },
+      ]),
+      "new_tables",
+      ["d1", "d2"],
+      0
+    );
+    const { draft: moved, unplaced } = moveGuests(draft, "B2", byId, 8, []);
+    expect(unplaced).toEqual([]);
+    expect(moved.tables.map((t) => t.key)).toEqual(["A1", "B1", "A2", "C2"]);
+    expect(moved.tables.filter((t) => t.seasonDateId === "d1")).toEqual(draft.tables.filter((t) => t.seasonDateId === "d1"));
+    const d2 = moved.tables.filter((t) => t.seasonDateId === "d2");
+    expect(d2.flatMap((t) => t.partyIds).sort()).toEqual(["c1", "c2", "h1", "h3", "s1"]);
+    // c1 shared table A1 with h1 on d1, so it goes to h3's table, which also has the most room.
+    expect(d2.find((t) => t.key === "C2")!.partyIds).toContain("c1");
+    const settings = input(parties, { format: "new_tables", dateIds: ["d1", "d2"], allowBackToBack: true });
+    expect(blocksPublish(draftWarnings(moved, settings))).toBe(false);
+    expect(Object.values(draftWarnings(moved, settings).tables).some((w) => w.overSeats)).toBe(false);
+  });
+
+  it("keeps a couple together and gives it the table with more room", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("h2", 2, { seats: 8 }), party("h3", 2, { seats: 6 }), party("c1", 2)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A", date: "d1", partyIds: ["h1"], hosts: [["d1", "h1"]] },
+        { id: "B", date: "d1", partyIds: ["h2"], hosts: [["d1", "h2"]] },
+        { id: "C", date: "d1", partyIds: ["h3", "c1"], hosts: [["d1", "h3"]] },
+      ]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved } = moveGuests(draft, "C", byId, 8, []);
+    expect(moved.tables.find((t) => t.key === "B")!.partyIds).toEqual(["h2", "c1"]);
+    expect(moved.tables.find((t) => t.key === "A")!.partyIds).toEqual(["h1"]);
+  });
+
+  it("leaves the host off that night", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("h2", 2, { seats: 6 }), party("s1", 1)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A", date: "d1", partyIds: ["h1"], hosts: [["d1", "h1"]] },
+        { id: "B", date: "d1", partyIds: ["h2", "s1"], hosts: [["d1", "h2"]] },
+      ]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved, unplaced } = moveGuests(draft, "B", byId, 8, []);
+    expect(unplaced).toEqual([]);
+    expect(moved.tables).toEqual([{ ...draft.tables[0], partyIds: ["h1", "s1"] }]);
+  });
+
+  it("moves nobody when a guest has no table with room", () => {
+    const parties = [party("h1", 2, { seats: 3 }), party("h2", 2, { seats: 6 }), party("c1", 2), party("s1", 1)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A", date: "d1", partyIds: ["h1"], hosts: [["d1", "h1"]] },
+        { id: "B", date: "d1", partyIds: ["h2", "c1", "s1"], hosts: [["d1", "h2"]] },
+      ]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved, unplaced, noOtherTable } = moveGuests(draft, "B", byId, 8, []);
+    expect(unplaced).toEqual(["c1"]);
+    expect(noOtherTable).toBe(false);
+    expect(moved).toBe(draft);
+  });
+
+  it("moves nobody when the cancelled table is the only one that night", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("c1", 2), party("s1", 1)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([{ id: "A", date: "d1", partyIds: ["h1", "c1", "s1"], hosts: [["d1", "h1"]] }]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved, unplaced, noOtherTable } = moveGuests(draft, "A", byId, 8, []);
+    expect(unplaced).toEqual(["c1", "s1"]);
+    expect(noOtherTable).toBe(true);
+    expect(moved).toBe(draft);
+  });
+
+  it("seats a waiting party at a table with room and changes no other table", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("h2", 2, { seats: 4 }), party("c1", 2), party("c2", 2), party("w", 2)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A", partyIds: ["h1", "c1"], hosts: [["d1", "h1"], ["d2", "h1"]] },
+        { id: "B", partyIds: ["h2", "c2"], hosts: [["d1", "h2"], ["d2", "h2"]] },
+      ]),
+      "same_table_one_host",
+      ["d1", "d2"],
+      0
+    );
+    const room = tablesWithRoom(draft, byId.get("w")!, byId, 8, ["d1", "d2"], new Set(["d2"]));
+    expect(room.map((t) => t.key)).toEqual(["A"]);
+    const seated = seatParty(draft, "w", "A");
+    expect(seated.tables[0].partyIds).toEqual(["h1", "c1", "w"]);
+    expect(seated.tables[1]).toEqual(draft.tables[1]);
+    expect(seatParty(seated, "w", "B")).toEqual(seated);
+    expect(tablesWithRoom(draft, byId.get("w")!, byId, 8, ["d1", "d2"], new Set())).toEqual([]);
+  });
+
+  it("keeps a one-dinner stand-in on a published one-host table, and the table's host on the other dates", () => {
+    const parties = [party("h1", 2, { seats: 8 }), party("h2", 2, { seats: 8 }), party("c1", 2)];
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2", "c1"], hosts: [["d1", "h1"], ["d2", "h1"], ["d3", "h1"]] }]),
+      "same_table_one_host",
+      ["d1", "d2", "d3", "d4"],
+      0
+    );
+    const standIn = setTableHost(draft, "A", "h2", "d2");
+    const fitted = fitDraft(standIn, "same_table_one_host", ["d1", "d2", "d3", "d4"], ["h1", "h2", "c1"])!;
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual(["h1", "h2", "h1", "h1"]);
+    expect(blocksPublish(draftWarnings(fitted, input(parties, { dateIds: ["d1", "d2", "d3", "d4"] })))).toBe(false);
+  });
+
+  it("leaves a one-host table whose host withdrew with no host until a new one is picked", () => {
+    const parties = [party("h2", 2, { seats: 8 }), party("c1", 2)];
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2", "c1"], hosts: [["d1", "h1"], ["d2", "h1"]] }]),
+      "same_table_one_host",
+      ["d1", "d2"],
+      0
+    );
+    const fitted = fitDraft(draft, "same_table_one_host", ["d1", "d2"], ["h2", "c1"])!;
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual([null, null]);
+    const settings = input(parties, { dateIds: ["d1", "d2"] });
+    expect(blocksPublish(draftWarnings(fitted, settings, new Set([dinnerKey("A", "d1")])))).toBe(true);
+    const picked = setTableHost(fitted, "A", "h2");
+    expect(blocksPublish(draftWarnings(picked, settings, new Set([dinnerKey("A", "d1")])))).toBe(false);
+  });
+
+  it("leaves the dates of a one-host table's withdrawn host open, not given to a one-dinner stand-in", () => {
+    const parties = [party("h2", 2, { seats: 8 }), party("c1", 2)];
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2", "c1"], hosts: [["d1", "h1"], ["d2", "h2"], ["d3", "h1"]] }]),
+      "same_table_one_host",
+      ["d1", "d2", "d3"],
+      0
+    );
+    const fitted = fitDraft(draft, "same_table_one_host", ["d1", "d2", "d3"], ["h2", "c1"])!;
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual([null, "h2", null]);
+    expect(blocksPublish(draftWarnings(fitted, input(parties, { dateIds: ["d1", "d2", "d3"] })))).toBe(true);
+  });
+
+  it("counts a table's free seats from the hosts of its dinners still to come", () => {
+    // h1 (4 seats) hosted the held first dinner; h2 (8 seats) hosts the next.
+    const parties = [party("h1", 2, { seats: 4 }), party("h2", 2, { seats: 8 }), party("w", 2)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2"], hosts: [["d1", "h1"], ["d2", "h2"]] }]),
+      "same_table_rotating",
+      ["d1", "d2"],
+      0
+    );
+    expect(freeSeats(draft.tables[0], byId, 8)).toBe(0);
+    expect(freeSeats(draft.tables[0], byId, 8, new Set(["d2"]))).toBe(4);
+    expect(tablesWithRoom(draft, byId.get("w")!, byId, 8, ["d1", "d2"], new Set(["d2"])).map((t) => t.key)).toEqual(["A"]);
+  });
+
+  it("swaps two dates' hosts at a table where hosts take turns", () => {
+    const draft = draftFromPublished(
+      published([{ id: "A", partyIds: ["h1", "h2"], hosts: [["d1", "h1"], ["d2", "h2"], ["d3", "h1"]] }]),
+      "same_table_rotating",
+      ["d1", "d2", "d3"],
+      0
+    );
+    expect(swapHostTurns(draft, "A", "d2", "d3").tables[0].hosts.map((h) => h.partyId)).toEqual(["h1", "h1", "h2"]);
+  });
+});
+
+describe("shuffle, keeping last seasons' tablemates apart", () => {
+  // Four tables last season, each a host couple, two couples and a single.
+  const lastSeason: string[][][] = [];
+  const parties: ShuffleParty[] = [];
+  for (const t of ["A", "B", "C", "D"]) {
+    parties.push(party(`${t}1`, 2, { seats: 8 }), party(`${t}2`, 2), party(`${t}3`, 2), party(`${t}4`, 1));
+    lastSeason.push([`${t}1`, `${t}2`, `${t}3`, `${t}4`].map((id) => [`${id}-person`]));
+  }
+  const current = parties.map((p) => ({ id: p.id, profileIds: [`${p.id}-person`] }));
+  const pastPairs = pastPairsFromHistory(current, lastSeason);
+
+  for (const format of ["same_table_one_host", "same_table_rotating", "new_tables"] as const) {
+    it(`seats nobody with last season's tablemates when there are enough people: ${format}`, () => {
+      for (let seed = 1; seed <= 20; seed++) {
+        const settings = input(parties, {
+          format,
+          dateIds: format === "new_tables" ? ["d1"] : ["d1", "d2", "d3"],
+          allowBackToBack: true,
+          pastPairs,
+          seed,
+        });
+        const warnings = draftWarnings(shuffle(settings), settings);
+        expect(Object.values(warnings.tables).flatMap((w) => w.repeatPairs)).toEqual([]);
+      }
+    });
+  }
+
+  it("keeps a repeat when the only way to avoid it leaves a single alone", () => {
+    const few = [party("h1", 2, { seats: 8 }), party("h2", 2, { seats: 8 }), party("c1", 2), party("s1", 1), party("s2", 1)];
+    const settings = input(few, { pastPairs: [["s1", "s2"]], tableSize: { min: 2, max: 4 } });
+    const warnings = draftWarnings(shuffle(settings), settings);
+    expect(Object.values(warnings.tables).flatMap((w) => w.repeatPairs.map((pair) => [...pair].sort()))).toEqual([["s1", "s2"]]);
   });
 });

@@ -54,6 +54,11 @@ interface FakeOptions {
   claims?: Record<string, DinnerClaimRow[]>;
   notGoing?: string[];
   capLeft?: number;
+  /** Per org, the seasons that have ended; the fake keeps them out of a published-only read. */
+  ended?: Record<string, string[]>;
+  bringListOff?: boolean;
+  /** What each party brings to every dinner. */
+  bringing?: Record<string, string>;
 }
 
 function fakeClient(options: FakeOptions = {}) {
@@ -87,7 +92,13 @@ function fakeClient(options: FakeOptions = {}) {
           case "group_settings":
             return ok((options.on?.[org] ?? []).map((group_id) => ({ group_id })));
           case "dinner_seasons":
-            return ok((options.on?.[org] ?? []).map((g) => ({ id: `season-${g}`, title: "Supper Club" })));
+            return ok(
+              (options.on?.[org] ?? [])
+                .filter((g) => !(recorded.filters.includes("status=published") && options.ended?.[org]?.includes(g)))
+                .map((g) => ({ id: `season-${g}`, title: "Supper Club", bring_list_enabled: !options.bringListOff })),
+            );
+          case "dinner_contributions":
+            return ok(Object.entries(options.bringing ?? {}).map(([party_id, item]) => ({ party_id, item })));
           case "dinners":
             return ok(options.dinners?.[org] ?? []);
           case "dinner_seats":
@@ -206,6 +217,7 @@ Deno.test("the email gets the host, the address and who is coming, leaving out w
   });
   const { deps: d, mailed } = deps();
   await runDinnerReminders(client, [church("o")], d);
+  assertEquals(mailed[0].bringing, null);
   assertEquals(mailed[0].details, {
     seasonTitle: "Supper Club",
     hostNames: "Henry and Chloe",
@@ -242,4 +254,44 @@ Deno.test("a cap of nothing sends nothing", async () => {
   const { deps: d, mailed } = deps();
   await runDinnerReminders(client, [church("o")], d);
   assertEquals(mailed, []);
+});
+
+Deno.test("each guest's reminder says what their party brings, and the host's says nothing", async () => {
+  const { client, queries } = fakeClient({
+    on: { o: ["g1"] },
+    dinners: { o: [dinner("d1", "2027-01-10T00:00:00Z")] },
+    claims: { d1: [claim("isaac"), claim("ruth"), claim("henry")] },
+    bringing: { guests: "Dessert", host: "Bread" },
+  });
+  const { deps: d, mailed } = deps();
+  await runDinnerReminders(client, [church("o")], d);
+  assertEquals(mailed.map((m) => [m.profileId, m.bringing]), [["isaac", "Dessert"], ["ruth", "Dessert"], ["henry", null]]);
+  assertEquals(queries.find((q) => q.table === "dinner_contributions")!.filters, ["org_id=o", "dinner_id=d1"]);
+});
+
+Deno.test("a season with the bring list off reads no contributions", async () => {
+  const { client, queries } = fakeClient({
+    on: { o: ["g1"] },
+    dinners: { o: [dinner("d1", "2027-01-10T00:00:00Z")] },
+    claims: { d1: [claim("isaac")] },
+    bringListOff: true,
+    bringing: { guests: "Dessert" },
+  });
+  const { deps: d, mailed } = deps();
+  await runDinnerReminders(client, [church("o")], d);
+  assertEquals(mailed[0].bringing, null);
+  assertEquals(queries.some((q) => q.table === "dinner_contributions"), false);
+});
+
+Deno.test("an ended season's dinners get no reminder", async () => {
+  const { client, queries } = fakeClient({
+    on: { o: ["g1"] },
+    ended: { o: ["g1"] },
+    dinners: { o: [dinner("d1", "2027-01-10T00:00:00Z")] },
+    claims: { d1: [claim("isaac")] },
+  });
+  const { deps: d, mailed } = deps();
+  await runDinnerReminders(client, [church("o")], d);
+  assertEquals(mailed, []);
+  assertEquals(queries.some((q) => q.table === "dinners" || q.rpc === "dinner_reminder_claim"), false);
 });

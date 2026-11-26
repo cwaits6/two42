@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const updates = vi.hoisted(() => [] as Record<string, unknown>[]);
+const refusal = vi.hoisted(() => ({ code: "" as string, message: "refused" }));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () =>
     Promise.resolve({
@@ -10,7 +13,14 @@ vi.mock("@/lib/supabase/server", () => ({
             maybeSingle: () => Promise.resolve({ data: { id: DINNER, starts_at: "2031-02-01T18:00:00+00:00" }, error: null }),
           }),
         }),
-        update: () => ({ eq: () => ({ select: () => Promise.resolve({ data: [{ id: DINNER }], error: null }) }) }),
+        update: (values: Record<string, unknown>) => {
+          updates.push(values);
+          return {
+            eq: () => ({
+              select: () => Promise.resolve(refusal.code ? { data: null, error: refusal } : { data: [{ id: DINNER }], error: null }),
+            }),
+          };
+        },
       }),
     }),
 }));
@@ -33,6 +43,21 @@ const move = () =>
 describe("POST /api/dinner-club/dinners/[dinnerId]/move", () => {
   beforeEach(() => {
     notifyDinnersMoved.mockReset();
+    updates.length = 0;
+    refusal.code = "";
+  });
+
+  it("asks the host again: a moved dinner clears that they can't host", async () => {
+    notifyDinnersMoved.mockResolvedValue({ sent: 0, failed: 0, capped: false });
+    await move();
+    expect(updates).toEqual([{ starts_at: "2031-02-08T18:00:00.000Z", host_unavailable: false }]);
+  });
+
+  it("emails nobody when the season has ended", async () => {
+    refusal.code = "DC003";
+    const res = await move();
+    expect(res.status).toBe(409);
+    expect(notifyDinnersMoved).not.toHaveBeenCalled();
   });
 
   it("emails the table about the dinner it moved, and says everyone heard", async () => {

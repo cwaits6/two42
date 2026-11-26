@@ -74,6 +74,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
             hostNames: r.details.hostNames,
             address: r.details.address,
             coming: r.details.coming,
+            bringing: r.bringing,
             pageUrl: `${SITE_URL}/g/${r.dinner.groupId}/dinner-club`,
           });
           const wait = lastSendAt + SEND_SPACING_MS - Date.now();

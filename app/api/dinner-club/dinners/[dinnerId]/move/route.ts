@@ -41,7 +41,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ din
   // A host who does not host this dinner matches no row: zero rows is a refusal.
   const { data: moved, error } = await supabase
     .from("dinners")
-    .update({ starts_at: startsAt })
+    // A moved dinner asks its host again, as it asks everyone's reply again.
+    .update({ starts_at: startsAt, host_unavailable: false })
     .eq("id", dinnerId)
     .select("id");
   if (error) {

@@ -12,17 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressFieldset, addressRow, hostingErrors, SeatsField, type AddressFields } from "@/components/dinnerClub/HostingFields";
 import type { DinnerFormat } from "@/lib/dinnerClub/shuffle";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
-
-export interface AddressFields {
-  address_line1: string;
-  address_line2: string;
-  city: string;
-  state: string;
-  postal_code: string;
-}
 
 export interface ExistingSignUp {
   partyId: string;
@@ -36,6 +29,18 @@ export interface ExistingSignUp {
   address: AddressFields | null;
   foodNotes: string;
   unavailable: string[];
+}
+
+/** The person's own party last season, for Sign up again. */
+export interface LastSeasonPrefill {
+  partnerId: string | null;
+  canHost: boolean;
+  seats: number | null;
+  kidsWelcome: boolean;
+  accessNotes: string;
+  pets: string;
+  address: AddressFields | null;
+  foodNotes: string;
 }
 
 type Option = { value: string; label: string };
@@ -56,6 +61,7 @@ export function SignUpForm({
   dates,
   existing,
   prefill,
+  lastSeason,
 }: {
   seasonId: string;
   groupId: string;
@@ -69,24 +75,49 @@ export function SignUpForm({
   existing: ExistingSignUp | null;
   /** The household's directory address, to start a host's address from. */
   prefill: AddressFields;
+  /** Sign up again: last season's answers, kept only for a party of the same people. */
+  lastSeason?: LastSeasonPrefill | null;
 }) {
   const router = useRouter();
   const ids = { who: useId(), other: useId(), seats: useId(), pref: useId(), food: useId(), access: useId(), pets: useId() };
-  const [who, setWho] = useState(ME);
-  const [other, setOther] = useState<string | null>(null);
+  const lastPartner = lastSeason?.partnerId ?? null;
+  const startWho = !lastPartner
+    ? ME
+    : household.some((o) => o.value === lastPartner)
+      ? lastPartner
+      : others.some((o) => o.value === lastPartner)
+        ? OTHER
+        : ME;
+  const startPartner = startWho === ME ? null : lastPartner;
+  // Last season's address, food needs and home notes were that party's, so
+  // they carry over only while the same people sign up together.
+  const kept = lastSeason && startPartner === lastPartner ? lastSeason : null;
+  const [who, setWho] = useState(startWho);
+  const [other, setOther] = useState<string | null>(startWho === OTHER ? lastPartner : null);
   const createdPartyId = useRef<string | undefined>(undefined);
   // Once the party is saved, a retry saves only its details, so who is in it
   // can no longer change here.
   const [partySaved, setPartySaved] = useState(false);
-  const [canHost, setCanHost] = useState(existing?.canHost ?? false);
-  const [seats, setSeats] = useState(String(existing?.seats ?? 8));
-  const [address, setAddress] = useState<AddressFields>(existing?.address ?? prefill);
+  const [canHost, setCanHost] = useState(existing?.canHost ?? lastSeason?.canHost ?? false);
+  const [seats, setSeats] = useState(String(existing?.seats ?? lastSeason?.seats ?? 8));
+  const [address, setAddress] = useState<AddressFields>(existing?.address ?? kept?.address ?? prefill);
   const [preferred, setPreferred] = useState(existing?.preferredDateId ?? NO_PREFERENCE);
   const [unavailable, setUnavailable] = useState<string[]>(existing?.unavailable ?? []);
-  const [kidsWelcome, setKidsWelcome] = useState(existing?.kidsWelcome ?? false);
-  const [accessNotes, setAccessNotes] = useState(existing?.accessNotes ?? "");
-  const [pets, setPets] = useState(existing?.pets ?? "");
-  const [foodNotes, setFoodNotes] = useState(existing?.foodNotes ?? "");
+  const [kidsWelcome, setKidsWelcome] = useState(existing?.kidsWelcome ?? lastSeason?.kidsWelcome ?? false);
+  const [accessNotes, setAccessNotes] = useState(existing?.accessNotes ?? kept?.accessNotes ?? "");
+  const [pets, setPets] = useState(existing?.pets ?? kept?.pets ?? "");
+  const [foodNotes, setFoodNotes] = useState(existing?.foodNotes ?? kept?.foodNotes ?? "");
+
+  function choosePartner(nextWho: string, nextOther: string | null) {
+    setWho(nextWho);
+    setOther(nextOther);
+    if (!lastSeason) return;
+    const same = (nextWho === ME ? null : nextWho === OTHER ? nextOther : nextWho) === lastPartner;
+    setAddress(same ? (lastSeason.address ?? prefill) : prefill);
+    setAccessNotes(same ? lastSeason.accessNotes : "");
+    setPets(same ? lastSeason.pets : "");
+    setFoodNotes(same ? lastSeason.foodNotes : "");
+  }
   const [errors, setErrors] = useState<{ seats?: string; line1?: string; other?: string }>({});
   const [saving, setSaving] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -100,11 +131,9 @@ export function SignUpForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const seatCount = Number(seats);
     const found = {
       other: !existing && who === OTHER && !other ? "Choose who you're signing up with." : undefined,
-      seats: canHost && !(Number.isInteger(seatCount) && seatCount >= 2 && seatCount <= 20) ? "Enter 2 to 20 seats." : undefined,
-      line1: canHost && !address.address_line1.trim() ? "Enter the address for the dinners." : undefined,
+      ...(canHost ? hostingErrors(seats, address) : {}),
     };
     setErrors(found);
     if (found.other || found.seats || found.line1) return;
@@ -141,7 +170,7 @@ export function SignUpForm({
       .from("dinner_parties")
       .update({
         can_host: canHost,
-        seats: canHost ? seatCount : null,
+        seats: canHost ? Number(seats) : null,
         preferred_season_date_id: canHost && format === "same_table_rotating" && preferred !== NO_PREFERENCE ? preferred : null,
         kids_welcome: canHost ? kidsWelcome : null,
         access_notes: canHost && accessNotes.trim() ? accessNotes.trim() : null,
@@ -155,17 +184,7 @@ export function SignUpForm({
     const addressWrite = canHost
       ? supabase
           .from("dinner_party_addresses")
-          .upsert(
-            {
-              ...keys,
-              address_line1: address.address_line1.trim(),
-              address_line2: address.address_line2.trim() || null,
-              city: address.city.trim() || null,
-              state: address.state.trim() || null,
-              postal_code: address.postal_code.trim() || null,
-            },
-            { onConflict: "party_id" }
-          )
+          .upsert(addressRow(keys, address), { onConflict: "party_id" })
           .select("party_id")
       : supabase.from("dinner_party_addresses").delete().eq("party_id", partyId).select("party_id");
     const notesWrite = foodNotes.trim()
@@ -192,8 +211,8 @@ export function SignUpForm({
     router.refresh();
   }
 
-  const setLine = (key: keyof AddressFields) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAddress((a) => ({ ...a, [key]: e.target.value }));
+  const setLine = (key: keyof AddressFields, value: string) => {
+    setAddress((a) => ({ ...a, [key]: value }));
     if (key === "address_line1") setErrors((x) => ({ ...x, line1: undefined }));
   };
 
@@ -201,9 +220,12 @@ export function SignUpForm({
     <form onSubmit={submit} noValidate className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold">{existing ? "Your sign-up" : "Sign up"}</CardTitle>
+          <CardTitle className="text-2xl font-bold">{existing ? "Your sign-up" : lastSeason ? "Sign up again" : "Sign up"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {!existing && lastSeason && (
+            <p className="text-lg">Your answers from last season are filled in. Change anything before you sign up.</p>
+          )}
           {existing ? (
             <p className="text-lg">{existing.partnerName ? `You and ${existing.partnerName}` : "Just you"}</p>
           ) : (
@@ -212,7 +234,7 @@ export function SignUpForm({
                 <Label htmlFor={ids.who} className="text-lg">
                   Who&apos;s coming
                 </Label>
-                <Select items={whoItems} value={who} disabled={partySaved} onValueChange={(next) => next && setWho(next)}>
+                <Select items={whoItems} value={who} disabled={partySaved} onValueChange={(next) => next && choosePartner(next, next === OTHER ? other : null)}>
                   <SelectTrigger id={ids.who} className={`w-full ${FIELD}`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -232,7 +254,7 @@ export function SignUpForm({
                     Signing up with
                   </Label>
                   <Select items={others} value={other} disabled={partySaved} onValueChange={(next) => {
-                      setOther(next);
+                      choosePartner(OTHER, next);
                       setErrors((x) => ({ ...x, other: undefined }));
                     }}>
                     <SelectTrigger id={ids.other} className={`w-full ${FIELD}`} {...invalidFieldProps(ids.other, errors.other)}>
@@ -264,42 +286,24 @@ export function SignUpForm({
               {format === "same_table_one_host" && (
                 <p className="text-lg">Hosting means hosting every dinner of the season.</p>
               )}
-              <div className="space-y-2">
-                <Label htmlFor={ids.seats} className="text-lg">
-                  Seats
-                </Label>
-                <Input
-                  id={ids.seats}
-                  type="number"
-                  inputMode="numeric"
-                  min={2}
-                  max={20}
-                  value={seats}
-                  className={`${FIELD} sm:w-40`}
-                  onChange={(e) => {
-                    setSeats(e.target.value);
-                    setErrors((x) => ({ ...x, seats: undefined }));
-                  }}
-                  {...invalidFieldProps(ids.seats, errors.seats)}
-                />
-                <p className="text-base text-muted-foreground">How many fit at your table, you included.</p>
-                <FieldError fieldId={ids.seats} message={errors.seats} />
-              </div>
+              <SeatsField
+                id={ids.seats}
+                value={seats}
+                error={errors.seats}
+                hint="How many fit at your table, you included."
+                onChange={(value) => {
+                  setSeats(value);
+                  setErrors((x) => ({ ...x, seats: undefined }));
+                }}
+              />
 
-              <fieldset className="space-y-3">
-                <legend className="text-lg font-medium">Address for the dinners</legend>
-                <p className="text-base text-muted-foreground">
-                  The group&apos;s leaders see it. The people at your table see it once the tables are published.
-                </p>
-                <Input aria-label="Street address" placeholder="Street address" maxLength={200} value={address.address_line1} className={FIELD} onChange={setLine("address_line1")} {...invalidFieldProps(`${ids.seats}-line1`, errors.line1)} />
-                <FieldError fieldId={`${ids.seats}-line1`} message={errors.line1} />
-                <Input aria-label="Apartment or unit" placeholder="Apartment or unit" maxLength={200} value={address.address_line2} className={FIELD} onChange={setLine("address_line2")} />
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Input aria-label="City" placeholder="City" maxLength={100} value={address.city} className={FIELD} onChange={setLine("city")} />
-                  <Input aria-label="State" placeholder="State" maxLength={100} value={address.state} className={FIELD} onChange={setLine("state")} />
-                  <Input aria-label="ZIP code" placeholder="ZIP code" maxLength={20} value={address.postal_code} className={FIELD} onChange={setLine("postal_code")} />
-                </div>
-              </fieldset>
+              <AddressFieldset
+                address={address}
+                line1Id={`${ids.seats}-line1`}
+                line1Error={errors.line1}
+                hint={<>The group&apos;s leaders see it. The people at your table see it once the tables are published.</>}
+                onChange={setLine}
+              />
 
               {format === "same_table_rotating" && (
                 <div className="space-y-2">

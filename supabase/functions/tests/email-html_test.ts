@@ -45,6 +45,7 @@ const reminders = [
     hostNames: "Henry and <b>Chloe</b>",
     address: "12 <i>Fixture</i> Lane",
     coming: ["Isaac", "<u>Ruth</u>"],
+    bringing: "<b>Dessert</b>",
     pageUrl: "https://two42.example/g/g1/dinner-club",
   }),
   dinnerTablesEmail({
@@ -151,12 +152,35 @@ Deno.test("the dinner reminder carries the time, host, address and who is coming
     hostNames: "Henry and Chloe",
     address: "12 Fixture Lane",
     coming: ["Isaac", "Ruth"],
+    bringing: "Dessert",
     pageUrl: "https://two42.example/g/g1/dinner-club",
   });
   assertEquals(subject, "Reminder: Supper Club dinner on Saturday, January 9 at 6:00 PM");
-  for (const part of ["Henry and Chloe", "12 Fixture Lane", "Isaac, Ruth", "https://two42.example/g/g1/dinner-club"]) {
+  for (
+    const part of [
+      "Henry and Chloe",
+      "12 Fixture Lane",
+      "Isaac, Ruth",
+      "You&#39;re bringing:</strong> Dessert",
+      "https://two42.example/g/g1/dinner-club",
+    ]
+  ) {
     assertStringIncludes(html, part);
   }
+});
+
+Deno.test("the dinner reminder says nothing about bringing when the party brings nothing", () => {
+  const { html } = dinnerReminderEmail({
+    ...BASE,
+    seasonTitle: "Supper Club",
+    dateLabel: "Saturday, January 9 at 6:00 PM",
+    hostNames: "Henry and Chloe",
+    address: "12 Fixture Lane",
+    coming: ["Isaac", "Ruth"],
+    bringing: null,
+    pageUrl: "https://two42.example/g/g1/dinner-club",
+  });
+  assert(!html.includes("bringing"));
 });
 
 Deno.test("dinner emails never call a table a group", () => {

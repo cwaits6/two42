@@ -38,7 +38,7 @@ export default async function EditSeasonPage({
     <PageContainer size="reading">
       <PageHeader
         title="Edit season"
-        subtitle={locked ? "Tables are published, so only the title and sign-up close date can change." : undefined}
+        subtitle={locked ? "Tables are published, so only the title, sign-up close date and what guests bring can change." : undefined}
         {...back}
       />
       <SeasonForm

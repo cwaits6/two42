@@ -3,17 +3,21 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BringListDialog } from "@/components/dinnerClub/BringListDialog";
 import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
+import { cantHostDinners } from "@/lib/dinnerClub/attention";
+import { bringListFor } from "@/lib/dinnerClub/bringList";
+import { pastPairsFromHistory } from "@/lib/dinnerClub/history";
 import { dinnerKey, draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { loadPeople, loadSeason, loadSeasonData, peopleOf, shuffleParties } from "../../../load";
+import { loadPastTables, loadPeople, loadSeason, loadSeasonData, peopleOf, shuffleParties } from "../../../load";
 
 export const generateMetadata = groupPageTitle("Tables");
 
@@ -47,12 +51,13 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     backLabel: "Back to the season",
   };
 
-  const [data, { data: stored, error: draftError }] = await Promise.all([
+  const [data, { data: stored, error: draftError }, pastTables] = await Promise.all([
     loadSeasonData(supabase, season.id),
     supabase.from("dinner_drafts").select("body").eq("season_id", season.id).maybeSingle(),
+    loadPastTables(supabase, season),
   ]);
   const people = data ? await loadPeople(supabase, data.members.map((m) => m.profile_id)) : null;
-  if (!data || !people || draftError) {
+  if (!data || !people || draftError || !pastTables) {
     return (
       <PageContainer>
         <PageHeader {...header} />
@@ -92,6 +97,29 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
   const heldDinners = data.dinners
     .filter((d) => new Date(d.starts_at) <= now)
     .map((d) => dinnerKey(d.table_id, d.season_date_id));
+  const futureDinners = data.dinners.filter((d) => new Date(d.starts_at) > now);
+  const cantHost = cantHostDinners(futureDinners, data.parties);
+  const cantHostIds = new Set(cantHost.map((d) => d.id));
+  const pastPairs = pastPairsFromHistory(
+    shuffleable.map((p) => ({ id: p.id, profileIds: peopleOf(data, p.id) })),
+    pastTables
+  );
+  const firstNames = new Map(people.map((p) => [p.id, p.firstName]));
+  const bringList = (d: (typeof data.dinners)[number]) => ({
+    dinner: { id: d.id, seasonId: season.id, groupId: group.id, tableId: d.table_id, label: dinnerWhen(d.starts_at, zone) },
+    ...bringListFor(d, data, (partyId) =>
+      partyName(peopleOf(data, partyId).map((id) => firstNames.get(id) ?? "Someone who left"))
+    ),
+  });
+
+  // A date is still to come while any of its dinners is: a host may have
+  // moved their table's dinner past the date it was set on.
+  const futureDateIds = data.dates
+    .filter((sd) => {
+      const onDate = data.dinners.filter((d) => d.season_date_id === sd.id);
+      return onDate.length > 0 ? onDate.some((d) => new Date(d.starts_at) > now) : new Date(sd.starts_at) > now;
+    })
+    .map((sd) => sd.id);
 
   return (
     <PageContainer size="wide">
@@ -113,6 +141,11 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             names={names}
             initialDraft={initialDraft}
             heldDinners={heldDinners}
+            futureDateIds={futureDateIds}
+            cantHost={Object.fromEntries(
+              cantHost.map((d) => [dinnerKey(d.table_id, d.season_date_id), d.host_party_id])
+            )}
+            pastPairs={pastPairs}
           />
         )}
 
@@ -137,9 +170,15 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
                           {d.host_party_id ? `Host: ${names[d.host_party_id] ?? ""}` : "No host"}
                           {d.host_party_id && addressOf.get(d.host_party_id) ? ` · ${addressOf.get(d.host_party_id)}` : ""}
                         </p>
+                        {cantHostIds.has(d.id) && (
+                          <p className="text-base font-semibold text-destructive">Host can&apos;t host</p>
+                        )}
                       </div>
-                      {season.status === "published" && new Date(d.starts_at) > new Date() && (
-                        <MoveDinnerButton dinnerId={d.id} startsAt={d.starts_at} zone={zone} />
+                      {season.status === "published" && new Date(d.starts_at) > now && (
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <MoveDinnerButton dinnerId={d.id} startsAt={d.starts_at} zone={zone} />
+                          {season.bring_list_enabled && <BringListDialog {...bringList(d)} />}
+                        </div>
                       )}
                     </li>
                   );

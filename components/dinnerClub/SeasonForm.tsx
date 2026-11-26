@@ -71,6 +71,7 @@ function columns(v: SeasonValues) {
     table_size_max: Number(v.sizeMax),
     signup_closes_on: v.closesOn,
     allow_back_to_back_hosting: v.format === "new_tables" && v.backToBack,
+    bring_list_enabled: v.bringList,
   };
 }
 
@@ -82,6 +83,7 @@ export function SeasonForm({
   seasonId,
   initial,
   locked = false,
+  previousSeasonId,
 }: {
   groupId: string;
   zone: string;
@@ -90,6 +92,8 @@ export function SeasonForm({
   initial: SeasonValues;
   /** Published: the format, dates and table size stay as they are. */
   locked?: boolean;
+  /** The ended season a new one starts from. */
+  previousSeasonId?: string;
 }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
@@ -118,7 +122,11 @@ export function SeasonForm({
     if (seasonId) {
       const { data, error } = await supabase
         .from("dinner_seasons")
-        .update(locked ? { title: row.title, signup_closes_on: row.signup_closes_on } : row)
+        .update(
+          locked
+            ? { title: row.title, signup_closes_on: row.signup_closes_on, bring_list_enabled: row.bring_list_enabled }
+            : row
+        )
         .eq("id", seasonId)
         .select("id");
       setSaving(false);
@@ -134,7 +142,7 @@ export function SeasonForm({
     } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from("dinner_seasons")
-      .insert({ ...row, group_id: groupId, created_by: user?.id ?? null })
+      .insert({ ...row, group_id: groupId, created_by: user?.id ?? null, previous_season_id: previousSeasonId ?? null })
       .select("id")
       .single();
     if (error || !data) {
@@ -328,6 +336,16 @@ export function SeasonForm({
             <Label htmlFor="season-closesOn" className="text-lg">Sign-ups close</Label>
             <Input {...field("closesOn")} type="date" value={values.closesOn} className={`${FIELD} sm:w-64`} onChange={(e) => set("closesOn", e.target.value)} />
             <FieldError fieldId="season-closesOn" message={errors.closesOn} />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex min-h-11 items-center gap-3">
+              <Checkbox id="season-bringList" checked={values.bringList} onCheckedChange={(checked) => set("bringList", checked === true)} />
+              <Label htmlFor="season-bringList" className="text-lg font-normal">
+                Hosts say what each guest brings
+              </Label>
+            </div>
+            <p className="text-base text-muted-foreground">Each guest sees what their party brings, and the reminder email says it.</p>
           </div>
 
           {values.format === "new_tables" && (

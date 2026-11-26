@@ -133,8 +133,11 @@ export async function notifyTablesPublished(
     .select("id, group_id, title")
     .eq("org_id", orgId)
     .eq("id", seasonId)
+    .eq("status", "published")
     .maybeSingle();
-  if (seasonError || !season) throw new Error("Failed to load the dinner club season");
+  if (seasonError) throw new Error("Failed to load the dinner club season");
+  // An ended season sends no more dinner email.
+  if (!season) return NOTHING;
 
   const to = await recipients(service, orgId, profileIds);
   if (to.size === 0) return NOTHING;
@@ -225,9 +228,15 @@ export async function notifyDinnersMoved(
 
   const seasonIds = [...new Set((dinners ?? []).map((d) => d.season_id))];
   const { data: seasons, error: seasonsError } = seasonIds.length
-    ? await service.from("dinner_seasons").select("id, title").eq("org_id", orgId).in("id", seasonIds)
+    ? await service
+        .from("dinner_seasons")
+        .select("id, title")
+        .eq("org_id", orgId)
+        .eq("status", "published")
+        .in("id", seasonIds)
     : { data: [], error: null };
   if (seasonsError) throw new Error("Failed to load dinner club seasons");
+  // Only a running season's dinners: an ended season sends no more dinner email.
   const titles = new Map((seasons ?? []).map((s) => [s.id, s.title]));
 
   const tableIds = [...new Set((dinners ?? []).map((d) => d.table_id))];
@@ -251,7 +260,8 @@ export async function notifyDinnersMoved(
 
   const messages = (dinners ?? []).flatMap((d): Message[] => {
     const move = moves.find((m) => m.dinnerId === d.id);
-    if (!move || move.oldStartsAt === d.starts_at) return [];
+    const seasonTitle = titles.get(d.season_id);
+    if (!move || !seasonTitle || move.oldStartsAt === d.starts_at) return [];
     const atTable = (seats ?? []).filter((s) => s.table_id === d.table_id).flatMap((s) => people.get(s.party_id) ?? []);
     return atTable.flatMap((id) => {
       const person = to.get(id);
@@ -263,7 +273,7 @@ export async function notifyDinnersMoved(
             dinnerMovedEmail({
               ...brand,
               name: person.name,
-              seasonTitle: titles.get(d.season_id) ?? "Dinner club",
+              seasonTitle,
               oldDateLabel: dinnerWhen(move.oldStartsAt, zone),
               newDateLabel: dinnerWhen(d.starts_at, zone),
               pageUrl: pageUrl(d.group_id),
