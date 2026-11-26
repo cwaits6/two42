@@ -84,11 +84,13 @@ drop function public.dinner_tables_publish(uuid);
 drop function public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid);
 drop function public.dinner_reminder_passes_prune(uuid, date, integer);
 
-alter table public.group_settings drop column dinner_club_enabled;
-
 -- ── Switches ────────────────────────────────────────────────────────────────
 alter table public.group_settings
   add column supper_club_enabled boolean not null default false;
+
+-- A group that turned the dinner club on keeps the Supper club on.
+update public.group_settings set supper_club_enabled = true where dinner_club_enabled;
+alter table public.group_settings drop column dinner_club_enabled;
 
 comment on column public.group_settings.supper_club_enabled is
   'Shows the Supper club page in the group. Off hides it and sends no supper emails; every rotation and its rows stay.';
