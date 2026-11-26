@@ -8,19 +8,6 @@ import type { RefreshResult } from "@/supabase/functions/_shared/records-refresh
 
 export type FieldChoice = "off" | FieldMode;
 
-export const FIELD_LABELS: Record<RecordsField, string> = {
-  name: "Name",
-  suffix: "Suffix",
-  title: "Title",
-  gender: "Gender",
-  phone_mobile: "Mobile phone",
-  phone_work: "Work phone",
-  birthday: "Birthday",
-  anniversary: "Anniversary",
-  photo: "Photo",
-  grade: "A child's grade",
-};
-
 const CHOICE_LABELS: Record<FieldChoice, string> = {
   off: "Not from your church's records",
   locked: "From them, locked",

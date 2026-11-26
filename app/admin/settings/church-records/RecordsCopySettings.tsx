@@ -7,11 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
+import { FIELD_LABELS } from "@/lib/integrations/records/labels";
 import { logError } from "@/lib/log";
 import type { RecordsField } from "@/supabase/functions/_shared/records-copy";
 import {
   choicesFor,
-  FIELD_LABELS,
   type FieldChoice,
   RECORDS_FIELDS,
   type RefreshCounts,

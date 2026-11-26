@@ -39,22 +39,37 @@ export function isLocked(records: ProfileRecords | null | undefined, field: Valu
   return recordsLabel(records, field)?.kind === "locked";
 }
 
+/** What the church admin's settings and the member's notice call each detail. */
+export const FIELD_LABELS: Record<ValueField, string> = {
+  name: "Name",
+  preferred_name: "Preferred name",
+  title: "Title",
+  suffix: "Suffix",
+  phone_mobile: "Mobile phone",
+  phone_work: "Work phone",
+  birthday: "Birthday",
+  gender: "Gender",
+  photo: "Photo",
+  anniversary: "Anniversary",
+  grade: "A child's grade",
+};
+
 /**
  * Where the one-time notice sends a member to change or clear each detail.
  * The anniversary is the household's and is edited on the Household tab. A
  * linked person's grade is on no form a member can edit, so it has no link.
  */
-export const NOTICE_FIELDS: Record<ValueField, { label: string; href: string; household?: true } | null> = {
-  name: { label: "Name", href: "#first_name" },
-  preferred_name: { label: "Preferred name", href: "#preferred_name" },
-  title: { label: "Title", href: "#title" },
-  suffix: { label: "Suffix", href: "#suffix" },
-  phone_mobile: { label: "Mobile phone", href: "#phone_mobile" },
-  phone_work: { label: "Work phone", href: "#phone_work" },
-  birthday: { label: "Birthday", href: "#birth_month" },
-  gender: { label: "Gender", href: "#gender-label" },
-  photo: { label: "Photo", href: "#profile-photo" },
-  anniversary: { label: "Anniversary", href: `?tab=${HOUSEHOLD_TAB}#anniversary_month`, household: true },
+export const NOTICE_FIELDS: Record<ValueField, { href: string; household?: true } | null> = {
+  name: { href: "#first_name" },
+  preferred_name: { href: "#preferred_name" },
+  title: { href: "#title" },
+  suffix: { href: "#suffix" },
+  phone_mobile: { href: "#phone_mobile" },
+  phone_work: { href: "#phone_work" },
+  birthday: { href: "#birth_month" },
+  gender: { href: "#gender-label" },
+  photo: { href: "#profile-photo" },
+  anniversary: { href: `?tab=${HOUSEHOLD_TAB}#anniversary_month`, household: true },
   grade: null,
 };
 
@@ -66,7 +81,7 @@ export function changeableFilled(
   return (Object.entries(NOTICE_FIELDS) as [ValueField, (typeof NOTICE_FIELDS)[ValueField]][]).flatMap(
     ([field, link]) =>
       link && (household || !link.household) && recordsLabel(records, field)?.kind === "records"
-        ? [{ field, label: link.label, href: link.href }]
+        ? [{ field, label: FIELD_LABELS[field], href: link.href }]
         : [],
   );
 }
