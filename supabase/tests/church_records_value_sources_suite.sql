@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(34);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -86,6 +86,44 @@ $$;
 
 create function pg_temp.copy_everyone() returns void language sql as $$
   update public.records_person_state set copied_at = now() where org_id = pg_temp.fx('org');
+$$;
+
+-- What a person's plan was read from, as the refresh sends it.
+create function pg_temp.expected(_profile uuid) returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'person', (select l.external_person_id from public.records_person_links l
+                where l.profile_id = p.id and l.org_id = p.org_id),
+    'profile', public.records_pick(to_jsonb(p), array[
+      'first_name', 'last_name', 'preferred_name', 'title', 'suffix', 'gender', 'phone_mobile',
+      'phone_work', 'birth_month', 'birth_day', 'birth_year', 'avatar_url']),
+    'household', (select public.records_pick(to_jsonb(f), array['anniversary_month', 'anniversary_day', 'anniversary_year'])
+                    from public.family_units f where f.id = p.family_id and f.org_id = p.org_id),
+    'grade', (select public.records_pick(to_jsonb(m), array['graduation_year'])
+                from public.family_members m where m.claimed_profile_id = p.id and m.org_id = p.org_id limit 1))
+  from public.profiles p where p.id = _profile;
+$$;
+
+-- Leo's full copy as a first fill of the household's anniversary would plan it.
+create function pg_temp.copy_leo() returns text language sql as $$
+  select pg_temp.as_service(format('select public.records_apply_copy(%L, %L, %L, %L, %L, %L, %L, %L)',
+    pg_temp.fx('org'), pg_temp.fx('leo'), pg_temp.expected(pg_temp.fx('leo')), '{}',
+    '{"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}', '{}',
+    '[{"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
+    '{anniversary}'));
+$$;
+
+create function pg_temp.fixtureton_anniversary() returns text language sql stable as $$
+  select coalesce(anniversary_month::text, 'null') from public.family_units where id = pg_temp.fx('fixtureton');
+$$;
+
+-- Ruth clears her household's anniversary, which leaves her source cleared.
+create function pg_temp.ruth_clears() returns void language sql as $$
+  update public.family_units set anniversary_month = null, anniversary_day = null, anniversary_year = null
+   where id = pg_temp.fx('fixtureton');
+  insert into public.records_field_values (org_id, profile_id, field, state, church_value)
+  values (pg_temp.fx('org'), pg_temp.fx('ruth'), 'anniversary', 'cleared',
+          '{"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}')
+  on conflict (org_id, profile_id, field) do update set state = 'cleared';
 $$;
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
@@ -267,6 +305,25 @@ select is(array[pg_temp.copied('ruth'), pg_temp.copied('hannah'), pg_temp.copied
   'nobody it didn''t move is asked for a full copy');
 select is((select copied_at is not null from public.records_person_state where profile_id = pg_temp.fx('other_admin')), true,
   'nor anyone in another church');
+
+-- ── The full copy of someone who joined ─────────────────────────────────────
+update public.family_units set anniversary_month = null, anniversary_day = null, anniversary_year = null
+ where id = pg_temp.fx('fixtureton');
+select is(pg_temp.copy_leo(), 'applied', 'non-vacuity: with no clear, Leo''s full copy is applied');
+select is(pg_temp.fixtureton_anniversary(), '6', 'and brings in the household''s anniversary');
+
+delete from public.records_field_values where profile_id = pg_temp.fx('leo') and field = 'anniversary';
+select pg_temp.ruth_clears();
+select is(pg_temp.copy_leo(), 'held', 'Leo''s full copy is held against the anniversary Ruth cleared');
+select is(pg_temp.fixtureton_anniversary(), 'null', 'so the household''s anniversary stays empty');
+select is(pg_temp.sources() @> array['ruth:anniversary:cleared'] and not pg_temp.sources() && array['leo:anniversary:records'],
+  true, 'Ruth''s clear stands and Leo gets no source that follows the church');
+
+select pg_temp.save_fields('{"phone_mobile": "member", "birthday": "member", "address": "member"}');
+select is(pg_temp.save_fields('{"phone_mobile": "member", "birthday": "member", "anniversary": "member", "address": "member"}'),
+  'saved', 'the church admin turns the anniversary off and on with Ruth''s clear in place');
+select is(pg_temp.copy_leo(), 'held', 'Leo''s full copy after it is held as well');
+select is(pg_temp.fixtureton_anniversary(), 'null', 'and the household''s anniversary still stays empty');
 
 select * from finish();
 rollback;

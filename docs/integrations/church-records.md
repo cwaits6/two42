@@ -198,7 +198,10 @@ How it works:
   person's: `records` follows the church, `changed` and `cleared` are the
   household's. An address outside the US, or one the household form wouldn't
   accept, counts as empty. While a spouse's own mobile is the household's
-  phone, the copy leaves it alone. The anniversary keeps its per-person source.
+  phone, the copy leaves it alone. The anniversary keeps its per-person source,
+  so a household member's `cleared` anniversary holds back the copy of anyone
+  in the household with no source of their own, such as someone a
+  confirmation moved in.
 - **Children.** While the switch is on, each confirmed household's family's
   children are stored as open suggestions (`records_child_suggestions`), with
   only the fields above and never a birth year. A child already linked to an
