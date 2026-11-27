@@ -896,7 +896,8 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
     ? await rowsByIds(
       linkedIds,
       (chunk) =>
-        db.from("family_members").select("id, family_id, first_name, last_name").eq("org_id", orgId).in("family_id", chunk).order("id"),
+        db.from("family_members").select("id, family_id, first_name, last_name").eq("org_id", orgId).in("family_id", chunk)
+          .eq("relationship", "child").order("id"),
       "household members",
     )
     : [];

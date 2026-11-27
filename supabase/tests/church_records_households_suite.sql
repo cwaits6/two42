@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(96);
+select plan(99);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -303,12 +303,28 @@ select isnt(
   'adding them doesn''t settle on the entry the first was added as');
 select is((select count(*)::int from public.family_members where family_id = pg_temp.fx('home') and first_name ilike 'ros%'), 2,
   'they get their own entry');
+insert into public.family_members (org_id, family_id, first_name, last_name, relationship)
+  values (pg_temp.fx('org'), pg_temp.fx('home'), 'June', 'Mockingham', 'parent');
+select isnt(
+  pg_temp.call('henry.mockingham@example.test', format('select public.records_add_suggested_child(%L)::text',
+    (select id from public.records_child_suggestions where external_person_id = '203'))),
+  (select id::text from public.family_members where family_id = pg_temp.fx('home') and first_name = 'June' and relationship = 'parent'),
+  'adding a child doesn''t settle on an adult of the same name');
+select is((select count(*)::int from public.family_members where family_id = pg_temp.fx('home') and first_name = 'June' and relationship = 'child'), 1,
+  'the child gets their own entry');
+select is(
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
+    '[{"external_person_id": "203", "first_name": "June", "last_name": "Mockingham"},
+      {"external_person_id": "204", "first_name": "Rosé", "last_name": "Mockingham"},
+      {"external_person_id": "205", "first_name": "Rose", "last_name": "Mockingham"},
+      {"external_person_id": "206", "first_name": "Ada", "last_name": "Mockingham"}]'),
+  1, 'one more child is suggested');
 select is(public.records_save_children_setting(pg_temp.fx('org'), false, pg_temp.fx('admin')), 'saved',
   'the church admin turns the switch off');
 select is(
   (select array_agg(state || ':' || coalesce(photo, '-') order by external_person_id)
      from public.records_child_suggestions where family_id = pg_temp.fx('home')),
-  array['added:-', 'dismissed:-', 'added:-', 'added:-'],
+  array['added:-', 'dismissed:-', 'added:-', 'added:-', 'added:-'],
   'turning it off removes the open suggestion and the waiting photo token, keeping the decisions');
 
 -- ── What members can't do ───────────────────────────────────────────────────

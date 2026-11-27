@@ -379,7 +379,7 @@ grant execute on function public.records_replace_household_suggestions(uuid, uui
 -- from has moved, been unlinked or relinked, or is no longer approved, when
 -- anyone it names has a different relationship than when it was planned, or its
 -- household is now linked to
--- another family or holds a primary or spouse it didn't; 'gone' for a
+-- another family or holds someone else in a primary or spouse place it fills; 'gone' for a
 -- suggestion not in this church; and 'busy' while a refresh holds its claim,
 -- since that run is replacing the suggestions. The 15 minutes match the
 -- claim's lease in supabase/functions/_shared/records-refresh.ts.
@@ -667,7 +667,7 @@ grant execute on function public.records_sync_child_suggestions(uuid, uuid, uuid
 -- A household's primary or spouse adds a suggested child to their household,
 -- as a child without an account: first and last name, birthday month and day,
 -- and grade, with no birth year. The photo follows at the next refresh.
--- Returns the household member's id: the new one, or the one already in the
+-- Returns the household member's id: the new one, or the child already in the
 -- household under the child's name.
 --
 -- SECURITY DEFINER because members have no write grant on the suggestions.
@@ -702,12 +702,13 @@ begin
     raise exception 'records_add_suggested_child: no such suggestion' using errcode = 'RC001';
   end if;
 
-  -- Someone in the household already under the same name, entered since the
+  -- A child in the household already under the same name, entered since the
   -- refresh, is this child: the suggestion is settled by them, not a second
-  -- entry. An entry another suggestion was added as is that other child.
+  -- entry. An adult sharing a child's name, as a parent and junior do, isn't.
+  -- An entry another suggestion was added as is that other child.
   -- The name key folds case, Latin accents, spaces and punctuation.
   select m.id into _id from public.family_members m
-   where m.org_id = _me.org_id and m.family_id = _me.family_id
+   where m.org_id = _me.org_id and m.family_id = _me.family_id and m.relationship = 'child'
      and lower(regexp_replace(regexp_replace(normalize(coalesce(m.first_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
        = lower(regexp_replace(regexp_replace(normalize(_s.first_name, NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
      and lower(regexp_replace(regexp_replace(normalize(coalesce(m.last_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))

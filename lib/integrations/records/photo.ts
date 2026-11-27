@@ -38,11 +38,18 @@ async function storeAt(path: string, bytes: Uint8Array): Promise<string> {
   return avatars.getPublicUrl(path).data.publicUrl;
 }
 
-/** Removes the stored photo; removeAvatarObjects() refuses a key outside `orgId` and logs what it couldn't remove. */
-export async function removeRecordsPhoto(orgId: string, profileId: string): Promise<void> {
-  await removeAvatarObjects(orgId, [recordsPhotoPath(orgId, profileId)]);
+/** Removes the stored photo; removeAvatarObjects() refuses a key outside `orgId`. Throws when it is still stored. */
+export function removeRecordsPhoto(orgId: string, profileId: string): Promise<void> {
+  return removeAt(orgId, recordsPhotoPath(orgId, profileId));
 }
 
-export async function removeRecordsChildPhoto(orgId: string, familyMemberId: string): Promise<void> {
-  await removeAvatarObjects(orgId, [recordsChildPhotoPath(orgId, familyMemberId)]);
+export function removeRecordsChildPhoto(orgId: string, familyMemberId: string): Promise<void> {
+  return removeAt(orgId, recordsChildPhotoPath(orgId, familyMemberId));
+}
+
+// removeAvatarObjects() logs and returns what it couldn't remove rather than
+// throwing; the refresh keeps its photo token only when removal throws.
+async function removeAt(orgId: string, key: string): Promise<void> {
+  const left = await removeAvatarObjects(orgId, [key]);
+  if (left.length > 0) throw new Error("records photo removal failed");
 }
