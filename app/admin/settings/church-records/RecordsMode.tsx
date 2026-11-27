@@ -34,22 +34,35 @@ export function RecordsMode({
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<ModeAnswer | null> => {
     setError(null);
     try {
       const res = await call("/api/admin/church-records/mode");
       if (!res.ok) {
         setError(errorText("load how two42 uses your church's records", res.status, res.data));
-        return;
+        return null;
       }
       const loaded = res.data as unknown as ModeAnswer;
       setData(loaded);
       onChange(loaded.mode);
+      return loaded;
     } catch (err) {
       logError("Church records mode load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
+      return null;
     }
   }, [onChange]);
+
+  // Refresh now copies details without this card reloading, so the count is read again before it is quoted.
+  async function confirmLive() {
+    setSaving(true);
+    try {
+      const current = await load();
+      if (current?.mode === "copy") setConfirming(true);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -92,7 +105,7 @@ export function RecordsMode({
           <p className="text-lg" role="alert">
             {error}
           </p>
-          <Button size="lg" variant="outline" onClick={load}>
+          <Button size="lg" variant="outline" onClick={() => void load()}>
             Try again
           </Button>
         </CardContent>
@@ -116,14 +129,14 @@ export function RecordsMode({
           value={data.mode}
           onChange={(mode) => {
             if (saving || mode === data.mode) return;
-            if (mode === "live") setConfirming(true);
+            if (mode === "live") void confirmLive();
             else save("copy");
           }}
         />
         <p className="text-lg">
           {data.mode === "copy"
             ? `Details are copied from ${label} into two42 and kept up to date every night.`
-            : `The address, birthday, anniversary and child's grade you turn on under What two42 copies are read from ${label} each time someone opens the directory, only for people they can already see, and are never stored in two42.`}
+            : `The address, birthday and anniversary you turn on under What two42 copies, and a suggested child's birthday and grade, are read from ${label} each time someone opens the directory, only for people they can already see, and are never stored in two42.`}
         </p>
         <p className="text-base text-muted-foreground">
           Either way, two42 keeps each linked person&apos;s name, sign-in email, phones, gender and photo. If your church

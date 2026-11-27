@@ -590,7 +590,9 @@ T42-274. A church admin chooses **Live from your church's records** under
   directory screen.
 - **Field settings gate it.** Only a live-only field the church turns on under
   **What two42 copies** is read live; one set to "Not from your church's
-  records" is neither read nor marked live on the admin's page.
+  records" is neither read nor marked live on the admin's page. A suggested
+  child's birthday and grade are the exception: like the copy, they follow
+  **Suggest children**, not the field settings.
 - **Hiding.** A live value is never in two42 for a member to leave out, so
   `records_live_hide()` records a `cleared` source instead: a member's own
   birthday, or, for a household's primary or spouse, its address and
