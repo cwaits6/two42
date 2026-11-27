@@ -12,7 +12,6 @@ import { logError, logWarn } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { RecordsError } from "./errors";
 import { loadRecordsSecret } from "./crypto";
-import { ADDRESS_COLUMNS } from "@/supabase/functions/_shared/records-households";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
 import { liveSourceOf, providerFor } from "./providers";
 import { loadCredentials, readConnection, readLiveSources, readMode } from "./store";
@@ -89,7 +88,9 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     supabase.from("profiles_directory").select("id, family_id, relationship, birth_month, birth_day"),
     supabase
       .from("families_directory_full")
-      .select(`id, ${ADDRESS_COLUMNS.join(", ")}, anniversary_month, anniversary_day, family_members_list`),
+      .select(
+        "id, address_line1, address_line2, city, state, postal_code, anniversary_month, anniversary_day, family_members_list",
+      ),
     supabase.from("profiles").select("id, family_id, relationship").eq("id", viewerId).maybeSingle(),
   ]);
   const readError = people.error ?? households.error ?? viewer.error;
