@@ -6,13 +6,17 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   FIELD_COLUMNS,
   FIELD_TABLE,
+  LIVE_ONLY_FIELDS,
   LOCKABLE_FIELDS,
   PROFILE_COPY_COLUMNS,
   RECORDS_FIELDS,
+  RECORDS_MODES,
   VALUE_STATES,
   type ValueField,
 } from "@/supabase/functions/_shared/records-copy";
+import { HIDEABLE_FIELDS } from "@/lib/integrations/records/livePlan";
 import {
+  ADDRESS_COLUMNS,
   type ChildRow,
   CONFIRM_HOUSEHOLD_OUTCOMES,
   HOUSEHOLD_COPY_COLUMNS,
@@ -33,6 +37,7 @@ import {
 
 const copySql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
 const householdsSql = readFileSync("supabase/migrations/20261210000000_church_records_households.sql", "utf8");
+const liveSql = readFileSync("supabase/migrations/20261211000000_church_records_live.sql", "utf8");
 let sql = copySql;
 
 const quoted = (text: string) => [...text.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1]);
@@ -264,5 +269,79 @@ describe("the households migration agrees with the household rules", () => {
     expect(table("records_child_suggestions")).not.toContain("birth_year");
     const add = between("create function public.records_add_suggested_child(", "$$;");
     expect(add).not.toContain("birth_year");
+  });
+});
+
+describe("the live migration agrees with the live rules", () => {
+  beforeEach(() => {
+    sql = liveSql;
+  });
+
+  /** The columns a statement sets to null: `set a = null, b = null`. */
+  const nulled = (text: string) => [...text.matchAll(/([a-z_0-9]+) = null/g)].map((m) => m[1]);
+  /** The columns a body tests with `[<alias>.]<column> is not null`. */
+  const tested = (text: string) => [...new Set([...text.matchAll(/(?:\w+\.)?([a-z_0-9]+) is not null/g)].map((m) => m[1]))];
+  const childColumns = sorted(
+    [...FIELD_COLUMNS.birthday, ...FIELD_COLUMNS.grade].filter((c) => Object.keys(CHILD).includes(c)),
+  );
+
+  it("never stores the same fields", () => {
+    const body = between("create function public.records_live_only_field(_field text)", "$$;");
+    expect(sorted(quoted(body.slice(body.indexOf("select"))))).toEqual(sorted(LIVE_ONLY_FIELDS));
+  });
+
+  it("knows the same modes", () => {
+    const column = between("add column mode text", ";");
+    expect(sorted(quoted(column.slice(column.indexOf("check"))))).toEqual(sorted(RECORDS_MODES));
+    const save = between("create function public.records_save_mode(", "$$;");
+    expect(sorted(quoted(save.slice(save.indexOf("if _mode not in ("), save.indexOf("then"))))).toEqual(sorted(RECORDS_MODES));
+  });
+
+  it("counts, and removes on the switch, the same columns each field copies", () => {
+    const count = between("create function public.records_live_copied_count(", "$$;");
+    const save = between("create function public.records_save_mode(", "$$;");
+    const parts = count.split("(select count(*)").slice(1);
+    const part = (marker: string) => {
+      const found = parts.find((p) => p.includes(marker));
+      expect(found, marker).toBeDefined();
+      return found ?? "";
+    };
+    const statement = (start: string) => save.slice(save.indexOf(start), save.indexOf(";", save.indexOf(start)));
+    const cases = [
+      [FIELD_COLUMNS.birthday, part("field = 'birthday'"), statement("update public.profiles p set")],
+      [FIELD_COLUMNS.grade, part("field = 'grade'"), statement("update public.family_members m set")],
+      [FIELD_COLUMNS.anniversary, part("records_live_anniversary_households"), statement("update public.family_units f set anniversary")],
+      [HOUSEHOLD_FIELD_COLUMNS.address, part("field = 'address'"), save.slice(save.indexOf("set address_line1"), save.indexOf("from", save.indexOf("set address_line1")))],
+    ] as const;
+    for (const [columns, counted, removed] of cases) {
+      expect(sorted(tested(counted)), columns.join()).toEqual(sorted(columns));
+      expect(sorted(nulled(removed)), columns.join()).toEqual(sorted(columns));
+    }
+    expect([...HOUSEHOLD_FIELD_COLUMNS.address]).toEqual([...ADDRESS_COLUMNS]);
+
+    const suggestions = statement("update public.records_child_suggestions");
+    expect(sorted(nulled(suggestions.slice(0, suggestions.indexOf("updated_at"))))).toEqual(childColumns);
+    expect(sorted(tested(suggestions))).toEqual(childColumns);
+  });
+
+  it("refuses a suggested child's birthday and grade, the same columns the switch removes", () => {
+    const guard = between("create function public.records_live_child_guard()", "$$;");
+    expect(sorted(tested(guard))).toEqual(childColumns);
+  });
+
+  it("holds the switch back for as long as a refresh's claim lasts, answering the outcomes the app reads", () => {
+    const save = between("create function public.records_save_mode(", "$$;");
+    expect(Number(save.match(/interval '(\d+) minutes'/)?.[1]) * 60_000).toBe(LEASE_MS);
+    const outcomes = [...save.matchAll(/'outcome', '([a-z]+)'/g)].map((m) => m[1]);
+    expect(sorted([...new Set(outcomes)])).toEqual(sorted(SAVE_SETTING_OUTCOMES));
+  });
+
+  it("lets a member hide the same fields the directory offers to hide", () => {
+    const hide = between("create function public.records_live_hide(", "$$;");
+    const fields = [
+      ...[...hide.matchAll(/_field = '([a-z_]+)'/g)].map((m) => m[1]),
+      ...[...hide.matchAll(/_field not in \(([^)]*)\)/g)].flatMap((m) => quoted(m[1])),
+    ];
+    expect(sorted([...new Set(fields)])).toEqual(sorted(HIDEABLE_FIELDS));
   });
 });

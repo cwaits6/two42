@@ -479,7 +479,9 @@ export async function liveCopiedCount(orgId: string): Promise<number> {
   return data;
 }
 
-export type SaveModeOutcome = { outcome: "saved"; removed: number } | { outcome: "busy" };
+export type SaveModeOutcome =
+  | { outcome: Extract<SaveSettingOutcome, "saved">; removed: number }
+  | { outcome: Extract<SaveSettingOutcome, "busy"> };
 
 /** Switching to live removes every value still the church's, in one transaction; "busy" while a refresh runs. */
 export async function saveMode(orgId: string, mode: RecordsMode, updatedBy: string): Promise<SaveModeOutcome> {
