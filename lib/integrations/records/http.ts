@@ -1,7 +1,7 @@
 // Answers shared by the church admin's church records routes.
 import { NextResponse } from "next/server";
 import { loadRecordsSecret } from "./crypto";
-import type { RecordsError } from "./errors";
+import { RecordsError, type RecordsFailure } from "./errors";
 import type { RecordsIntakeSetup } from "./types";
 
 // Rock generates 24-character keys; an admin can type their own.
@@ -52,6 +52,12 @@ export function intakeFailureMessage(error: RecordsError, product: string, setup
     default:
       return recordsFailureMessage(error, product);
   }
+}
+
+/** Why the newest send failed, for the card. A saved write key two42 can't open is recorded as unauthorized too, and entering it again fixes that. */
+export function intakeLastFailureMessage(kind: RecordsFailure, product: string, setup: RecordsIntakeSetup): string {
+  const message = intakeFailureMessage(new RecordsError(kind), product, setup);
+  return kind === "unauthorized" ? `${message} If both are right, choose Change and enter the write key again.` : message;
 }
 
 export function recordsFailure(error: RecordsError, product: string, status = 502) {

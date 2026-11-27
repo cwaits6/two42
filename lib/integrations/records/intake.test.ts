@@ -157,12 +157,17 @@ describe("sendNewPerson", () => {
       ["p1", "failed", "unauthorized"],
       ["p2", "failed", "unauthorized"],
     ]);
-    expect(log.logWarn).toHaveBeenCalledWith("Church records new person not sent", undefined, {
+    expect(log.logError).toHaveBeenCalledWith("Church records new person send failed", expect.anything(), {
       route: "/api/church-records/intake",
       step: "key",
       ids: { org: ORG, user: "p1" },
     });
-    expect(log.logError).not.toHaveBeenCalled();
+    expect(log.logWarn).toHaveBeenCalledWith("Church records new person not sent", undefined, {
+      route: "/api/church-records/intake",
+      step: "key",
+      ids: { org: ORG, user: "p2" },
+    });
+    expect(JSON.stringify([log.logWarn.mock.calls, log.logError.mock.calls])).not.toMatch(/Nora|Setupwell|nora@|555/);
   });
 
   it("never reads another church's setting", async () => {

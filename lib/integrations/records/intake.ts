@@ -285,8 +285,9 @@ async function submitClaimed(
   let loaded: IntakeCredentials | null;
   try {
     loaded = await loadIntakeCredentials(orgId, secret);
-  } catch {
-    loaded = null;
+  } catch (err) {
+    logError("Church records new person send failed", err, { route: "/api/church-records/intake", step: "key", ids });
+    return "unauthorized";
   }
   if (!loaded) {
     logWarn("Church records new person not sent", undefined, { route: "/api/church-records/intake", step: "key", ids });

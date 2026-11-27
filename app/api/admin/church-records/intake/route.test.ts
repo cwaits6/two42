@@ -174,7 +174,7 @@ describe("/api/admin/church-records/intake", () => {
       enabledAt: SETTINGS.enabledAt,
       sent: 3,
       failed: 1,
-      lastFailure: expect.stringContaining("didn't accept the write key"),
+      lastFailure: expect.stringMatching(/didn't accept the write key.*If both are right, choose Change and enter the write key again\.$/),
     });
     expect(JSON.stringify(body)).not.toContain(WRITE_KEY);
   });
