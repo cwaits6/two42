@@ -81,6 +81,9 @@ export function RecordsMode({
         return;
       }
       setConfirming(false);
+      // Published before the reload, so a reload that fails can't leave the saved mode unknown.
+      setData((prev) => (prev ? { ...prev, mode } : prev));
+      onChange(mode);
       if (mode === "live") {
         toast.success("Saved. Details now come live from your church's records.");
       } else {

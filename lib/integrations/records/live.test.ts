@@ -192,11 +192,12 @@ vi.mock("./providers", async (actual) => ({
 }));
 const details = vi.hoisted(() => vi.fn());
 const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown>, selects: {} as Record<string, string> }));
+const org = vi.hoisted(() => ({ answer: { data: null as unknown, error: null as unknown } }));
 vi.mock("./store", () => store);
 vi.mock("./crypto", () => ({ loadRecordsSecret: () => Buffer.alloc(32) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    rpc: async () => ({ data: ORG, error: null }),
+    rpc: async () => org.answer,
     from: (table: string) => {
       const result = { data: tables.data[table], error: null };
       const chain = {
@@ -220,6 +221,7 @@ const { liveDirectoryOn, readLiveDirectory } = await import("./live");
 describe("readLiveDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    org.answer = { data: ORG, error: null };
     tables.data = { profiles_directory: VISIBLE_PEOPLE, families_directory_full: VISIBLE_HOUSEHOLDS, profiles: VIEWER_ROW };
     store.readMode.mockResolvedValue({ mode: "live", suggestChildren: true });
     provider.current = { id: "rock", copy: {}, live: { details } };
@@ -296,6 +298,25 @@ describe("readLiveDirectory", () => {
     spy.mockRestore();
     expect(store.readMode).not.toHaveBeenCalled();
     expect(details).not.toHaveBeenCalled();
+  });
+
+  it("when the org lookup fails, asks for live details and answers them unavailable without reading the church's settings", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    org.answer = { data: null, error: { message: "rpc failed" } };
+    expect(await liveDirectoryOn()).toBe(true);
+    expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
+    spy.mockRestore();
+    expect(store.readConnection).not.toHaveBeenCalled();
+    expect(details).not.toHaveBeenCalled();
+  });
+
+  it("for a request with no org, stays off without reading the church's settings", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    org.answer = { data: null, error: null };
+    expect(await liveDirectoryOn()).toBe(false);
+    expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+    spy.mockRestore();
+    expect(store.readConnection).not.toHaveBeenCalled();
   });
 
   it("with a key that can't be opened, answers unavailable details without asking the records", async () => {

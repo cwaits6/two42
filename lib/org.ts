@@ -51,6 +51,18 @@ export async function resolveRequestOrgId(
   client: SupabaseClient,
   opts: { label: string }
 ): Promise<string | null> {
+  return (await resolveRequestOrg(client, opts)).orgId;
+}
+
+/**
+ * resolveRequestOrgId(), telling the two failure modes apart for a caller
+ * that answers them differently: `failed` is true only when the RPC errored.
+ * `orgId` is NULL in both, so anything scoped on it still fails closed.
+ */
+export async function resolveRequestOrg(
+  client: SupabaseClient,
+  opts: { label: string }
+): Promise<{ orgId: string | null; failed: boolean }> {
   // org-anchor: app_request_org_id() IS the org resolver — it derives the org
   // from the principal, so there is no org_id to pass in; callers scope
   // everything after this on the value it returns
@@ -62,10 +74,12 @@ export async function resolveRequestOrgId(
   const orgId = typeof data === "string" ? data : null;
   if (error) {
     logError("Org resolution failed", error, { step: stepOf(opts.label) });
-  } else if (!orgId) {
+    return { orgId: null, failed: true };
+  }
+  if (!orgId) {
     // The RPC succeeded but returned NULL — no principal. `error` stays null
     // in this path, so without this log the failure is invisible.
     logError("Org resolution returned NULL", undefined, { step: stepOf(opts.label) });
   }
-  return orgId;
+  return { orgId, failed: false };
 }

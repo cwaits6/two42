@@ -10,7 +10,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { logError, logWarn } from "@/lib/log";
-import { resolveRequestOrgId } from "@/lib/org";
+import { resolveRequestOrg } from "@/lib/org";
 import { RecordsError } from "./errors";
 import { loadRecordsSecret } from "./crypto";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
@@ -58,8 +58,9 @@ function warnUnavailable(err: unknown, orgId: string) {
 export async function liveDirectoryOn(): Promise<boolean> {
   if (!loadRecordsSecret()) return false;
   const supabase = await createClient();
-  const orgId = await resolveRequestOrgId(supabase, { label: "directory live" });
-  if (!orgId) return false;
+  const { orgId, failed } = await resolveRequestOrg(supabase, { label: "directory live" });
+  // A lookup that errored can't tell a live church from any other, so it asks and is answered unavailable.
+  if (!orgId) return failed;
   try {
     return (await liveConnection(orgId)) !== null;
   } catch (err) {
@@ -74,15 +75,15 @@ export async function liveDirectoryOn(): Promise<boolean> {
  * batch to the provider. "off" for a church that doesn't show details live,
  * without touching the provider. When the records can't be reached every
  * detail that would have come from them is unavailable, and when two42's own
- * reads fail (the connection, the mode, the directory, the sources), the
+ * reads fail (the org, the connection, the mode, the directory, the sources), the
  * whole answer is; the rest of the directory is unaffected either way.
  */
 export async function readLiveDirectory(viewerId: string, today = new Date()): Promise<LiveDirectory> {
   const secret = loadRecordsSecret();
   if (!secret) return OFF;
   const supabase = await createClient();
-  const orgId = await resolveRequestOrgId(supabase, { label: "directory live" });
-  if (!orgId) return OFF;
+  const { orgId, failed } = await resolveRequestOrg(supabase, { label: "directory live" });
+  if (!orgId) return failed ? LIVE_UNAVAILABLE : OFF;
 
   let connection: Awaited<ReturnType<typeof liveConnection>>;
   try {
