@@ -30,7 +30,6 @@ const providers = vi.hoisted(() => ({ withIntake: true }));
 vi.mock("@/lib/integrations/records/providers", () => ({
   providerFor: (id: unknown) =>
     id === "stub" ? { id: "stub", label: "Stub Records", ...(providers.withIntake ? { intake: stubIntake } : {}) } : null,
-  intakeOf: (provider: { intake?: unknown } | null) => provider?.intake ?? null,
 }));
 
 import { DELETE, GET, PUT } from "./route";

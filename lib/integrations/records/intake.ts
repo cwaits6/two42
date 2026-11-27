@@ -13,7 +13,7 @@ import { logError, logWarn } from "@/lib/log";
 import { openKey } from "./crypto";
 import { recordsIntegrationEnabled } from "./enabled";
 import { RecordsError, type RecordsFailure } from "./errors";
-import { intakeOf, providerFor } from "./providers";
+import { providerFor } from "./providers";
 import { RecordsStoreError } from "./store";
 import type { RecordsCredentials, RecordsIntake, RecordsNewPerson, RecordsProvider } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -81,7 +81,7 @@ export async function loadIntakeCredentials(orgId: string, secret: Buffer): Prom
   if (error) throw new RecordsStoreError("records intake credentials read failed", { cause: error });
   if (!connection.data || !settings.data || settings.data.connection_id !== connection.data.connection_id) return null;
   const provider = providerFor(connection.data.provider);
-  const intake = intakeOf(provider);
+  const intake = provider?.intake;
   if (!provider || !intake) return null;
   return {
     provider,

@@ -77,7 +77,6 @@ const stubIntake = {
 };
 vi.mock("./providers", () => ({
   providerFor: (id: unknown) => (id === "stub" ? { id: "stub", label: "Stub Records", intake: stubIntake } : null),
-  intakeOf: (provider: { intake?: unknown } | null) => provider?.intake ?? null,
 }));
 
 const { intakeOffer, readIntakeStatus, sendNewPerson, withdrawConsent } = await import("./intake");

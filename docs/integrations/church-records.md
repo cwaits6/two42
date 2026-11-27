@@ -704,7 +704,7 @@ store nothing while sending is off and never claim a linked person
 Sending is an optional `intake` capability on `RecordsProvider`
 (`lib/integrations/records/types.ts`): the provider's setup wording,
 `destinations()`, `checkDestination()` and `submitNewPerson()`. Shared code
-asks `intakeOf(provider)` and offers nothing for a provider without it. For
+asks for `provider.intake` and offers nothing for a provider without it. For
 Rock it starts a workflow type the church picks; see
 [the write key's user and role](#the-write-keys-user-and-role).
 

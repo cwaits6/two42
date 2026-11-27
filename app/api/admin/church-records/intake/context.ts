@@ -5,7 +5,7 @@ import { logError } from "@/lib/log";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, intakeFailureMessage, RECORDS_KEY_SHAPE, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { loadIntakeCredentials } from "@/lib/integrations/records/intake";
-import { intakeOf, providerFor } from "@/lib/integrations/records/providers";
+import { providerFor } from "@/lib/integrations/records/providers";
 import { loadCredentials, readConnection } from "@/lib/integrations/records/store";
 import type { RecordsCredentials, RecordsIntake, RecordsProvider } from "@/lib/integrations/records/types";
 
@@ -32,7 +32,7 @@ export async function intakeContext(): Promise<{ ok: true; ctx: IntakeContext } 
   try {
     const connection = await readConnection(gate.orgId);
     const provider = connection && providerFor(connection.provider);
-    const intake = intakeOf(provider);
+    const intake = provider?.intake;
     if (!connection || !provider || !intake) return { ok: false, response: hidden() };
     return {
       ok: true,
