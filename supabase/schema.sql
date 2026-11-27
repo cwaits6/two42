@@ -3107,6 +3107,192 @@ $$;
 ALTER FUNCTION "public"."records_is_empty"("_value" "jsonb") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."records_live_anniversary_households"("_org_id" "uuid") RETURNS TABLE("family_id" "uuid")
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select p.family_id
+    from public.records_field_values v
+    join public.profiles p on p.id = v.profile_id and p.org_id = v.org_id
+   where v.org_id = _org_id and v.field = 'anniversary' and p.family_id is not null
+   group by p.family_id
+  having bool_and(v.state = 'records');
+$$;
+
+
+ALTER FUNCTION "public"."records_live_anniversary_households"("_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_live_child_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if (new.birth_month is not null or new.birth_day is not null or new.graduation_year is not null)
+     and exists (select 1 from public.records_org_settings s where s.org_id = new.org_id and s.mode = 'live') then
+    raise exception 'live mode stores no child''s birthday or grade from the church''s records' using errcode = 'RC002';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_live_child_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_live_copied_count"("_org_id" "uuid") RETURNS integer
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select (
+    (select count(*) from public.records_field_values v
+       join public.profiles p on p.id = v.profile_id and p.org_id = v.org_id
+      where v.org_id = _org_id and v.field = 'birthday' and v.state = 'records'
+        and (p.birth_month is not null or p.birth_day is not null or p.birth_year is not null))
+  + (select count(*) from public.records_field_values v
+       join public.family_members m on m.id = (
+         select m2.id from public.family_members m2
+          where m2.claimed_profile_id = v.profile_id and m2.org_id = v.org_id
+          order by m2.id limit 1)
+      where v.org_id = _org_id and v.field = 'grade' and v.state = 'records' and m.graduation_year is not null)
+  + (select count(*) from public.family_units f
+      where f.org_id = _org_id
+        and (f.anniversary_month is not null or f.anniversary_day is not null or f.anniversary_year is not null)
+        and f.id in (select h.family_id from public.records_live_anniversary_households(_org_id) h))
+  + (select count(*) from public.records_household_values v
+       join public.family_units f on f.id = v.family_id and f.org_id = v.org_id
+      where v.org_id = _org_id and v.field = 'address' and v.state = 'records'
+        and (f.address_line1 is not null or f.address_line2 is not null or f.city is not null
+             or f.state is not null or f.postal_code is not null))
+  + (select count(*) filter (where s.birth_month is not null) + count(*) filter (where s.graduation_year is not null)
+       from public.records_child_suggestions s
+      where s.org_id = _org_id and s.state = 'open')
+  )::integer;
+$$;
+
+
+ALTER FUNCTION "public"."records_live_copied_count"("_org_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_live_copied_count"("_org_id" "uuid") IS 'How many details from the church''s records Copy -> Live would remove. Service key only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _me public.profiles%rowtype;
+  _count integer;
+begin
+  select * into _me from public.profiles
+   where id = auth.uid() and org_id = public.app_current_org_id();
+  if not found or _me.role not in ('member', 'admin')
+     or not exists (select 1 from public.records_org_settings where org_id = _me.org_id and mode = 'live') then
+    raise exception 'records_live_hide: not allowed' using errcode = 'RC001';
+  end if;
+
+  if _field = 'birthday' then
+    if not exists (select 1 from public.records_person_links where org_id = _me.org_id and profile_id = _me.id) then
+      raise exception 'records_live_hide: not allowed' using errcode = 'RC001';
+    end if;
+    if _hidden then
+      insert into public.records_field_values (org_id, profile_id, field, state)
+      values (_me.org_id, _me.id, 'birthday', 'cleared')
+      on conflict (org_id, profile_id, field) do nothing;
+    else
+      delete from public.records_field_values
+       where org_id = _me.org_id and profile_id = _me.id and field = 'birthday' and state = 'cleared';
+    end if;
+    return;
+  end if;
+
+  if _field not in ('anniversary', 'address') or _me.family_id is null
+     or _me.relationship not in ('primary', 'spouse') then
+    raise exception 'records_live_hide: not allowed' using errcode = 'RC001';
+  end if;
+
+  if _field = 'address' then
+    if not exists (
+      select 1 from public.records_household_links where org_id = _me.org_id and family_id = _me.family_id
+    ) then
+      raise exception 'records_live_hide: not allowed' using errcode = 'RC001';
+    end if;
+    if _hidden then
+      insert into public.records_household_values (org_id, family_id, field, state)
+      values (_me.org_id, _me.family_id, 'address', 'cleared')
+      on conflict (org_id, family_id, field) do nothing;
+    else
+      delete from public.records_household_values
+       where org_id = _me.org_id and family_id = _me.family_id and field = 'address' and state = 'cleared';
+    end if;
+    return;
+  end if;
+
+  -- The anniversary's source is per linked person, so every linked person in
+  -- the household carries the hide, as records_household_member_edit() marks them together.
+  if _hidden then
+    insert into public.records_field_values (org_id, profile_id, field, state)
+    select l.org_id, l.profile_id, 'anniversary', 'cleared'
+      from public.records_person_links l
+      join public.profiles p on p.id = l.profile_id and p.org_id = l.org_id
+     where l.org_id = _me.org_id and p.family_id = _me.family_id
+    on conflict (org_id, profile_id, field) do nothing;
+    get diagnostics _count = row_count;
+    if _count = 0 and not exists (
+      select 1 from public.records_field_values v
+        join public.profiles p on p.id = v.profile_id and p.org_id = v.org_id
+       where v.org_id = _me.org_id and v.field = 'anniversary' and p.family_id = _me.family_id
+    ) then
+      raise exception 'records_live_hide: not allowed' using errcode = 'RC001';
+    end if;
+  else
+    delete from public.records_field_values v
+     using public.profiles p
+     where v.org_id = _me.org_id and v.field = 'anniversary' and v.state = 'cleared'
+       and p.id = v.profile_id and p.org_id = v.org_id and p.family_id = _me.family_id;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) IS 'A member hides, or shows again, their own birthday or, as the household''s primary or spouse, its anniversary or address shown live from the church''s records. Org and person from auth.uid()''s profile.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."records_live_only_field"("_field" "text") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select _field in ('birthday', 'anniversary', 'grade', 'address');
+$$;
+
+
+ALTER FUNCTION "public"."records_live_only_field"("_field" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_live_value_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if public.records_live_only_field(new.field)
+     and (new.state = 'records' or new.church_value <> '{}'::jsonb)
+     and exists (select 1 from public.records_org_settings s where s.org_id = new.org_id and s.mode = 'live') then
+    raise exception 'live mode stores no % from the church''s records', new.field using errcode = 'RC002';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_live_value_guard"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) RETURNS "jsonb"
     LANGUAGE "sql" IMMUTABLE
     SET "search_path" TO ''
@@ -3329,6 +3515,116 @@ $$;
 
 
 ALTER FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_save_mode"("_org_id" "uuid", "_mode" "text", "_updated_by" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _running timestamptz;
+  _before text;
+  _removed integer := 0;
+begin
+  if _mode not in ('copy', 'live') then
+    raise exception 'records_save_mode: unknown mode' using errcode = '22023';
+  end if;
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return jsonb_build_object('outcome', 'busy');
+  end if;
+
+  select mode into _before from public.records_org_settings where org_id = _org_id for update;
+  _before := coalesce(_before, 'copy');
+  if _before = _mode then
+    return jsonb_build_object('outcome', 'saved', 'removed', 0);
+  end if;
+
+  if _mode = 'live' then
+    -- Locks the rows to clear before any statement below reads their sources.
+    -- An UPDATE that waits on a member's edit rechecks the row it updates but
+    -- not the source it joined, so it would clear the member's new value;
+    -- once locked, the next statements see the source that edit wrote.
+    perform 1 from public.profiles p
+      join public.records_field_values v on v.profile_id = p.id and v.org_id = p.org_id
+     where p.org_id = _org_id and v.field = 'birthday' and v.state = 'records'
+       for update of p;
+    perform 1 from public.family_members m
+      join public.records_field_values v on v.profile_id = m.claimed_profile_id and v.org_id = m.org_id
+     where m.org_id = _org_id and v.field = 'grade' and v.state = 'records'
+       for update of m;
+    perform 1 from public.family_units f
+     where f.org_id = _org_id
+       and (f.id in (select h.family_id from public.records_live_anniversary_households(_org_id) h)
+            or f.id in (select hv.family_id from public.records_household_values hv
+                         where hv.org_id = _org_id and hv.field = 'address' and hv.state = 'records'))
+       for update of f;
+
+    _removed := public.records_live_copied_count(_org_id);
+
+    update public.profiles p set birth_month = null, birth_day = null, birth_year = null
+      from public.records_field_values v
+     where v.org_id = _org_id and v.field = 'birthday' and v.state = 'records'
+       and p.id = v.profile_id and p.org_id = _org_id;
+
+    -- The copy owns only the person's lowest-id claimed row, as records_apply_copy() picks it.
+    update public.family_members m set graduation_year = null
+      from public.records_field_values v
+     where v.org_id = _org_id and v.field = 'grade' and v.state = 'records'
+       and m.org_id = _org_id
+       and m.id = (
+         select m2.id from public.family_members m2
+          where m2.claimed_profile_id = v.profile_id and m2.org_id = _org_id
+          order by m2.id limit 1);
+
+    update public.family_units f set anniversary_month = null, anniversary_day = null, anniversary_year = null
+     where f.org_id = _org_id
+       and f.id in (select h.family_id from public.records_live_anniversary_households(_org_id) h);
+
+    update public.family_units f
+       set address_line1 = null, address_line2 = null, city = null, state = null, postal_code = null
+      from public.records_household_values v
+     where v.org_id = _org_id and v.field = 'address' and v.state = 'records'
+       and f.id = v.family_id and f.org_id = _org_id;
+
+    delete from public.records_field_values
+     where org_id = _org_id and public.records_live_only_field(field) and state = 'records';
+    update public.records_field_values set church_value = '{}'::jsonb, updated_at = now()
+     where org_id = _org_id and public.records_live_only_field(field) and church_value <> '{}'::jsonb;
+    delete from public.records_household_values
+     where org_id = _org_id and public.records_live_only_field(field) and state = 'records';
+    update public.records_household_values set church_value = '{}'::jsonb, updated_at = now()
+     where org_id = _org_id and public.records_live_only_field(field) and church_value <> '{}'::jsonb;
+
+    update public.records_child_suggestions
+       set birth_month = null, birth_day = null, graduation_year = null, updated_at = now()
+     where org_id = _org_id and state = 'open'
+       and (birth_month is not null or birth_day is not null or graduation_year is not null);
+  else
+    update public.records_person_state set copied_at = null
+     where org_id = _org_id and copied_at is not null;
+  end if;
+
+  -- Last, so the guards below still see copy mode while the sources are rewritten.
+  insert into public.records_org_settings (org_id, mode, updated_by, updated_at)
+  values (_org_id, _mode, _updated_by, now())
+  on conflict (org_id) do update
+    set mode = excluded.mode, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
+  return jsonb_build_object('outcome', 'saved', 'removed', _removed);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_save_mode"("_org_id" "uuid", "_mode" "text", "_updated_by" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_save_mode"("_org_id" "uuid", "_mode" "text", "_updated_by" "uuid") IS 'A church admin''s choice of copy or live mode; Copy -> Live removes every value still the church''s in one transaction. Service key only.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."records_sync_child_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_external_family_id" "text", "_children" "jsonb") RETURNS integer
@@ -6652,14 +6948,16 @@ CREATE TABLE IF NOT EXISTS "public"."records_org_settings" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "suggest_children" boolean DEFAULT false NOT NULL,
     "updated_by" "uuid",
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "mode" "text" DEFAULT 'copy'::"text" NOT NULL,
+    CONSTRAINT "records_org_settings_mode_check" CHECK (("mode" = ANY (ARRAY['copy'::"text", 'live'::"text"])))
 );
 
 
 ALTER TABLE "public"."records_org_settings" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."records_org_settings" IS 'A church''s church-records switches: whether children in a linked household''s family are suggested to its adults. Off by default. Members read it; only the service key writes it, through records_save_children_setting().';
+COMMENT ON TABLE "public"."records_org_settings" IS 'A church''s church-records switches: whether its records'' details are copied into two42 or shown live (mode, copy by default), and whether children in a linked household''s family are suggested to its adults (off by default). Members read suggest_children; only the service key writes it, through records_save_children_setting() and records_save_mode().';
 
 
 
@@ -8649,6 +8947,18 @@ CREATE OR REPLACE TRIGGER "records_household_member_edit" BEFORE UPDATE OF "anni
 
 
 CREATE OR REPLACE TRIGGER "records_household_value_edit" BEFORE UPDATE OF "address_line1", "address_line2", "city", "state", "postal_code", "phone_home", "phone_profile_id" ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."records_household_value_edit"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_live_child_guard" BEFORE INSERT OR UPDATE ON "public"."records_child_suggestions" FOR EACH ROW EXECUTE FUNCTION "public"."records_live_child_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_live_value_guard" BEFORE INSERT OR UPDATE ON "public"."records_field_values" FOR EACH ROW EXECUTE FUNCTION "public"."records_live_value_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_live_value_guard" BEFORE INSERT OR UPDATE ON "public"."records_household_values" FOR EACH ROW EXECUTE FUNCTION "public"."records_live_value_guard"();
 
 
 
@@ -11400,6 +11710,37 @@ GRANT ALL ON FUNCTION "public"."records_is_empty"("_value" "jsonb") TO "service_
 
 
 
+REVOKE ALL ON FUNCTION "public"."records_live_anniversary_households"("_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_anniversary_households"("_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_live_child_guard"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_child_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_live_copied_count"("_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_copied_count"("_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."records_live_hide"("_field" "text", "_hidden" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_live_only_field"("_field" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_only_field"("_field" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_live_value_guard"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_live_value_guard"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) TO "service_role";
 
@@ -11427,6 +11768,11 @@ GRANT ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_pro
 
 REVOKE ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_save_mode"("_org_id" "uuid", "_mode" "text", "_updated_by" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_save_mode"("_org_id" "uuid", "_mode" "text", "_updated_by" "uuid") TO "service_role";
 
 
 
