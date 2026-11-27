@@ -752,7 +752,7 @@ async function copyPerson(
     return { copied: false, photoSkipped, stale: true, householdWritten: false };
   }
   // "held": the anniversary was left out because another linked person in the
-  // household holds a different one; everything else landed.
+  // household holds a different one, or cleared it; everything else landed.
   const written = data === "held" ? { ...plan, household: {} } : plan;
   return {
     copied: (data === "applied" || data === "held") && planWrites(written),

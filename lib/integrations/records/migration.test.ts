@@ -47,13 +47,15 @@ const migrations = readdirSync("supabase/migrations")
 
 /** A function's body as its latest migration defines it, so a later create or replace is the one checked. */
 function fn(name: string): string {
-  const start = new RegExp(`create (?:or replace )?function public\\.${name}\\(`, "g");
+  const heads = [`create or replace function public.${name}(`, `create function public.${name}(`];
   for (const text of [...migrations].reverse()) {
-    const match = [...text.matchAll(start)].at(-1);
-    if (match?.index === undefined) continue;
-    const to = text.indexOf("$$;", match.index);
-    expect(to, name).toBeGreaterThan(match.index);
-    return text.slice(match.index + match[0].length, to);
+    const [at, head] = heads
+      .map((h) => [text.lastIndexOf(h), h] as const)
+      .reduce((a, b) => (b[0] > a[0] ? b : a));
+    if (at < 0) continue;
+    const to = text.indexOf("$$;", at);
+    expect(to, name).toBeGreaterThan(at);
+    return text.slice(at + head.length, to);
   }
   throw new Error(`no migration defines public.${name}()`);
 }
