@@ -63,14 +63,22 @@ async function families(creds: RecordsCredentials, ids: readonly string[], fetch
   return found;
 }
 
+const settled = <T>(result: PromiseSettledResult<T>) => (result.status === "fulfilled" ? result.value : null);
+
 export function rockLiveSource(fetcher: FetchLike = safeFetch): RecordsLiveSource {
   return {
     async details(creds, request): Promise<RecordsLiveDetails> {
-      const [foundPeople, foundFamilies] = await Promise.all([
+      // Apart, so a key that can't read families, such as one saved before households, still shows birthdays.
+      const [foundPeople, foundFamilies] = await Promise.allSettled([
         people(creds, request.people, fetcher),
         families(creds, request.families, fetcher),
       ]);
-      return { people: foundPeople, families: foundFamilies };
+      const failure = [foundPeople, foundFamilies].find((r): r is PromiseRejectedResult => r.status === "rejected");
+      const readSome =
+        (foundPeople.status === "fulfilled" && request.people.length > 0) ||
+        (foundFamilies.status === "fulfilled" && request.families.length > 0);
+      if (failure && !readSome) throw failure.reason;
+      return { people: settled(foundPeople), families: settled(foundFamilies), ...(failure && { error: failure.reason }) };
     },
   };
 }

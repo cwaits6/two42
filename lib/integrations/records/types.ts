@@ -60,15 +60,21 @@ export interface RecordsLivePerson {
 }
 
 export interface RecordsLiveDetails {
-  /** By the provider's person id. */
-  people: Map<string, RecordsLivePerson>;
-  /** Each family's home address, by the provider's family id; null when it has none. */
-  families: Map<string, RecordsAddress | null>;
+  /** By the provider's person id; null when the people couldn't be read but the families could. */
+  people: Map<string, RecordsLivePerson> | null;
+  /** Each family's home address, by the provider's family id, null when it has none; the map is null when the families couldn't be read but the people could. */
+  families: Map<string, RecordsAddress | null> | null;
+  /** Why one half is null. */
+  error?: unknown;
 }
 
 /** Reading the details two42 shows live and never stores. Every call only reads. */
 export interface RecordsLiveSource {
-  /** These people's and families' details, in as few requests as the provider allows; an id the records don't have is left out. */
+  /**
+   * These people's and families' details, in as few requests as the provider
+   * allows; an id the records don't have is left out. Rejects when nothing
+   * asked for could be read.
+   */
   details(
     creds: RecordsCredentials,
     request: { people: readonly string[]; families: readonly string[] },

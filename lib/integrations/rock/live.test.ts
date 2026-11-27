@@ -63,13 +63,13 @@ describe("Rock live details", () => {
     const { requests, fetcher } = fakeRock();
     const found = await rockLiveSource(fetcher).details(creds, { people: ["100", "101"], families: ["500"] });
 
-    expect([...found.people.keys()].sort()).toEqual(["100", "101"]);
-    expect(found.people.get("100")).toEqual({
+    expect([...found.people!.keys()].sort()).toEqual(["100", "101"]);
+    expect(found.people!.get("100")).toEqual({
       birthday: { month: 4, day: 12 },
       anniversary: { year: 2001, month: 6, day: 9 },
       graduationYear: 2031,
     });
-    expect(found.families.get("500")).toMatchObject({ street1: "10500 Oak St", city: "Austin" });
+    expect(found.families!.get("500")).toMatchObject({ street1: "10500 Oak St", city: "Austin" });
 
     const people = requests.filter((u) => u.pathname === "/api/People");
     expect(people.map((u) => u.searchParams.get("$select"))).toEqual([LIVE_PERSON_FIELDS.join(",")]);
@@ -91,18 +91,28 @@ describe("Rock live details", () => {
     const { requests, fetcher } = fakeRock();
     const found = await rockLiveSource(fetcher).details(creds, { people: ["not-a-rock-id"], families: [] });
     expect(requests).toHaveLength(0);
-    expect(found.people.size).toBe(0);
+    expect(found.people!.size).toBe(0);
   });
 
   it("leaves out a person the records don't have", async () => {
     const fetcher = async (url: URL) => (url.pathname === "/api/People" ? reply([{ Id: 100 }]) : reply([]));
     const found = await rockLiveSource(fetcher).details(creds, { people: ["100", "101"], families: [] });
-    expect([...found.people.keys()]).toEqual(["100"]);
-    expect(found.people.get("100")).toEqual({
+    expect([...found.people!.keys()]).toEqual(["100"]);
+    expect(found.people!.get("100")).toEqual({
       birthday: { month: null, day: null },
       anniversary: { year: null, month: null, day: null },
       graduationYear: null,
     });
+  });
+
+  it("still answers the people when only the families can't be read, saying why", async () => {
+    const { fetcher: rock } = fakeRock();
+    const fetcher = async (url: URL) =>
+      url.pathname === "/api/Groups" ? reply({ Message: "Authorization has been denied" }, 401) : rock(url);
+    const found = await rockLiveSource(fetcher).details(creds, { people: ["100"], families: ["500"] });
+    expect([...found.people!.keys()]).toEqual(["100"]);
+    expect(found.families).toBeNull();
+    expect(found.error).toBeInstanceOf(RecordsError);
   });
 
   it("fails with a records error when Rock can't answer", async () => {

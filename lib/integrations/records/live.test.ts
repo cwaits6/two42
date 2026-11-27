@@ -164,6 +164,12 @@ describe("liveDirectory", () => {
     });
   });
 
+  it("marks only the half that couldn't be read unavailable", () => {
+    const live = liveDirectory(plan(), { ...details, families: null }, new Date("2026-11-26"));
+    expect(live.people[VIEWER].birthday).toEqual({ state: "shown", value: { month: 4, day: 12 } });
+    expect(live.households[HOME].address).toEqual({ state: "unavailable" });
+  });
+
   it("marks every planned detail unavailable when the records couldn't be reached", () => {
     const live = liveDirectory(plan(), null, new Date("2026-11-26"));
     expect(live.people[VIEWER].birthday).toEqual({ state: "unavailable" });

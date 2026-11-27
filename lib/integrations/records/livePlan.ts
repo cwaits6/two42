@@ -222,9 +222,8 @@ const date = (d: { month: number | null; day: number | null }): LiveSlot<LiveDat
 
 /**
  * The response for a plan: the records' values normalized exactly as the
- * copy would store them, so live and copied details read the same. With no
- * details, because the records couldn't be reached, every planned slot is
- * unavailable.
+ * copy would store them, so live and copied details read the same. Every
+ * planned slot whose half of the details couldn't be read is unavailable.
  */
 export function liveDirectory(plan: LivePlan, details: RecordsLiveDetails | null, today: Date): LiveDirectoryOn {
   const result: LiveDirectoryOn = { mode: "live", unavailable: false, people: {}, households: {}, children: {}, canHide: plan.canHide };
@@ -235,17 +234,19 @@ export function liveDirectory(plan: LivePlan, details: RecordsLiveDetails | null
   for (const slot of plan.hidden) slots(slot.kind, slot.id)[slot.field] = { state: "hidden" };
   for (const slot of plan.planned) {
     const target = slots(slot.kind, slot.id);
-    if (!details) {
+    const isAddress = slot.kind === "household" && slot.field === "address";
+    const read = isAddress ? details?.families : details?.people;
+    if (!read) {
       target[slot.field] = { state: "unavailable" };
       continue;
     }
-    if (slot.kind === "household" && slot.field === "address") {
-      const address = details.families.get(slot.from);
+    if (isAddress) {
+      const address = details?.families?.get(slot.from);
       const value = address ? liveAddress(householdChurchValues({ address, homePhone: null }, () => null).address) : null;
       target.address = value ? { state: "shown", value } : { state: "empty" };
       continue;
     }
-    const person = details.people.get(slot.from);
+    const person = details?.people?.get(slot.from);
     if (!person) {
       target[slot.field] = { state: "empty" };
     } else if (slot.field === "anniversary") {

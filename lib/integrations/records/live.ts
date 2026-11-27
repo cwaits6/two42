@@ -38,6 +38,15 @@ async function openCredentials(orgId: string, secret: Buffer) {
   }
 }
 
+/** The error's kind only: a provider's answer is never logged. */
+function warnUnavailable(err: unknown, orgId: string) {
+  logWarn("Church records live details unavailable", undefined, {
+    route: "/api/directory/live",
+    step: err instanceof RecordsError ? err.kind : "provider",
+    ids: { org: orgId },
+  });
+}
+
 /** Whether the directory should ask for live details; read by the directory layouts without calling the provider. */
 export async function liveDirectoryOn(): Promise<boolean> {
   if (!loadRecordsSecret()) return false;
@@ -116,13 +125,9 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   if (creds) {
     try {
       details = await connection.source.details(creds, { people: plan.people, families: plan.families });
+      if (details.error !== undefined) warnUnavailable(details.error, orgId);
     } catch (err) {
-      // The error's kind only: a provider's answer is never logged.
-      logWarn("Church records live details unavailable", undefined, {
-        route: "/api/directory/live",
-        step: err instanceof RecordsError ? err.kind : "provider",
-        ids: { org: orgId },
-      });
+      warnUnavailable(err, orgId);
     }
   }
   return liveDirectory(plan, details, today);

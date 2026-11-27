@@ -591,7 +591,9 @@ T42-274. A church admin chooses **Live from your church's records** under
   member's if the church switches back to copy.
 - **Not reachable.** When the provider fails, or the key can't be opened,
   every detail that would have come from it shows "Not available right now";
-  the rest of the directory is unaffected. When two42's own reads fail once
+  the rest of the directory is unaffected. The people and the families are
+  read apart, so when only one half fails (a key whose role can't view
+  Groups, say) only that half's details are unavailable. When two42's own reads fail once
   the church is known to be live (the mode, the directory, the sources), or
   the request itself fails, the answer is `LIVE_UNAVAILABLE`: each entry and
   both lists say their details from the records aren't available, rather than
