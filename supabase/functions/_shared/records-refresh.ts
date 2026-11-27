@@ -19,7 +19,10 @@ import {
   PROFILE_COPY_COLUMNS,
   RECORDS_FIELDS,
   type RecordsField,
+  type RecordsMode,
+  isLiveOnly,
   type StoredValue,
+  storedFields,
   type ValueField,
   type ValueRow,
   type ValueState,
@@ -89,7 +92,7 @@ export type GradeRow = Columns & { id: string; claimed_profile_id: string | null
 export type FieldSettingRow = { field: string; mode: string };
 export type PersonLinkRow = { profile_id: string; external_person_id: string };
 export type FieldValueRow = { profile_id: string; field: string; state: string; church_value: Columns };
-export type OrgSettingsRow = { suggest_children: boolean };
+export type OrgSettingsRow = { suggest_children: boolean; mode: string };
 export type HouseholdLinkRow = { family_id: string; external_family_id: string };
 export type HouseholdValueDbRow = { family_id: string; field: string; state: string; church_value: Columns };
 export type ChildSuggestionRow = { id: string; family_member_id: string | null; photo: string | null };
@@ -329,8 +332,17 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
     );
   let cursor: string | null | undefined;
   try {
-    cursor = await run(db, options, claimed[0].cursor, result);
-    await householdStep(db, options, result);
+    // Read inside the claim: records_save_mode() and records_save_children_setting() refuse while it is held.
+    const [orgSettings] = await allRows(
+      () => db.from("records_org_settings").select("suggest_children, mode").eq("org_id", orgId).order("org_id"),
+      "records settings",
+    );
+    const church: ChurchSettings = {
+      mode: orgSettings?.mode === "live" ? "live" : "copy",
+      suggestChildren: orgSettings?.suggest_children === true,
+    };
+    cursor = await run(db, options, claimed[0].cursor, result, church.mode);
+    await householdStep(db, options, result, church);
   } catch (err) {
     // A failed run is not a refresh: "Last refreshed" keeps the last one that
     // finished, and the run's own error is the one that reaches the caller.
@@ -439,16 +451,25 @@ export async function refreshAllOrgs(
   return all;
 }
 
+interface ChurchSettings {
+  mode: RecordsMode;
+  suggestChildren: boolean;
+}
+
 /** Runs the refresh and returns the mark to keep for next time. */
 async function run(
   db: RecordsRefreshClient,
   options: RefreshOptions,
   cursor: string | null,
   result: RefreshResult,
+  mode: RecordsMode,
 ): Promise<string | null> {
   const { orgId, connectionId, creds, source } = options;
-  const settings = parseSettings(
-    await allRows(() => db.from("records_field_settings").select("field, mode").eq("org_id", orgId).order("field"), "settings"),
+  const settings = storedFields(
+    parseSettings(
+      await allRows(() => db.from("records_field_settings").select("field, mode").eq("org_id", orgId).order("field"), "settings"),
+    ),
+    mode,
   );
   const links = await allRows(
     () =>
@@ -761,7 +782,12 @@ const asPlanProfile = (row: ProfileRow) => row as unknown as PlanProfile;
  * refresh's claim. The records refusing a family read ends this step only, so
  * a key made before families were read keeps copying people.
  */
-async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, result: RefreshResult) {
+async function householdStep(
+  db: RecordsRefreshClient,
+  options: RefreshOptions,
+  result: RefreshResult,
+  church: ChurchSettings,
+) {
   const source = options.source.households;
   if (!source) return;
   if (options.elapsed() >= options.budgetMs) {
@@ -770,14 +796,11 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
   }
   const { orgId, connectionId, creds } = options;
 
-  const [orgSettings] = await allRows(
-    () => db.from("records_org_settings").select("suggest_children").eq("org_id", orgId).order("org_id"),
-    "records settings",
-  );
-  const suggestChildren = orgSettings?.suggest_children === true;
+  const { suggestChildren } = church;
   const fields = new Set(
     (await allRows(() => db.from("records_field_settings").select("field, mode").eq("org_id", orgId).order("field"), "settings"))
       .filter((row) => (HOUSEHOLD_FIELDS as readonly string[]).includes(row.field) && row.mode === "member")
+      .filter((row) => church.mode === "copy" || !isLiveOnly(row.field))
       .map((row) => row.field as HouseholdField),
   );
   const personLinks = await allRows(
@@ -952,10 +975,14 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
         _connection_id: connectionId,
         _family_id: link.family_id,
         _external_family_id: link.external_family_id,
-        _children: childSuggestionRows(family.children, {
-          linked: linkedPeople,
-          entries: entries.filter((e) => e.family_id === link.family_id && !claimed.has(e.id)),
-        }),
+        _children: childSuggestionRows(
+          family.children,
+          {
+            linked: linkedPeople,
+            entries: entries.filter((e) => e.family_id === link.family_id && !claimed.has(e.id)),
+          },
+          church.mode,
+        ),
       });
       if (error) throw new Error(`suggested children write failed: ${error.message}`);
     }

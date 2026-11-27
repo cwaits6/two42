@@ -28,6 +28,27 @@ export const LOCKABLE_FIELDS: readonly RecordsField[] = ["name", "suffix", "titl
 
 export type FieldMode = "locked" | "member";
 
+/** How a church uses its records: copied into two42, or shown live and never stored. */
+export const RECORDS_MODES = ["copy", "live"] as const;
+export type RecordsMode = (typeof RECORDS_MODES)[number];
+
+/**
+ * What live mode never stores, a person's or their household's: read from the
+ * records when a screen needs them. Kept beside records_live_only_field() in
+ * 20261211000000_church_records_live.sql, whose guards refuse to store them.
+ */
+export const LIVE_ONLY_FIELDS = ["birthday", "anniversary", "grade", "address"] as const;
+export type LiveOnlyField = (typeof LIVE_ONLY_FIELDS)[number];
+
+export function isLiveOnly(field: string): field is LiveOnlyField {
+  return (LIVE_ONLY_FIELDS as readonly string[]).includes(field);
+}
+
+/** The fields a refresh stores in this mode: in live mode, none of the live-only ones. */
+export function storedFields<F extends string, M>(settings: ReadonlyMap<F, M>, mode: RecordsMode): Map<F, M> {
+  return new Map([...settings].filter(([field]) => mode === "copy" || !isLiveOnly(field)));
+}
+
 /** The preferred name follows the name's setting, is filled from the nick name and is never locked. */
 export type ValueField = RecordsField | "preferred_name";
 
