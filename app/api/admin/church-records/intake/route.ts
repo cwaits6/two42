@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
 import { sealKey } from "@/lib/integrations/records/crypto";
-import { intakeFailureMessage } from "@/lib/integrations/records/http";
+import { intakeLastFailureMessage } from "@/lib/integrations/records/http";
 import {
   deleteIntakeSettings,
   intakeKeyLabel,
@@ -9,7 +9,6 @@ import {
   readIntakeStatus,
   saveIntakeSettings,
 } from "@/lib/integrations/records/intake";
-import { RecordsError } from "@/lib/integrations/records/errors";
 import { badRequest, type IntakeContext, intakeContext, providerRefusal, serverError, writeKey } from "./context";
 
 /**
@@ -42,6 +41,9 @@ export interface IntakeAnswer {
   lastFailure: string | null;
 }
 
+/** What PUT answers on a save: the setting, or `saved` alone when it couldn't be read back. */
+export type IntakeSaveAnswer = { intake: IntakeAnswer | null } | { saved: true };
+
 async function answer(ctx: IntakeContext): Promise<IntakeAnswer | null> {
   const settings = await readIntakeSettings(ctx.orgId);
   if (!settings || settings.connectionId !== ctx.connectionId) return null;
@@ -53,7 +55,7 @@ async function answer(ctx: IntakeContext): Promise<IntakeAnswer | null> {
     sent: status.sent,
     failed: status.failed,
     lastFailure: status.lastFailure
-      ? intakeFailureMessage(new RecordsError(status.lastFailure), ctx.provider.label, ctx.intake.setup)
+      ? intakeLastFailureMessage(status.lastFailure, ctx.provider.label, ctx.intake.setup)
       : null,
   };
 }
@@ -116,10 +118,10 @@ export async function PUT(request: Request) {
   }
 
   try {
-    return NextResponse.json({ intake: await answer(ctx) });
+    return NextResponse.json<IntakeSaveAnswer>({ intake: await answer(ctx) });
   } catch (err) {
     logError("Church records new people read failed", err, { route: "/api/admin/church-records/intake", step: "status", ids: { org: ctx.orgId } });
-    return NextResponse.json({ saved: true });
+    return NextResponse.json<IntakeSaveAnswer>({ saved: true });
   }
 }
 

@@ -12,7 +12,7 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 import type { RecordsIntakeDestination, RecordsIntakeSetup } from "@/lib/integrations/records/types";
-import type { IntakeAnswer } from "@/app/api/admin/church-records/intake/route";
+import type { IntakeAnswer, IntakeSaveAnswer } from "@/app/api/admin/church-records/intake/route";
 import { call, errorText } from "./requests";
 
 const INTAKE = "/api/admin/church-records/intake";
@@ -211,12 +211,13 @@ function IntakeForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key, destinationId }),
       });
-      if (!res.ok || !(res.data?.intake || res.data?.saved === true)) {
+      const saved = res.ok ? (res.data as IntakeSaveAnswer | null) : null;
+      if (!saved || !("saved" in saved || saved.intake)) {
         toast.error(errorText("save sending new people", res.status, res.data));
         return;
       }
       toast.success(`Saved. New people who share their details go to ${label}.`);
-      onSaved((res.data.intake as IntakeAnswer | undefined) ?? null);
+      onSaved("intake" in saved ? saved.intake : null);
     } catch (err) {
       logError("Church records new people save failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
