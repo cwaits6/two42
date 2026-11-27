@@ -1,6 +1,11 @@
 // What two42 needs from a church's records, whichever software keeps them.
 
-import type { RecordsCopySource, RecordsCredentials } from "@/supabase/functions/_shared/records-types";
+import type {
+  RecordsAddress,
+  RecordsCopySource,
+  RecordsCredentials,
+  RecordsDate,
+} from "@/supabase/functions/_shared/records-types";
 
 export type {
   RecordsAddress,
@@ -47,6 +52,35 @@ export interface RecordsConnectStep {
   keyHelp: string;
 }
 
+/** A person's details two42 shows live and never stores. Never a birth year. */
+export interface RecordsLivePerson {
+  birthday: { month: number | null; day: number | null };
+  anniversary: RecordsDate;
+  graduationYear: number | null;
+}
+
+export interface RecordsLiveDetails {
+  /** By the provider's person id; null when the people couldn't be read but the families could. */
+  people: Map<string, RecordsLivePerson> | null;
+  /** Each family's home address, by the provider's family id, null when it has none; the map is null when the families couldn't be read but the people could. */
+  families: Map<string, RecordsAddress | null> | null;
+  /** Why one half is null. */
+  error?: unknown;
+}
+
+/** Reading the details two42 shows live and never stores. Every call only reads. */
+export interface RecordsLiveSource {
+  /**
+   * These people's and families' details, in as few requests as the provider
+   * allows; an id the records don't have is left out. Rejects when nothing
+   * asked for could be read.
+   */
+  details(
+    creds: RecordsCredentials,
+    request: { people: readonly string[]; families: readonly string[] },
+  ): Promise<RecordsLiveDetails>;
+}
+
 /** One kind of church records two42 can read. Every call only reads. */
 export interface RecordsProvider {
   id: RecordsProviderId;
@@ -55,6 +89,8 @@ export interface RecordsProvider {
   connect: RecordsConnectStep;
   /** Copying people's details into two42, for a provider that offers it. */
   copy?: RecordsCopySource;
+  /** Showing details live from the records instead of copying them, for a provider that offers it. */
+  live?: RecordsLiveSource;
   /** Proves the address is this provider and the key can read people. */
   checkConnection(creds: RecordsCredentials): Promise<void>;
   /** People who are linkable and have one of these last names. */

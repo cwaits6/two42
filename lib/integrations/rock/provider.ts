@@ -10,6 +10,7 @@ import {
   type PersonFilterIds,
   type RockPerson,
 } from "./client";
+import { rockLiveSource } from "./live";
 
 /** Whether Rock's record is one two42 may link: a living person, not a business or an inactive record. */
 export function linkable(person: RockPerson, ids: PersonFilterIds): boolean {
@@ -46,6 +47,7 @@ export const rockProvider: RecordsProvider = {
       "In Rock, add a REST key under Admin Tools, Settings, REST Keys. Give its user a security role of its own that can only view the People, PhoneNumbers, DefinedValues, Groups, GroupMembers and Locations REST controllers, with no edit rights. The key isn't shown again after you save it.",
   },
   copy: COPY_SOURCES.rock,
+  live: rockLiveSource(),
   checkConnection: (creds: RecordsCredentials) => checkConnection(creds),
   async findByLastNames(creds, lastNames) {
     const ids = await definedValueIds(creds);

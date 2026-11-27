@@ -827,6 +827,67 @@ Deno.test("with the switch on, a linked household's children are suggested witho
   }]);
 });
 
+for (const mode of ["copy", "live"] as const) {
+  Deno.test(`in ${mode} mode a refresh ${mode === "live" ? "stores no" : "stores the"} birthday, anniversary, grade and address from the records, and copies the rest`, async () => {
+    const { db, fns, rpcs } = fakeDb({
+      ...HOUSEHOLD_FIXTURE,
+      settings: ["name", "phone_mobile", "birthday", "anniversary", "grade", "address", "phone_home"].map((field) => ({
+        field,
+        mode: "member",
+      })),
+      orgSettings: [{ suggest_children: true, mode }],
+      householdLinks: [{ family_id: H1, external_family_id: "500" }],
+      familyMembers: [{ id: MEMBER, claimed_profile_id: P1, graduation_year: null }],
+      familyUnits: HOUSEHOLD_FIXTURE.familyUnits!.map((unit) => ({
+        ...unit,
+        anniversary_month: null,
+        anniversary_day: null,
+        anniversary_year: null,
+      })),
+    });
+    const { source } = householdSource();
+    source.peopleForCopy = (_creds, ids) =>
+      Promise.resolve(
+        ids.includes("100")
+          ? [{
+            ...CHURCH,
+            birthday: { month: 4, day: 5, year: 1980 },
+            anniversary: { month: 6, day: 7, year: 2001 },
+            graduationYear: 2030,
+          }]
+          : [],
+      );
+    await refreshOrg(db, options(source));
+
+    const liveOnly = /^(birth_|anniversary_|graduation_year$|address_line|city$|state$|postal_code$)/;
+    const of = (fn: string) => rpcs.filter((_, i) => fns[i] === fn) as Record<string, unknown>[];
+    const people = of("records_apply_copy");
+    const households = of("records_apply_household_copy");
+    const children = of("records_sync_child_suggestions");
+    assert(people.length > 0 && households.length > 0 && children.length > 0);
+    const columns = [
+      ...people.flatMap((a) => [a._profile, a._household, a._grade].flatMap((c) => Object.keys(c as object))),
+      ...households.flatMap((a) => Object.keys(a._household as object)),
+    ];
+    const fields = [...people, ...households].flatMap((a) => (a._values as { field: string }[]).map((v) => v.field));
+    const childDetails = children.flatMap((a) =>
+      (a._children as Record<string, unknown>[]).flatMap((c) => [c.birth_month, c.birth_day, c.graduation_year])
+    );
+    assert(columns.includes("phone_mobile") && columns.includes("phone_home"));
+    assert(fields.includes("phone_mobile") && fields.includes("phone_home"));
+    assertEquals(children.flatMap((a) => (a._children as { first_name: string }[]).map((c) => c.first_name)), ["Lily"]);
+    if (mode === "live") {
+      assertEquals(columns.filter((c) => liveOnly.test(c)), []);
+      assertEquals(fields.filter((f) => ["birthday", "anniversary", "grade", "address"].includes(f)), []);
+      assertEquals(childDetails, [null, null, null]);
+    } else {
+      assert(columns.includes("birth_month") && columns.includes("anniversary_month") && columns.includes("address_line1"));
+      assert(columns.includes("graduation_year"));
+      assertEquals(childDetails, [3, 3, 2034]);
+    }
+  });
+}
+
 Deno.test("a household entry another child was added as doesn't hide a same-named child", async () => {
   const lily = { id: MEMBER, family_id: H1, first_name: "Lily", last_name: "Quux" };
   const sync = async (childSuggestions: Record<string, unknown>[]) => {

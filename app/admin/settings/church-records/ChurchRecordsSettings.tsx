@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { RecordsMode as Mode } from "@/supabase/functions/_shared/records-copy";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import type { RecordsConnectStep } from "@/lib/integrations/records/types";
 import { PersonLinks } from "./PersonLinks";
 import { RecordsCopySettings } from "./RecordsCopySettings";
 import { RecordsHouseholds } from "./RecordsHouseholds";
+import { RecordsMode } from "./RecordsMode";
 import { call, errorText } from "./requests";
 
 export interface Connection {
@@ -28,6 +30,8 @@ export interface Connection {
   canCopy: boolean;
   /** Whether the provider reads families, for the Households tab. */
   canSuggestHouseholds: boolean;
+  /** Whether the provider can show details live instead of copying them. */
+  canShowLive: boolean;
   baseUrl: string;
   keyHint: string;
   connectedAt: string;
@@ -112,11 +116,26 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
 }
 
 function PeopleSettings({ connection }: { connection: Connection }) {
+  const [mode, setMode] = useState<Mode>("copy");
+  const [modeSaves, setModeSaves] = useState(0);
   return (
     <>
       <PersonLinks key={connection.provider + connection.baseUrl + connection.keyHint} label={connection.providerLabel} />
+      {connection.canShowLive && (
+        <RecordsMode
+          key={`mode:${connection.provider}${connection.baseUrl}`}
+          label={connection.providerLabel}
+          onChange={setMode}
+          onSaved={() => setModeSaves((n) => n + 1)}
+        />
+      )}
       {connection.canCopy && (
-        <RecordsCopySettings key={connection.provider + connection.baseUrl} label={connection.providerLabel} />
+        <RecordsCopySettings
+          key={`copy:${connection.provider}${connection.baseUrl}`}
+          label={connection.providerLabel}
+          live={connection.canShowLive && mode === "live"}
+          reloads={modeSaves}
+        />
       )}
     </>
   );

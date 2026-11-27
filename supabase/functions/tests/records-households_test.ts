@@ -183,6 +183,7 @@ Deno.test("children carry no birth year, and a child with an account or already 
       { id: "5", firstName: "Sam", lastName: "Hale", birthday: { month: null, day: null }, graduationYear: null, photo: null },
     ],
     { linked: new Set(["5"]), entries: [{ first_name: "Jack", last_name: "Hale" }] },
+    "copy",
   );
   assertEquals(rows, [
     { external_person_id: "1", first_name: "Lily", last_name: "Hale", birth_month: 3, birth_day: 3, graduation_year: 2034, photo: "9" },

@@ -16,6 +16,7 @@ import {
   memberStep,
   phone,
   pick,
+  type RecordsMode,
   sameValue,
   type ValueState,
 } from "./records-copy.ts";
@@ -26,7 +27,7 @@ import type { Relationship } from "./relationships.ts";
 export const HOUSEHOLD_FIELDS = ["address", "phone_home"] as const;
 export type HouseholdField = (typeof HOUSEHOLD_FIELDS)[number];
 
-const ADDRESS_COLUMNS = ["address_line1", "address_line2", "city", "state", "postal_code"] as const;
+export const ADDRESS_COLUMNS = ["address_line1", "address_line2", "city", "state", "postal_code"] as const;
 
 export const HOUSEHOLD_FIELD_COLUMNS: Record<HouseholdField, readonly string[]> = {
   address: ADDRESS_COLUMNS,
@@ -341,6 +342,7 @@ export interface ChildRow {
 export function childSuggestionRows(
   children: readonly RecordsChild[],
   exclude: { linked: ReadonlySet<string>; entries: readonly { first_name: string | null; last_name: string | null }[] },
+  mode: RecordsMode,
 ): ChildRow[] {
   const known = new Set(exclude.entries.map((e) => `${normalizeName(e.first_name)} ${normalizeName(e.last_name)}`));
   return children.flatMap((child) => {
@@ -349,14 +351,15 @@ export function childSuggestionRows(
     const last = titleCaseName(child.lastName);
     if (!first || !last || first.length > MAX_NAME_LENGTH || last.length > MAX_NAME_LENGTH) return [];
     if (known.has(`${normalizeName(first)} ${normalizeName(last)}`)) return [];
-    const { month, day } = formDate({ ...child.birthday, year: null });
+    // Live mode stores names and the photo; the birthday and grade are read when shown.
+    const { month, day } = mode === "live" ? { month: null, day: null } : formDate({ ...child.birthday, year: null });
     return [{
       external_person_id: child.id,
       first_name: first,
       last_name: last,
       birth_month: month,
       birth_day: day,
-      graduation_year: formGraduationYear(child.graduationYear),
+      graduation_year: mode === "live" ? null : formGraduationYear(child.graduationYear),
       photo: child.photo && child.photo.length <= 100 ? child.photo : null,
     }];
   });

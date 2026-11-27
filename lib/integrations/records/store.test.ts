@@ -33,7 +33,7 @@ function query(table: string) {
 
 vi.mock("@/lib/supabase/server", () => ({ createServiceClient: async () => ({ from: query }) }));
 
-const { readCopyStatus } = await import("./store");
+const { readCopyStatus, readLiveSources } = await import("./store");
 
 const ORG = "org-1";
 const link = (profile_id: string, external_person_id: string, org_id = ORG) => ({ org_id, profile_id, external_person_id });
@@ -88,5 +88,51 @@ describe("readCopyStatus", () => {
     tables.profiles = tables.profiles.filter((p) => p.id !== "missing");
     const status = await readCopyStatus(ORG);
     expect(status.review.map((r) => r.profileId)).toEqual(["inactive"]);
+  });
+});
+
+describe("readLiveSources", () => {
+  it("reads only the people and households asked for, in this church, and no value from the records", async () => {
+    tables.records_field_settings = [
+      { org_id: ORG, field: "birthday", mode: "member" },
+      { org_id: ORG, field: "phone_mobile", mode: "member" },
+      { org_id: "org-2", field: "address", mode: "member" },
+    ];
+    tables.records_field_values = [
+      { org_id: ORG, profile_id: "copied", field: "birthday", state: "cleared", church_value: { birth_month: 1 } },
+      { org_id: ORG, profile_id: "copied", field: "phone_mobile", state: "changed" },
+      { org_id: "org-2", profile_id: "never", field: "birthday", state: "changed" },
+    ];
+    tables.records_household_links = [
+      { org_id: ORG, family_id: "home", external_family_id: "500" },
+      { org_id: "org-2", family_id: "home", external_family_id: "900" },
+    ];
+    tables.records_household_values = [{ org_id: ORG, family_id: "home", field: "address", state: "changed" }];
+    tables.records_child_suggestions = [
+      { org_id: ORG, family_member_id: "kid", external_person_id: "700", state: "added" },
+      { org_id: ORG, family_member_id: "open-kid", external_person_id: "701", state: "open" },
+    ];
+
+    const sources = await readLiveSources(
+      ORG,
+      { profiles: ["copied", "never"], households: ["home"], members: ["kid", "open-kid"] },
+      true,
+    );
+    expect([...sources.fields]).toEqual(["birthday"]);
+    expect([...sources.personLinks]).toEqual([["copied", "103"], ["never", "104"]]);
+    expect([...sources.personStates]).toEqual([["copied:birthday", "cleared"]]);
+    expect([...sources.householdLinks]).toEqual([["home", "500"]]);
+    expect([...sources.addressStates]).toEqual([["home", "changed"]]);
+    expect([...sources.children]).toEqual([["kid", "700"]]);
+    expect(JSON.stringify(sources, (_k, v) => (v instanceof Map || v instanceof Set ? [...v] : v))).not.toContain(
+      "birth_month",
+    );
+  });
+
+  it("asks nothing about children while the church doesn't suggest them", async () => {
+    tables.records_field_settings = [];
+    tables.records_child_suggestions = [{ org_id: ORG, family_member_id: "kid", external_person_id: "700", state: "added" }];
+    const sources = await readLiveSources(ORG, { profiles: [], households: [], members: ["kid"] }, false);
+    expect(sources.children.size).toBe(0);
   });
 });

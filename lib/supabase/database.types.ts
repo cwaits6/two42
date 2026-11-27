@@ -1457,14 +1457,14 @@ isOneToOne: false
                   ]
                 },"records_org_settings": {
                   Row: {
-                    "org_id": string,"suggest_children": boolean,"updated_at": string,"updated_by": string | null
+                    "mode": string,"org_id": string,"suggest_children": boolean,"updated_at": string,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                    "mode"?: string,"org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Update: {
-                    "org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                    "mode"?: string,"org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -2811,6 +2811,20 @@ isOneToOne: false
 "records_is_empty":
 { Args: { "_value": Json }; Returns: boolean
                            },
+"records_live_anniversary_households":
+{ Args: { "_org_id": string }; Returns: {
+              "family_id": string
+            }[]
+                           },
+"records_live_copied_count":
+{ Args: { "_org_id": string }; Returns: number
+                           },
+"records_live_hide":
+{ Args: { "_field": string,"_hidden": boolean }; Returns: undefined
+                           },
+"records_live_only_field":
+{ Args: { "_field": string }; Returns: boolean
+                           },
 "records_pick":
 { Args: { "_columns": (string)[],"_row": Json }; Returns: Json
                            },
@@ -2825,6 +2839,9 @@ isOneToOne: false
                            },
 "records_save_field_settings":
 { Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: string
+                           },
+"records_save_mode":
+{ Args: { "_mode": string,"_org_id": string,"_updated_by": string }; Returns: Json
                            },
 "records_sync_child_suggestions":
 { Args: { "_children": Json,"_connection_id": string,"_external_family_id": string,"_family_id": string,"_org_id": string }; Returns: number

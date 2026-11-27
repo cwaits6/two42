@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useGroupMemberships } from "@/components/groups/GroupProvider";
 import {
   directoryScopeOptions,
@@ -12,6 +12,8 @@ import {
   type ScopeOption,
 } from "@/components/directory/scope";
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
+import { LiveDetailsProvider, useLiveDirectory } from "@/components/directory/LiveDetailsContext";
+import { applyLiveDetails } from "@/components/directory/liveDetails";
 import { calendarDate } from "@/components/directory/utils";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
@@ -53,6 +55,8 @@ export interface DirectoryProviderProps {
   currentFamilyId: string | null;
   /** The church's calendar date, "YYYY-MM-DD", read by the layout in the org's time zone. */
   today: string;
+  /** Whether the church shows some details live from its records, which the directory then asks for once. */
+  recordsLive: boolean;
   children: ReactNode;
 }
 
@@ -69,12 +73,32 @@ export function DirectoryProvider({
   currentUserId,
   currentFamilyId,
   today,
+  recordsLive,
   children,
 }: DirectoryProviderProps) {
   const churchToday = useMemo(() => calendarDate(today), [today]);
   const memberships = useGroupMemberships();
   const membershipIds = useMemo(() => memberships.map((g) => g.id), [memberships]);
   const data = useDirectoryData(membershipIds);
+  const live = useLiveDirectory(recordsLive);
+  const merged = useMemo(
+    () => applyLiveDetails(data.members, data.families, live.controls?.live ?? null),
+    [data.members, data.families, live.controls],
+  );
+  const profileMap = useMemo(
+    () => (merged.members === data.members ? data.profileMap : Object.fromEntries(merged.members.map((m) => [m.id, m]))),
+    [merged.members, data.members, data.profileMap],
+  );
+  const familyMap = useMemo(
+    () => (merged.families === data.families ? data.familyMap : Object.fromEntries(merged.families.map((f) => [f.id, f]))),
+    [merged.families, data.families, data.familyMap],
+  );
+  const { reload: reloadData } = data;
+  const { reload: reloadLive } = live;
+  const reload = useCallback(() => {
+    reloadData();
+    reloadLive();
+  }, [reloadData, reloadLive]);
 
   const { options, defaultScope, showControl } = useMemo(
     () => directoryScopeOptions({ memberships, activeGroupId, orgVisible, orgName }),
@@ -87,12 +111,12 @@ export function DirectoryProvider({
     chosen && options.some((o) => o.value === scopeValue(chosen)) ? chosen : defaultScope;
 
   const members = useMemo(
-    () => scopeMembers(data.members, scope, data.groupRosters, membershipIds),
-    [data.members, scope, data.groupRosters, membershipIds]
+    () => scopeMembers(merged.members, scope, data.groupRosters, membershipIds),
+    [merged.members, scope, data.groupRosters, membershipIds]
   );
   const families = useMemo(
-    () => scopeFamilies(data.families, scope, data.groupRosters, membershipIds),
-    [data.families, scope, data.groupRosters, membershipIds]
+    () => scopeFamilies(merged.families, scope, data.groupRosters, membershipIds),
+    [merged.families, scope, data.groupRosters, membershipIds]
   );
 
   const value: DirectoryContextValue = {
@@ -102,8 +126,8 @@ export function DirectoryProvider({
     showControl,
     members,
     families,
-    profileMap: data.profileMap,
-    familyMap: data.familyMap,
+    profileMap,
+    familyMap,
     groupRosters: data.groupRosters,
     groupsByProfile: data.groupsByProfile,
     memberships,
@@ -115,10 +139,14 @@ export function DirectoryProvider({
     today: churchToday,
     loading: data.loading,
     error: data.error,
-    reload: data.reload,
+    reload,
   };
 
-  return <DirectoryContext.Provider value={value}>{children}</DirectoryContext.Provider>;
+  return (
+    <DirectoryContext.Provider value={value}>
+      <LiveDetailsProvider value={live.controls}>{children}</LiveDetailsProvider>
+    </DirectoryContext.Provider>
+  );
 }
 
 export function useDirectory(): DirectoryContextValue {

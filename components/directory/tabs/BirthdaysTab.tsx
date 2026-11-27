@@ -10,6 +10,8 @@ import { DirRow } from "@/components/directory/DirRow";
 import { CelebrationList } from "@/components/directory/CelebrationList";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
+import { NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
+import { someUnavailable } from "@/components/directory/liveDetails";
 import {
   birthdayEntries,
   celebrationHref,
@@ -24,6 +26,7 @@ import {
 
 function BirthdaysTabInner() {
   const { members, families, basePath, today } = useDirectory();
+  const live = useLiveControls()?.live ?? null;
   const searchParams = useSearchParams();
   const includeNonAttendees = parseIncludeNonAttendees(searchParams.get("household"));
 
@@ -34,6 +37,11 @@ function BirthdaysTabInner() {
 
   return (
     <>
+      {someUnavailable(live, "birthday") && (
+        <p className="mb-4 text-base text-muted-foreground" role="status">
+          Birthdays from your church&apos;s records: {NOT_AVAILABLE}
+        </p>
+      )}
       <CelebrationList
         tab="birthdays"
         noun="birthdays"

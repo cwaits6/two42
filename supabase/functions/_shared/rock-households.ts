@@ -171,6 +171,27 @@ function parseAddress(row: Record<string, unknown>): RecordsAddress {
   };
 }
 
+/** Each family's home address, by family id, read from the groups' GroupLocations; null for a family with none. */
+export async function homeAddresses(
+  creds: RecordsCredentials,
+  groupRows: readonly Record<string, unknown>[],
+  homeType: number | null,
+  fetcher: FetchLike,
+): Promise<Map<number, RecordsAddress | null>> {
+  const homes = homeLocationIds(groupRows, homeType);
+  const locationIds = [...new Set(homes.values())];
+  const locations = new Map<number, RecordsAddress>();
+  for (const row of locationIds.length
+    ? await byIdChunks(creds, "/api/Locations", "Id", locationIds, LOCATION_FIELDS, fetcher)
+    : []) {
+    const id = int(row.Id);
+    if (id && locationIds.includes(id)) locations.set(id, parseAddress(row));
+  }
+  const addresses = new Map<number, RecordsAddress | null>();
+  for (const [family, location] of homes) addresses.set(family, locations.get(location) ?? null);
+  return addresses;
+}
+
 async function families(
   creds: RecordsCredentials,
   ids: readonly string[],
@@ -212,15 +233,7 @@ async function families(
     });
   }
 
-  const homes = homeLocationIds(groups, valueIds.homeLocation);
-  const locationIds = [...new Set(homes.values())];
-  const locations = new Map<number, RecordsAddress>();
-  for (const row of locationIds.length
-    ? await byIdChunks(creds, "/api/Locations", "Id", locationIds, LOCATION_FIELDS, fetcher)
-    : []) {
-    const id = int(row.Id);
-    if (id && locationIds.includes(id)) locations.set(id, parseAddress(row));
-  }
+  const addresses = await homeAddresses(creds, groups, valueIds.homeLocation, fetcher);
 
   const adults = [...people.values()].filter((p) => p.member.adult).map((p) => Number(p.member.id)).sort((a, b) => a - b);
   const homePhones = new Map<number, RecordsPhone>();
@@ -239,13 +252,12 @@ async function families(
       .sort((a, b) => a - b)
       .map((id) => people.get(id))
       .filter((p) => p !== undefined);
-    const location = homes.get(familyId);
     const phoneOwner = inFamily.find((p) => p.member.adult && homePhones.has(Number(p.member.id)));
     return {
       id: String(familyId),
       members: inFamily.map((p) => p.member),
       children: inFamily.flatMap((p) => (p.child ? [p.child] : [])),
-      address: location === undefined ? null : locations.get(location) ?? null,
+      address: addresses.get(familyId) ?? null,
       homePhone: phoneOwner ? homePhones.get(Number(phoneOwner.member.id)) ?? null : null,
     };
   });

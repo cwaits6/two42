@@ -28,6 +28,7 @@ import {
   householdPhoneLabel,
   showsHouseholdPhone,
 } from "@/components/directory/utils";
+import { LiveHideButton, LiveUnavailableNote, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 import type { ComponentType, ReactNode } from "react";
 
@@ -72,6 +73,10 @@ interface PersonCardProps {
 export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
   const address = resolveAddress(profile, family);
   const hasBirthday = profile.birth_month && profile.birth_day;
+  const live = useLiveControls()?.live;
+  const birthdaySlot = live?.people[profile.id]?.birthday;
+  const ownBirthday = live?.canHide.person === profile.id;
+  const addressUnavailable = !address && !!family && live?.households[family.id]?.address?.state === "unavailable";
 
   return (
     <div className="space-y-3">
@@ -165,7 +170,10 @@ export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
           </ContactLine>
         )}
 
+        <LiveUnavailableNote />
+
         {/* Address */}
+        {addressUnavailable && <ContactLine icon={MapPin}>Address — {NOT_AVAILABLE}</ContactLine>}
         {address && (
           <ContactLine icon={MapPin} alignTop>
             <span>
@@ -185,11 +193,19 @@ export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
         )}
 
         {/* Birthday */}
-        {hasBirthday && (
+        {hasBirthday ? (
           <ContactLine icon={Cake}>
             Birthday — {formatBirthdayShort(profile.birth_month!, profile.birth_day!)}
+            {ownBirthday && birthdaySlot?.state === "shown" && <LiveHideButton field="birthday" hidden={false} />}
           </ContactLine>
-        )}
+        ) : birthdaySlot?.state === "unavailable" ? (
+          <ContactLine icon={Cake}>Birthday — {NOT_AVAILABLE}</ContactLine>
+        ) : ownBirthday && birthdaySlot?.state === "hidden" ? (
+          <ContactLine icon={Cake}>
+            Birthday — not shown in the directory
+            <LiveHideButton field="birthday" hidden />
+          </ContactLine>
+        ) : null}
 
         {/* Occupation */}
         {(profile.occupation || profile.employer) && (
