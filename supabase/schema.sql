@@ -2492,6 +2492,77 @@ COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_em
 
 
 
+CREATE OR REPLACE FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _me public.profiles%rowtype;
+  _s public.records_child_suggestions%rowtype;
+  _id uuid;
+begin
+  select * into _me from public.profiles
+   where id = auth.uid() and org_id = public.app_current_org_id()
+     for update;
+  if not found or _me.role not in ('member', 'admin') or _me.relationship not in ('primary', 'spouse')
+     or _me.family_id is null then
+    raise exception 'records_add_suggested_child: no such suggestion' using errcode = 'RC001';
+  end if;
+  -- Locked so a concurrent add by the other adult sees this one's claim before
+  -- looking for a same-named child to settle by.
+  perform 1 from public.family_units where id = _me.family_id and org_id = _me.org_id for update;
+  select * into _s from public.records_child_suggestions
+   where id = _suggestion_id and org_id = _me.org_id and family_id = _me.family_id and state = 'open'
+     for update;
+  if not found or not exists (
+    select 1 from public.records_org_settings where org_id = _me.org_id and suggest_children
+  ) then
+    raise exception 'records_add_suggested_child: no such suggestion' using errcode = 'RC001';
+  end if;
+
+  -- A child in the household already under the same name, entered since the
+  -- refresh, is this child: the suggestion is settled by them, not a second
+  -- entry. An adult sharing a child's name, as a parent and junior do, isn't.
+  -- An entry another suggestion was added as is that other child.
+  -- The name key folds case, Latin accents, spaces and punctuation.
+  select m.id into _id from public.family_members m
+   where m.org_id = _me.org_id and m.family_id = _me.family_id and m.relationship = 'child'
+     and lower(regexp_replace(regexp_replace(normalize(coalesce(m.first_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(regexp_replace(normalize(_s.first_name, NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+     and lower(regexp_replace(regexp_replace(normalize(coalesce(m.last_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(regexp_replace(normalize(_s.last_name, NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+     and not exists (
+       select 1 from public.records_child_suggestions o
+        where o.org_id = _me.org_id and o.family_member_id = m.id and o.id <> _s.id
+     )
+   order by m.id
+   limit 1;
+  if _id is null then
+    insert into public.family_members
+      (org_id, family_id, first_name, last_name, relationship, birth_month, birth_day, graduation_year, is_class_member)
+    values
+      (_me.org_id, _me.family_id, _s.first_name, _s.last_name, 'child', _s.birth_month, _s.birth_day,
+       _s.graduation_year, false)
+    returning id into _id;
+  end if;
+
+  update public.records_child_suggestions
+     set state = 'added', family_member_id = _id, decided_by = _me.id, decided_at = now(),
+         first_name = null, last_name = null, birth_month = null, birth_day = null, graduation_year = null,
+         updated_at = now()
+   where id = _s.id and org_id = _me.org_id;
+  return _id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") IS 'A household''s primary or spouse adds a suggested child as a child without an account, with no birth year. Org and household from auth.uid()''s profile.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) RETURNS "text"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -2660,6 +2731,230 @@ $$;
 ALTER FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."records_apply_household_copy"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_expected" "jsonb", "_household" "jsonb", "_values" "jsonb") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _family public.family_units%rowtype;
+  _key text;
+begin
+  select * into _family from public.family_units
+   where id = _family_id and org_id = _org_id
+     for update;
+  if not found then
+    return 'gone';
+  end if;
+  -- Locked, and the refresh's own connection, so a replaced connection's run can't write.
+  perform 1 from public.records_household_links
+   where org_id = _org_id and family_id = _family_id and connection_id = _connection_id
+     and external_family_id = _expected ->> 'family'
+     for share;
+  if not found then
+    return 'unlinked';
+  end if;
+
+  for _key in select jsonb_object_keys(coalesce(_expected -> 'household', '{}'::jsonb)) loop
+    if public.records_pick(to_jsonb(_family), array[_key]) <> public.records_pick(_expected -> 'household', array[_key]) then
+      return 'stale';
+    end if;
+  end loop;
+  for _key in select jsonb_object_keys(coalesce(_expected -> 'states', '{}'::jsonb)) loop
+    if (select v.state from public.records_household_values v
+         where v.org_id = _org_id and v.family_id = _family_id and v.field = _key)
+       is distinct from (_expected -> 'states' ->> _key) then
+      return 'stale';
+    end if;
+  end loop;
+
+  if _household <> '{}'::jsonb then
+    update public.family_units set
+      address_line1 = case when _household ? 'address_line1' then _household ->> 'address_line1' else address_line1 end,
+      address_line2 = case when _household ? 'address_line2' then _household ->> 'address_line2' else address_line2 end,
+      city = case when _household ? 'city' then _household ->> 'city' else city end,
+      state = case when _household ? 'state' then _household ->> 'state' else state end,
+      postal_code = case when _household ? 'postal_code' then _household ->> 'postal_code' else postal_code end,
+      phone_home = case when _household ? 'phone_home' then _household ->> 'phone_home' else phone_home end
+    where id = _family_id and org_id = _org_id;
+  end if;
+
+  insert into public.records_household_values (org_id, family_id, field, state, church_value, updated_at)
+  select _org_id, _family_id, v.field, v.state, v.church_value, now()
+    from jsonb_to_recordset(coalesce(_values, '[]'::jsonb)) as v(field text, state text, church_value jsonb)
+  on conflict (org_id, family_id, field) do update
+    set state = excluded.state, church_value = excluded.church_value, updated_at = excluded.updated_at
+    where (public.records_household_values.state, public.records_household_values.church_value)
+          is distinct from (excluded.state, excluded.church_value);
+  return 'applied';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_apply_household_copy"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_expected" "jsonb", "_household" "jsonb", "_values" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_confirm_household"("_org_id" "uuid", "_suggestion_id" "uuid", "_confirmed_by" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _s public.records_household_suggestions%rowtype;
+  _running timestamptz;
+  _target uuid;
+  _ids uuid[];
+begin
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return 'busy';
+  end if;
+
+  select * into _s from public.records_household_suggestions
+   where id = _suggestion_id and org_id = _org_id
+     for update;
+  if not found then
+    return 'gone';
+  end if;
+
+  _ids := array(select (p ->> 'profile_id')::uuid from jsonb_array_elements(_s.people) as p);
+  perform 1 from public.profiles where org_id = _org_id
+     and (id = any (_ids) or id in (select (b ->> 'profile_id')::uuid from jsonb_array_elements(_s.basis) as b))
+   order by id for update;
+  -- Locked so none of the links the suggestion rests on can end or change before it is written.
+  perform 1 from public.records_person_links
+   where org_id = _org_id and connection_id = _s.connection_id
+     and profile_id in (select (b ->> 'profile_id')::uuid from jsonb_array_elements(_s.basis) as b)
+   order by profile_id for update;
+  if exists (
+    select 1 from jsonb_array_elements(_s.basis) as b
+     where not exists (
+       select 1 from public.profiles pr
+         join public.records_person_links l
+           on l.org_id = pr.org_id and l.profile_id = pr.id and l.connection_id = _s.connection_id
+        where pr.id = (b ->> 'profile_id')::uuid
+          and pr.org_id = _org_id
+          and pr.role in ('member', 'admin')
+          and l.external_person_id = b ->> 'external_person_id'
+          and pr.family_id is not distinct from (b ->> 'family_id')::uuid
+     )
+  ) then
+    return 'stale';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(_s.people) as p
+     where not exists (
+       select 1 from public.profiles pr
+         join public.records_person_links l
+           on l.org_id = pr.org_id and l.profile_id = pr.id and l.connection_id = _s.connection_id
+        where pr.id = (p ->> 'profile_id')::uuid
+          and pr.org_id = _org_id
+          and pr.role in ('member', 'admin')
+          and pr.family_id is not distinct from (p ->> 'from_family_id')::uuid
+          and pr.relationship is not distinct from p ->> 'from_relationship'
+     )
+  ) then
+    return 'stale';
+  end if;
+
+  if exists (
+    select 1 from public.records_household_links
+     where org_id = _org_id and connection_id = _s.connection_id
+       and external_family_id = _s.external_family_id
+       and family_id is distinct from _s.target_family_id
+  ) then
+    return 'stale';
+  end if;
+
+  _target := _s.target_family_id;
+  if _target is not null then
+    perform 1 from public.family_units where id = _target and org_id = _org_id for update;
+    if not found then
+      return 'stale';
+    end if;
+    if exists (
+      select 1 from public.records_household_links
+       where org_id = _org_id and family_id = _target
+         and (connection_id <> _s.connection_id or external_family_id <> _s.external_family_id)
+    ) then
+      return 'stale';
+    end if;
+    if exists (
+      select 1 from public.profiles o
+       where o.org_id = _org_id and o.family_id = _target
+         and not (o.id = any (_ids))
+         and o.relationship in (
+           select p ->> 'relationship' from jsonb_array_elements(_s.people) as p
+            where p ->> 'relationship' in ('primary', 'spouse')
+         )
+    ) then
+      return 'stale';
+    end if;
+  else
+    insert into public.family_units (org_id, family_name)
+    values (_org_id, _s.family_name)
+    returning id into _target;
+  end if;
+
+  update public.profiles pr
+     set family_id = _target, relationship = p.relationship
+    from jsonb_to_recordset(_s.people) as p(profile_id uuid, relationship text)
+   where pr.id = p.profile_id and pr.org_id = _org_id;
+
+  insert into public.records_household_links (org_id, family_id, connection_id, external_family_id, confirmed_by)
+  values (_org_id, _target, _s.connection_id, _s.external_family_id, _confirmed_by)
+  on conflict (org_id, family_id) do nothing;
+
+  delete from public.records_household_suggestions where id = _s.id and org_id = _org_id;
+  return 'confirmed';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_confirm_household"("_org_id" "uuid", "_suggestion_id" "uuid", "_confirmed_by" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_confirm_household"("_org_id" "uuid", "_suggestion_id" "uuid", "_confirmed_by" "uuid") IS 'A church admin''s confirmation of one household suggestion, all or nothing; service key only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _me public.profiles%rowtype;
+begin
+  select * into _me from public.profiles
+   where id = auth.uid() and org_id = public.app_current_org_id()
+     for update;
+  if not found or _me.role not in ('member', 'admin') or _me.relationship not in ('primary', 'spouse')
+     or _me.family_id is null
+     or not exists (select 1 from public.records_org_settings where org_id = _me.org_id and suggest_children) then
+    raise exception 'records_dismiss_suggested_child: no such suggestion' using errcode = 'RC001';
+  end if;
+  update public.records_child_suggestions
+     set state = 'dismissed', decided_by = _me.id, decided_at = now(),
+         first_name = null, last_name = null, birth_month = null, birth_day = null, graduation_year = null,
+         photo = null, updated_at = now()
+   where id = _suggestion_id and org_id = _me.org_id and family_id = _me.family_id and state = 'open';
+  if not found then
+    raise exception 'records_dismiss_suggested_child: no such suggestion' using errcode = 'RC001';
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") IS 'A household''s primary or spouse dismisses a suggested child, who is never suggested again. Org and household from auth.uid()''s profile.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."records_edit_state"("_new" "jsonb", "_church_value" "jsonb", "_columns" "text"[]) RETURNS "text"
     LANGUAGE "sql" IMMUTABLE
     SET "search_path" TO ''
@@ -2767,6 +3062,40 @@ $$;
 ALTER FUNCTION "public"."records_household_member_edit"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."records_household_value_edit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _value record;
+  _columns text[];
+  _state text;
+begin
+  if coalesce(current_setting('role', true), '') not in ('anon', 'authenticated') then
+    return new;
+  end if;
+  for _value in
+    select v.field, v.church_value from public.records_household_values v
+     where v.org_id = old.org_id and v.family_id = old.id
+  loop
+    _columns := case _value.field
+      when 'address' then array['address_line1', 'address_line2', 'city', 'state', 'postal_code']
+      else array['phone_home']
+    end;
+    continue when public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns);
+    _state := public.records_edit_state(to_jsonb(new), _value.church_value, _columns);
+    update public.records_household_values
+       set state = _state, updated_at = now()
+     where org_id = old.org_id and family_id = old.id and field = _value.field and state <> _state;
+  end loop;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_household_value_edit"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."records_is_empty"("_value" "jsonb") RETURNS boolean
     LANGUAGE "sql" IMMUTABLE
     SET "search_path" TO ''
@@ -2834,6 +3163,81 @@ $$;
 
 
 ALTER FUNCTION "public"."records_profile_member_edit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_replace_household_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_suggestions" "jsonb") RETURNS integer
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _count integer;
+begin
+  perform 1 from public.family_units f
+   where f.org_id = _org_id
+     and f.id in (
+       select t.target_family_id from public.records_household_suggestions t
+        where t.org_id = _org_id and t.connection_id = _connection_id and t.target_family_id is not null
+       union
+       select (e ->> 'target_family_id')::uuid
+         from jsonb_array_elements(coalesce(_suggestions, '[]'::jsonb)) as e
+        where e ->> 'target_family_id' is not null
+     )
+   order by f.id
+     for key share;
+  delete from public.records_household_suggestions
+   where org_id = _org_id and connection_id = _connection_id;
+  insert into public.records_household_suggestions
+    (org_id, connection_id, external_family_id, target_family_id, family_name, people, basis, ready)
+  select _org_id, _connection_id, s.external_family_id, s.target_family_id, s.family_name, s.people,
+         coalesce(s.basis, '[]'::jsonb), s.ready
+    from jsonb_to_recordset(coalesce(_suggestions, '[]'::jsonb))
+      as s(external_family_id text, target_family_id uuid, family_name text, people jsonb, basis jsonb, ready boolean)
+   where s.target_family_id is null
+      or exists (
+        select 1 from public.family_units f where f.id = s.target_family_id and f.org_id = _org_id
+           for key share
+      );
+  get diagnostics _count = row_count;
+  return _count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_replace_household_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_suggestions" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_save_children_setting"("_org_id" "uuid", "_on" boolean, "_updated_by" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _running timestamptz;
+begin
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return 'busy';
+  end if;
+
+  insert into public.records_org_settings (org_id, suggest_children, updated_by, updated_at)
+  values (_org_id, _on, _updated_by, now())
+  on conflict (org_id) do update
+    set suggest_children = excluded.suggest_children, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
+  if not _on then
+    delete from public.records_child_suggestions where org_id = _org_id and state = 'open';
+    update public.records_child_suggestions set photo = null, updated_at = now()
+     where org_id = _org_id and photo is not null;
+  end if;
+  return 'saved';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_save_children_setting"("_org_id" "uuid", "_on" boolean, "_updated_by" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") RETURNS "void"
@@ -2914,6 +3318,9 @@ begin
    where v.org_id = _org_id
      and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
 
+  delete from public.records_household_values v
+   where v.org_id = _org_id and not (_after ? v.field);
+
   update public.records_person_state set copied_at = null
    where org_id = _org_id and copied_at is not null;
   return 'saved';
@@ -2922,6 +3329,68 @@ $$;
 
 
 ALTER FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_sync_child_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_external_family_id" "text", "_children" "jsonb") RETURNS integer
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _count integer;
+begin
+  -- Locked so turning the switch off waits for these writes, and then removes them.
+  perform 1 from public.records_org_settings
+   where org_id = _org_id and suggest_children
+     for share;
+  if not found then
+    return 0;
+  end if;
+  -- Locked so the link can't end, and its suggestions with it, while they are written.
+  perform 1 from public.records_household_links
+   where org_id = _org_id and family_id = _family_id and connection_id = _connection_id
+     and external_family_id = _external_family_id
+     for share;
+  if not found then
+    return 0;
+  end if;
+
+  insert into public.records_child_suggestions
+    (org_id, family_id, external_person_id, first_name, last_name, birth_month, birth_day, graduation_year, photo)
+  select _org_id, _family_id, c.external_person_id, c.first_name, c.last_name, c.birth_month, c.birth_day,
+         c.graduation_year, c.photo
+    from jsonb_to_recordset(coalesce(_children, '[]'::jsonb)) as c(
+      external_person_id text, first_name text, last_name text,
+      birth_month smallint, birth_day smallint, graduation_year smallint, photo text
+    )
+  on conflict (org_id, family_id, external_person_id) do update
+    set first_name = excluded.first_name,
+        last_name = excluded.last_name,
+        birth_month = excluded.birth_month,
+        birth_day = excluded.birth_day,
+        graduation_year = excluded.graduation_year,
+        photo = excluded.photo,
+        updated_at = now()
+    where public.records_child_suggestions.state = 'open'
+      and (public.records_child_suggestions.first_name, public.records_child_suggestions.last_name,
+           public.records_child_suggestions.birth_month, public.records_child_suggestions.birth_day,
+           public.records_child_suggestions.graduation_year, public.records_child_suggestions.photo)
+          is distinct from
+          (excluded.first_name, excluded.last_name, excluded.birth_month, excluded.birth_day,
+           excluded.graduation_year, excluded.photo);
+  get diagnostics _count = row_count;
+
+  delete from public.records_child_suggestions s
+   where s.org_id = _org_id and s.family_id = _family_id and s.state = 'open'
+     and not exists (
+       select 1 from jsonb_array_elements(coalesce(_children, '[]'::jsonb)) as c
+        where c ->> 'external_person_id' = s.external_person_id
+     );
+  return _count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_sync_child_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_external_family_id" "text", "_children" "jsonb") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) RETURNS "text"
@@ -6015,6 +6484,45 @@ SELECT
 ALTER VIEW "public"."profiles_directory" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."records_child_suggestions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "family_id" "uuid" NOT NULL,
+    "external_person_id" "text" NOT NULL,
+    "state" "text" DEFAULT 'open'::"text" NOT NULL,
+    "first_name" "text",
+    "last_name" "text",
+    "birth_month" smallint,
+    "birth_day" smallint,
+    "graduation_year" smallint,
+    "photo" "text",
+    "family_member_id" "uuid",
+    "decided_by" "uuid",
+    "decided_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_child_suggestions_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
+    CONSTRAINT "records_child_suggestions_birthday_check" CHECK ((("birth_month" IS NULL) = ("birth_day" IS NULL))),
+    CONSTRAINT "records_child_suggestions_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= (ARRAY[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])["birth_month"]))),
+    CONSTRAINT "records_child_suggestions_decided_check" CHECK ((("state" = 'open'::"text") OR (("first_name" IS NULL) AND ("last_name" IS NULL) AND ("birth_month" IS NULL) AND ("birth_day" IS NULL) AND ("graduation_year" IS NULL)))),
+    CONSTRAINT "records_child_suggestions_dismissed_check" CHECK ((("state" <> 'dismissed'::"text") OR ("photo" IS NULL))),
+    CONSTRAINT "records_child_suggestions_external_person_id_check" CHECK ((("char_length"("external_person_id") >= 1) AND ("char_length"("external_person_id") <= 100))),
+    CONSTRAINT "records_child_suggestions_first_name_check" CHECK ((("char_length"("first_name") >= 1) AND ("char_length"("first_name") <= 100))),
+    CONSTRAINT "records_child_suggestions_graduation_year_check" CHECK ((("graduation_year" >= 2000) AND ("graduation_year" <= 2100))),
+    CONSTRAINT "records_child_suggestions_last_name_check" CHECK ((("char_length"("last_name") >= 1) AND ("char_length"("last_name") <= 100))),
+    CONSTRAINT "records_child_suggestions_open_check" CHECK ((("state" <> 'open'::"text") OR (("first_name" IS NOT NULL) AND ("last_name" IS NOT NULL)))),
+    CONSTRAINT "records_child_suggestions_photo_check" CHECK ((("char_length"("photo") >= 1) AND ("char_length"("photo") <= 100))),
+    CONSTRAINT "records_child_suggestions_state_check" CHECK (("state" = ANY (ARRAY['open'::"text", 'added'::"text", 'dismissed'::"text"])))
+);
+
+
+ALTER TABLE "public"."records_child_suggestions" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_child_suggestions" IS 'Children of a linked household''s family, suggested to the household''s primary and spouse while the church''s children switch is on, and the household''s decision on each. Never holds a birth year. Members read their own household''s open suggestions and decide through records_add_suggested_child() and records_dismiss_suggested_child().';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."records_connections" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "provider" "text" NOT NULL,
@@ -6043,7 +6551,7 @@ CREATE TABLE IF NOT EXISTS "public"."records_field_settings" (
     "mode" "text" NOT NULL,
     "updated_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "records_field_settings_field_check" CHECK (("field" = ANY (ARRAY['name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'phone_mobile'::"text", 'phone_work'::"text", 'birthday'::"text", 'anniversary'::"text", 'photo'::"text", 'grade'::"text"]))),
+    CONSTRAINT "records_field_settings_field_check" CHECK (("field" = ANY (ARRAY['name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'phone_mobile'::"text", 'phone_work'::"text", 'birthday'::"text", 'anniversary'::"text", 'photo'::"text", 'grade'::"text", 'address'::"text", 'phone_home'::"text"]))),
     CONSTRAINT "records_field_settings_lockable" CHECK ((("mode" = 'member'::"text") OR ("field" = ANY (ARRAY['name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'grade'::"text"])))),
     CONSTRAINT "records_field_settings_mode_check" CHECK (("mode" = ANY (ARRAY['locked'::"text", 'member'::"text"])))
 );
@@ -6073,6 +6581,85 @@ ALTER TABLE "public"."records_field_values" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."records_field_values" IS 'Per linked person and field: whether the value came from the church''s records or the member changed or cleared it, and the church''s last value. A person reads their own rows and a church admin every row; only the service key and the member-edit triggers write it. Goes with the link.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_household_links" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "family_id" "uuid" NOT NULL,
+    "connection_id" "uuid" NOT NULL,
+    "external_family_id" "text" NOT NULL,
+    "confirmed_by" "uuid",
+    "confirmed_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_household_links_external_family_id_check" CHECK ((("char_length"("external_family_id") >= 1) AND ("char_length"("external_family_id") <= 100)))
+);
+
+
+ALTER TABLE "public"."records_household_links" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_household_links" IS 'A household a church admin confirmed as one family in the church''s records. Service key only; goes with the connection.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_household_suggestions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "connection_id" "uuid" NOT NULL,
+    "external_family_id" "text" NOT NULL,
+    "target_family_id" "uuid",
+    "family_name" "text",
+    "people" "jsonb" NOT NULL,
+    "basis" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
+    "ready" boolean NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_household_suggestions_basis_check" CHECK (("jsonb_typeof"("basis") = 'array'::"text")),
+    CONSTRAINT "records_household_suggestions_external_family_id_check" CHECK ((("char_length"("external_family_id") >= 1) AND ("char_length"("external_family_id") <= 100))),
+    CONSTRAINT "records_household_suggestions_family_name_check" CHECK ((("char_length"("family_name") >= 1) AND ("char_length"("family_name") <= 200))),
+    CONSTRAINT "records_household_suggestions_people_check" CHECK (("jsonb_typeof"("people") = 'array'::"text")),
+    CONSTRAINT "records_household_suggestions_target_check" CHECK ((("target_family_id" IS NULL) = ("family_name" IS NOT NULL)))
+);
+
+
+ALTER TABLE "public"."records_household_suggestions" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_household_suggestions" IS 'The church records refresh''s household groupings for the church admin to confirm. Service key only; goes with the connection.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_household_values" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "family_id" "uuid" NOT NULL,
+    "field" "text" NOT NULL,
+    "state" "text" NOT NULL,
+    "church_value" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_household_values_church_value_check" CHECK (("jsonb_typeof"("church_value") = 'object'::"text")),
+    CONSTRAINT "records_household_values_field_check" CHECK (("field" = ANY (ARRAY['address'::"text", 'phone_home'::"text"]))),
+    CONSTRAINT "records_household_values_state_check" CHECK (("state" = ANY (ARRAY['records'::"text", 'changed'::"text", 'cleared'::"text"])))
+);
+
+
+ALTER TABLE "public"."records_household_values" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_household_values" IS 'Per linked household: whether its address and home phone came from the church''s records or the household changed or cleared them, and the church''s last value. Read by the household''s members and church admins; written only by the service key and records_household_value_edit(). Goes with the household''s link.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_org_settings" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "suggest_children" boolean DEFAULT false NOT NULL,
+    "updated_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."records_org_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_org_settings" IS 'A church''s church-records switches: whether children in a linked household''s family are suggested to its adults. Off by default. Members read it; only the service key writes it, through records_save_children_setting().';
 
 
 
@@ -7065,6 +7652,21 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_id_org_id_key" UNIQUE ("id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_org_id_family_id_external_person__key" UNIQUE ("org_id", "family_id", "external_person_id");
+
+
+
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."records_connections"
     ADD CONSTRAINT "records_connections_connection_key" UNIQUE ("org_id", "connection_id");
 
@@ -7082,6 +7684,41 @@ ALTER TABLE ONLY "public"."records_field_settings"
 
 ALTER TABLE ONLY "public"."records_field_values"
     ADD CONSTRAINT "records_field_values_pkey" PRIMARY KEY ("org_id", "profile_id", "field");
+
+
+
+ALTER TABLE ONLY "public"."records_household_links"
+    ADD CONSTRAINT "records_household_links_org_id_connection_id_external_famil_key" UNIQUE ("org_id", "connection_id", "external_family_id");
+
+
+
+ALTER TABLE ONLY "public"."records_household_links"
+    ADD CONSTRAINT "records_household_links_pkey" PRIMARY KEY ("org_id", "family_id");
+
+
+
+ALTER TABLE ONLY "public"."records_household_suggestions"
+    ADD CONSTRAINT "records_household_suggestions_id_org_id_key" UNIQUE ("id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."records_household_suggestions"
+    ADD CONSTRAINT "records_household_suggestions_org_id_connection_id_external_key" UNIQUE ("org_id", "connection_id", "external_family_id");
+
+
+
+ALTER TABLE ONLY "public"."records_household_suggestions"
+    ADD CONSTRAINT "records_household_suggestions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."records_household_values"
+    ADD CONSTRAINT "records_household_values_pkey" PRIMARY KEY ("org_id", "family_id", "field");
+
+
+
+ALTER TABLE ONLY "public"."records_org_settings"
+    ADD CONSTRAINT "records_org_settings_pkey" PRIMARY KEY ("org_id");
 
 
 
@@ -7605,6 +8242,18 @@ CREATE INDEX "profiles_org_id_last_first_idx" ON "public"."profiles" USING "btre
 
 
 
+CREATE INDEX "records_child_suggestions_decided_by_idx" ON "public"."records_child_suggestions" USING "btree" ("decided_by") WHERE ("decided_by" IS NOT NULL);
+
+
+
+CREATE INDEX "records_child_suggestions_family_id_idx" ON "public"."records_child_suggestions" USING "btree" ("family_id");
+
+
+
+CREATE INDEX "records_child_suggestions_family_member_id_idx" ON "public"."records_child_suggestions" USING "btree" ("family_member_id") WHERE ("family_member_id" IS NOT NULL);
+
+
+
 CREATE INDEX "records_connections_connected_by_idx" ON "public"."records_connections" USING "btree" ("connected_by") WHERE ("connected_by" IS NOT NULL);
 
 
@@ -7614,6 +8263,26 @@ CREATE INDEX "records_field_settings_updated_by_idx" ON "public"."records_field_
 
 
 CREATE INDEX "records_field_values_profile_id_idx" ON "public"."records_field_values" USING "btree" ("profile_id");
+
+
+
+CREATE INDEX "records_household_links_confirmed_by_idx" ON "public"."records_household_links" USING "btree" ("confirmed_by") WHERE ("confirmed_by" IS NOT NULL);
+
+
+
+CREATE INDEX "records_household_links_family_id_idx" ON "public"."records_household_links" USING "btree" ("family_id");
+
+
+
+CREATE INDEX "records_household_suggestions_target_family_id_idx" ON "public"."records_household_suggestions" USING "btree" ("target_family_id") WHERE ("target_family_id" IS NOT NULL);
+
+
+
+CREATE INDEX "records_household_values_family_id_idx" ON "public"."records_household_values" USING "btree" ("family_id");
+
+
+
+CREATE INDEX "records_org_settings_updated_by_idx" ON "public"."records_org_settings" USING "btree" ("updated_by") WHERE ("updated_by" IS NOT NULL);
 
 
 
@@ -7976,6 +8645,10 @@ CREATE OR REPLACE TRIGGER "records_grade_member_edit" BEFORE UPDATE OF "graduati
 
 
 CREATE OR REPLACE TRIGGER "records_household_member_edit" BEFORE UPDATE OF "anniversary_month", "anniversary_day", "anniversary_year" ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."records_household_member_edit"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_household_value_edit" BEFORE UPDATE OF "address_line1", "address_line2", "city", "state", "postal_code", "phone_home", "phone_profile_id" ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."records_household_value_edit"();
 
 
 
@@ -8583,6 +9256,21 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_decided_by_fkey" FOREIGN KEY ("decided_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("decided_by");
+
+
+
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_link_fkey" FOREIGN KEY ("org_id", "family_id") REFERENCES "public"."records_household_links"("org_id", "family_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_child_suggestions"
+    ADD CONSTRAINT "records_child_suggestions_member_fkey" FOREIGN KEY ("family_member_id", "org_id") REFERENCES "public"."family_members"("id", "org_id") ON DELETE SET NULL ("family_member_id");
+
+
+
 ALTER TABLE ONLY "public"."records_connections"
     ADD CONSTRAINT "records_connections_connected_by_fkey" FOREIGN KEY ("connected_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("connected_by");
 
@@ -8605,6 +9293,46 @@ ALTER TABLE ONLY "public"."records_field_settings"
 
 ALTER TABLE ONLY "public"."records_field_values"
     ADD CONSTRAINT "records_field_values_link_fkey" FOREIGN KEY ("org_id", "profile_id") REFERENCES "public"."records_person_links"("org_id", "profile_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_household_links"
+    ADD CONSTRAINT "records_household_links_confirmed_by_fkey" FOREIGN KEY ("confirmed_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("confirmed_by");
+
+
+
+ALTER TABLE ONLY "public"."records_household_links"
+    ADD CONSTRAINT "records_household_links_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_household_links"
+    ADD CONSTRAINT "records_household_links_family_fkey" FOREIGN KEY ("family_id", "org_id") REFERENCES "public"."family_units"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_household_suggestions"
+    ADD CONSTRAINT "records_household_suggestions_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_household_suggestions"
+    ADD CONSTRAINT "records_household_suggestions_target_fkey" FOREIGN KEY ("target_family_id", "org_id") REFERENCES "public"."family_units"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_household_values"
+    ADD CONSTRAINT "records_household_values_link_fkey" FOREIGN KEY ("org_id", "family_id") REFERENCES "public"."records_household_links"("org_id", "family_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_org_settings"
+    ADD CONSTRAINT "records_org_settings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_org_settings"
+    ADD CONSTRAINT "records_org_settings_updated_by_fkey" FOREIGN KEY ("updated_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("updated_by");
 
 
 
@@ -9058,6 +9786,12 @@ ALTER TABLE ONLY "public"."usage_counts"
 
 
 
+CREATE POLICY "A household's adults read its suggested children" ON "public"."records_child_suggestions" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("state" = 'open'::"text") AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_household_manager"() AS "is_household_manager") AND (EXISTS ( SELECT 1
+   FROM "public"."records_org_settings" "s"
+  WHERE (("s"."org_id" = "records_child_suggestions"."org_id") AND "s"."suggest_children")))));
+
+
+
 CREATE POLICY "A person keeps their own feed link" ON "public"."supper_feed_tokens" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid"))));
 
 
@@ -9384,6 +10118,10 @@ CREATE POLICY "Host or leaders set contributions" ON "public"."supper_contributi
 
 
 
+CREATE POLICY "Household members read their household's value sources" ON "public"."records_household_values" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")))));
+
+
+
 CREATE POLICY "Leaders add rotation dates" ON "public"."supper_rotation_dates" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
 
 
@@ -9597,6 +10335,10 @@ CREATE POLICY "Members read rotations" ON "public"."supper_rotations" FOR SELECT
 
 
 CREATE POLICY "Members read the church's field settings" ON "public"."records_field_settings" FOR SELECT TO "authenticated" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "Members read the church's records settings" ON "public"."records_org_settings" FOR SELECT TO "authenticated" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -9950,6 +10692,10 @@ CREATE POLICY "org isolation" ON "public"."profiles" AS RESTRICTIVE TO "authenti
 
 
 
+CREATE POLICY "org isolation" ON "public"."records_child_suggestions" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."records_connections" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -9959,6 +10705,22 @@ CREATE POLICY "org isolation" ON "public"."records_field_settings" AS RESTRICTIV
 
 
 CREATE POLICY "org isolation" ON "public"."records_field_values" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_household_links" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_household_suggestions" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_household_values" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_org_settings" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -10119,6 +10881,9 @@ ALTER TABLE "public"."prayer_responses" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."records_child_suggestions" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."records_connections" ENABLE ROW LEVEL SECURITY;
 
 
@@ -10126,6 +10891,18 @@ ALTER TABLE "public"."records_field_settings" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."records_field_values" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_household_links" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_household_suggestions" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_household_values" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_org_settings" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."records_person_links" ENABLE ROW LEVEL SECURITY;
@@ -10566,8 +11343,30 @@ GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_
 
 
 
+REVOKE ALL ON FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."records_add_suggested_child"("_suggestion_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_apply_household_copy"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_expected" "jsonb", "_household" "jsonb", "_values" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_apply_household_copy"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_expected" "jsonb", "_household" "jsonb", "_values" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_confirm_household"("_org_id" "uuid", "_suggestion_id" "uuid", "_confirmed_by" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_confirm_household"("_org_id" "uuid", "_suggestion_id" "uuid", "_confirmed_by" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."records_dismiss_suggested_child"("_suggestion_id" "uuid") TO "service_role";
 
 
 
@@ -10591,6 +11390,11 @@ GRANT ALL ON FUNCTION "public"."records_household_member_edit"() TO "service_rol
 
 
 
+REVOKE ALL ON FUNCTION "public"."records_household_value_edit"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_household_value_edit"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."records_is_empty"("_value" "jsonb") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_is_empty"("_value" "jsonb") TO "service_role";
 
@@ -10606,6 +11410,16 @@ GRANT ALL ON FUNCTION "public"."records_profile_member_edit"() TO "service_role"
 
 
 
+REVOKE ALL ON FUNCTION "public"."records_replace_household_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_suggestions" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_replace_household_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_suggestions" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_save_children_setting"("_org_id" "uuid", "_on" boolean, "_updated_by" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_save_children_setting"("_org_id" "uuid", "_on" boolean, "_updated_by" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") TO "service_role";
 
@@ -10613,6 +11427,11 @@ GRANT ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_pro
 
 REVOKE ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_sync_child_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_external_family_id" "text", "_children" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_sync_child_suggestions"("_org_id" "uuid", "_connection_id" "uuid", "_family_id" "uuid", "_external_family_id" "text", "_children" "jsonb") TO "service_role";
 
 
 
@@ -11385,6 +12204,50 @@ GRANT ALL ON TABLE "public"."profiles_directory" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."records_child_suggestions" TO "service_role";
+
+
+
+GRANT SELECT("id") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("org_id") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("family_id") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("state") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("first_name") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("last_name") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("birth_month") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("birth_day") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("graduation_year") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
+GRANT SELECT("created_at") ON TABLE "public"."records_child_suggestions" TO "authenticated";
+
+
+
 GRANT ALL ON TABLE "public"."records_connections" TO "service_role";
 
 
@@ -11396,6 +12259,50 @@ GRANT SELECT ON TABLE "public"."records_field_settings" TO "authenticated";
 
 GRANT ALL ON TABLE "public"."records_field_values" TO "service_role";
 GRANT SELECT ON TABLE "public"."records_field_values" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."records_household_links" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_household_suggestions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_household_values" TO "service_role";
+
+
+
+GRANT SELECT("org_id") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT SELECT("family_id") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT SELECT("field") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT SELECT("state") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT SELECT("church_value") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."records_org_settings" TO "service_role";
+
+
+
+GRANT SELECT("org_id") ON TABLE "public"."records_org_settings" TO "authenticated";
+
+
+
+GRANT SELECT("suggest_children") ON TABLE "public"."records_org_settings" TO "authenticated";
 
 
 
