@@ -121,6 +121,14 @@ test.describe("a member, in a church that shows details live", () => {
     await expect(list.getByText(PERSONAS.householdPrimary.name)).toBeVisible();
     await expect(list.getByText(PERSONAS.oneGroup.name)).toHaveCount(0);
   });
+
+  test("when two42 can't load the details either, says so rather than showing none", async ({ page }) => {
+    await page.route("**/api/directory/live", (route) => route.fulfill({ status: 500, json: { error: "x" } }));
+    await page.goto(`/directory?person=${isaacId}`);
+    await expect(page.getByText("Details from your church's records: Not available right now")).toBeVisible();
+    await page.getByRole("link", { name: "Birthdays" }).click();
+    await expect(page.getByText("Birthdays from your church's records: Not available right now")).toBeVisible();
+  });
 });
 
 test.describe("a church admin switching from copy to live", () => {
