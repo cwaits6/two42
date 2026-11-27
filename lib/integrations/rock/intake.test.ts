@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { RecordsError } from "@/lib/integrations/records/errors";
+import { ROCK_REST_PATHS } from "@/supabase/functions/_shared/rock-client";
 import { ROCK_INTAKE_ATTRIBUTES, rockIntake } from "./intake";
 
 const creds = { baseUrl: "https://rock.example.org", key: "write-key-1234" };
@@ -145,6 +146,7 @@ describe("the setup docs", () => {
   ])("%s name the attribute keys and REST controllers two42 uses", (path, quote) => {
     const text = readFileSync(path, "utf8").replace(/\s+/g, " ");
     expect(text).toContain(list(quote));
-    for (const controller of ["WorkflowEntry", "Workflows", "WorkflowTypes"]) expect(text).toContain(controller);
+    const read = ROCK_REST_PATHS.map((path) => path.replace("/api/", ""));
+    for (const controller of [...read, "WorkflowEntry", "Workflows", "WorkflowTypes"]) expect(text).toContain(controller);
   });
 });

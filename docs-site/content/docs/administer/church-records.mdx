@@ -9,6 +9,9 @@ sources:
   - "lib/integrations/records/crypto.ts"
   - "lib/integrations/records/http.ts"
   - "lib/integrations/records/intake.ts"
+  - "lib/integrations/records/labels.ts"
+  - "lib/integrations/records/live.ts"
+  - "lib/integrations/records/livePlan.ts"
   - "lib/integrations/records/match.ts"
   - "lib/integrations/records/refresh.ts"
   - "lib/integrations/records/settings.ts"
@@ -16,6 +19,7 @@ sources:
   - "lib/integrations/rock/**"
   - "supabase/functions/_shared/records-copy.ts"
   - "supabase/functions/_shared/records-households.ts"
+  - "supabase/functions/_shared/records-refresh.ts"
   - "supabase/functions/_shared/rock-client.ts"
   - "supabase/functions/_shared/rock-copy.ts"
   - "supabase/functions/_shared/rock-households.ts"
@@ -139,14 +143,14 @@ None of these changes anyone's details in two42. What was copied stays in each p
 | | Read from your records | Stored in two42 |
 |---|---|---|
 | Connect | The id of one row of each kind it reads, to prove the key can read them | Which church software, its address, the key sealed with the operator's secret, its last four characters, who connected and when |
-| Suggest and link | People with the last names of people in two42: their id, names, email, birthday, and whether they can be linked | For each link: the person's id in your records, who linked them and when |
-| Refresh | Names, nick name, title, suffix, gender, birthday, anniversary, grade, photo and listed mobile and work phones of linked people; whether each is still active | The copied details you turned on, where each came from and your church's last value; who needs review |
+| Suggest and link | People with the last names of people in two42: their id, names, email, birthday with the year, and whether they can be linked | For each link: the person's id in your records, who linked them and when |
+| Refresh | Names, nick name, title, suffix, gender, birthday with the year, anniversary, grade, photo and listed mobile and work phones of linked people; whether each is still active | The copied details you turned on, where each came from and your church's last value; who needs review |
 | Households | Each linked person's family, who is in it, the family's home address and the adults' listed home phone | The suggestions, which household is linked to which family, and the household's copied address and home phone |
 | Suggest children | Each child's first and last name, birthday without the year, grade and photo | Open suggestions with those details; for a child added or dismissed, only the decision |
-| Live mode | For the people someone opens in the directory: birthday, anniversary, grade and the household's address | Nothing |
+| Live mode | For the people someone opens in the directory: birthday without the year, anniversary, grade and the household's address | Nothing |
 | Send new people | Workflow types, and the chosen one, to check it | The write key, sealed, its last four characters, where new people go, and for each person whether and when they were sent, never their details |
 
-What is read to suggest or link is kept only while answering that request. Unlisted phone numbers are dropped as they are read. A person's email in your records is used only to match them, never copied. two42 never reads a birth year, and never logs anything it read from your records.
+What is read to suggest or link is kept only while answering that request. Unlisted phone numbers are dropped as they are read. A person's email in your records is used only to match them, never copied. A birth year is read only to suggest, link and refresh. When the church copies into two42 and **Birthday** is taken from your records, the refresh stores the year with the birthday. Live details and suggested children never read it. two42 never logs anything it read from your records.
 
 ## Rock RMS
 
