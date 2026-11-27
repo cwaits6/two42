@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(54);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -89,33 +89,38 @@ $$;
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 -- Henry (primary) and Chloe (spouse) share the Mockingham household, linked
--- to family F1; Isaac is the primary of the Seedly household, which isn't
--- linked. Ruth isn't linked at all.
+-- to family F1; Isaac is the primary of the Seedly household, linked to F2,
+-- and Ruth joins it as his spouse. Mia and her household aren't linked at all.
 insert into fx select 'org', org_id from public.profiles where email = 'admin@local.dev';
 insert into fx values ('admin', pg_temp.uid('admin@local.dev'));
 insert into fx values ('henry', pg_temp.uid('henry.mockingham@example.test'));
 insert into fx values ('chloe', pg_temp.uid('chloe.mockingham@example.test'));
 insert into fx values ('isaac', pg_temp.uid('isaac.seedly@example.test'));
 insert into fx values ('ruth', pg_temp.uid('ruth.fixtureton@example.test'));
+insert into fx values ('mia', pg_temp.uid('mia.fakeworth@example.test'));
 insert into fx select 'home', family_id from public.profiles where email = 'henry.mockingham@example.test';
 insert into fx select 'seedly', family_id from public.profiles where email = 'isaac.seedly@example.test';
 
 select is(
   (select array_agg(p.email || ':' || p.relationship || ':' || coalesce((p.family_id = pg_temp.fx('home'))::text, 'none') order by p.email)
      from public.profiles p
-    where p.email in ('henry.mockingham@example.test', 'chloe.mockingham@example.test', 'isaac.seedly@example.test')),
+    where p.email in ('henry.mockingham@example.test', 'chloe.mockingham@example.test', 'isaac.seedly@example.test',
+                      'mia.fakeworth@example.test')),
   array['chloe.mockingham@example.test:spouse:true', 'henry.mockingham@example.test:primary:true',
-        'isaac.seedly@example.test:primary:false'],
-  'non-vacuity: a household''s primary and spouse, and the primary of another');
+        'isaac.seedly@example.test:primary:false', 'mia.fakeworth@example.test:primary:false'],
+  'non-vacuity: a household''s primary and spouse, the primary of another, and someone else');
+
+update public.profiles set family_id = pg_temp.fx('seedly'), relationship = 'spouse' where id = pg_temp.fx('ruth');
 
 insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
   values (pg_temp.fx('org'), 'rock', 'https://rock.example.org', 'k1.kid.iv.sealed', '9012', pg_temp.fx('admin'));
 insert into fx select 'connection', connection_id from public.records_connections where org_id = pg_temp.fx('org');
 insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id)
   select pg_temp.fx('org'), pg_temp.fx('connection'), l.profile_id, l.person
-    from (values (pg_temp.fx('henry'), '100'), (pg_temp.fx('chloe'), '101'), (pg_temp.fx('isaac'), '102')) l(profile_id, person);
+    from (values (pg_temp.fx('henry'), '100'), (pg_temp.fx('chloe'), '101'), (pg_temp.fx('isaac'), '102'), (pg_temp.fx('ruth'), '103')) l(profile_id, person);
 insert into public.records_household_links (org_id, family_id, connection_id, external_family_id, confirmed_by)
-  values (pg_temp.fx('org'), pg_temp.fx('home'), pg_temp.fx('connection'), 'F1', pg_temp.fx('admin'));
+  values (pg_temp.fx('org'), pg_temp.fx('home'), pg_temp.fx('connection'), 'F1', pg_temp.fx('admin')),
+         (pg_temp.fx('org'), pg_temp.fx('seedly'), pg_temp.fx('connection'), 'F2', pg_temp.fx('admin'));
 insert into public.records_field_settings (org_id, field, mode)
   select pg_temp.fx('org'), f, 'member' from unnest(array['birthday', 'anniversary', 'address', 'phone_mobile']) f;
 insert into public.records_field_settings (org_id, field, mode) values (pg_temp.fx('org'), 'grade', 'locked');
@@ -123,7 +128,10 @@ insert into public.records_field_settings (org_id, field, mode) values (pg_temp.
 -- What a copy left: Henry's birthday, the household's anniversary (both
 -- spouses' sources) and address, and Isaac's grade on his own household
 -- member row, all still the church's; Isaac's birthday, which he changed;
--- Henry's mobile, which live mode keeps; and an open suggested child.
+-- Henry's mobile, which live mode keeps; and an open suggested child. And
+-- what a member made their own, which Copy -> Live keeps: Chloe's grade, the
+-- Seedly household's address, and its anniversary, which Isaac changed while
+-- Ruth's source for it is still the church's.
 update public.profiles set birth_month = 1, birth_day = 2, birth_year = 1980, phone_mobile = '+15125550100'
  where id = pg_temp.fx('henry');
 update public.profiles set birth_month = 5, birth_day = 5, birth_year = null where id = pg_temp.fx('isaac');
@@ -133,16 +141,27 @@ update public.family_units set anniversary_month = 6, anniversary_day = 9, anniv
 insert into public.family_members (org_id, family_id, first_name, last_name, relationship, claimed_profile_id, graduation_year)
   values (pg_temp.fx('org'), pg_temp.fx('seedly'), 'Isaac', 'Seedly', 'primary', pg_temp.fx('isaac'), 2030);
 insert into fx select 'isaac_row', id from public.family_members where claimed_profile_id = pg_temp.fx('isaac') order by id limit 1;
+insert into public.family_members (org_id, family_id, first_name, last_name, relationship, claimed_profile_id, graduation_year)
+  values (pg_temp.fx('org'), pg_temp.fx('home'), 'Chloe', 'Mockingham', 'spouse', pg_temp.fx('chloe'), 2031);
+insert into fx select 'chloe_row', id from public.family_members where claimed_profile_id = pg_temp.fx('chloe') order by id limit 1;
+update public.family_units set anniversary_month = 8, anniversary_day = 11, anniversary_year = 2018,
+       address_line1 = '707 Example Place', city = 'Springfield', state = 'IL', postal_code = '62704'
+ where id = pg_temp.fx('seedly');
 insert into public.records_field_values (org_id, profile_id, field, state, church_value) values
   (pg_temp.fx('org'), pg_temp.fx('henry'), 'birthday', 'records', '{"birth_month": 1, "birth_day": 2, "birth_year": 1980}'),
   (pg_temp.fx('org'), pg_temp.fx('henry'), 'anniversary', 'records', '{"anniversary_month": 6, "anniversary_day": 9, "anniversary_year": 2001}'),
   (pg_temp.fx('org'), pg_temp.fx('chloe'), 'anniversary', 'records', '{"anniversary_month": 6, "anniversary_day": 9, "anniversary_year": 2001}'),
   (pg_temp.fx('org'), pg_temp.fx('henry'), 'phone_mobile', 'records', '{"phone_mobile": "+15125550100"}'),
   (pg_temp.fx('org'), pg_temp.fx('isaac'), 'birthday', 'changed', '{"birth_month": 7, "birth_day": 7, "birth_year": null}'),
-  (pg_temp.fx('org'), pg_temp.fx('isaac'), 'grade', 'records', '{"graduation_year": 2030}');
+  (pg_temp.fx('org'), pg_temp.fx('isaac'), 'grade', 'records', '{"graduation_year": 2030}'),
+  (pg_temp.fx('org'), pg_temp.fx('chloe'), 'grade', 'changed', '{"graduation_year": 2029}'),
+  (pg_temp.fx('org'), pg_temp.fx('isaac'), 'anniversary', 'changed', '{"anniversary_month": 8, "anniversary_day": 12, "anniversary_year": 2018}'),
+  (pg_temp.fx('org'), pg_temp.fx('ruth'), 'anniversary', 'records', '{"anniversary_month": 8, "anniversary_day": 12, "anniversary_year": 2018}');
 insert into public.records_household_values (org_id, family_id, field, state, church_value) values
   (pg_temp.fx('org'), pg_temp.fx('home'), 'address', 'records',
-   '{"address_line1": "12 Oak St", "address_line2": null, "city": "Austin", "state": "TX", "postal_code": "78701"}');
+   '{"address_line1": "12 Oak St", "address_line2": null, "city": "Austin", "state": "TX", "postal_code": "78701"}'),
+  (pg_temp.fx('org'), pg_temp.fx('seedly'), 'address', 'changed',
+   '{"address_line1": "9 Elm St", "address_line2": null, "city": "Springfield", "state": "IL", "postal_code": "62704"}');
 insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name, birth_month, birth_day, graduation_year)
   values (pg_temp.fx('org'), pg_temp.fx('home'), '200', 'Lily', 'Mockingham', 3, 3, 2034);
 insert into public.records_person_state (org_id, profile_id, copied_at)
@@ -234,6 +253,21 @@ select is((select phone_mobile from public.profiles where id = pg_temp.fx('henry
   'and what live mode keeps from the records stays, with its source');
 select is((select state from public.records_field_values where profile_id = pg_temp.fx('henry') and field = 'phone_mobile'),
   'records', 'still following the records');
+select is((select array[anniversary_month, anniversary_day, anniversary_year] from public.family_units where id = pg_temp.fx('seedly')),
+  array[8, 11, 2018]::smallint[], 'an anniversary one of the couple changed stays the household''s');
+select is(
+  (select state || ':' || church_value::text from public.records_field_values where profile_id = pg_temp.fx('isaac') and field = 'anniversary'),
+  'changed:{}', 'with the church''s value forgotten');
+select is((select address_line1 || ', ' || city || ' ' || state || ' ' || postal_code from public.family_units where id = pg_temp.fx('seedly')),
+  '707 Example Place, Springfield IL 62704', 'an address the household changed stays');
+select is(
+  (select state || ':' || church_value::text from public.records_household_values where family_id = pg_temp.fx('seedly') and field = 'address'),
+  'changed:{}', 'with the church''s value forgotten');
+select is((select graduation_year from public.family_members where id = pg_temp.fx('chloe_row')), 2031::smallint,
+  'and so does a grade the member changed');
+select is(
+  (select state || ':' || church_value::text from public.records_field_values where profile_id = pg_temp.fx('chloe') and field = 'grade'),
+  'changed:{}', 'still theirs');
 select is(pg_temp.live_details_stored(pg_temp.fx('org')), 0,
   'the promise: no address, birthday, anniversary or grade from the records is stored');
 
@@ -288,9 +322,9 @@ select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.reco
   'rows:1', 'its primary hides its address');
 select is((select state from public.records_household_values where family_id = pg_temp.fx('home') and field = 'address'),
   'cleared', 'as the household''s clear');
-select is(pg_temp.attempt('isaac.seedly@example.test', $q$select public.records_live_hide('address', true)$q$),
+select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('address', true)$q$),
   'RC001', 'a household not linked to the records has no address to hide');
-select is(pg_temp.attempt('ruth.fixtureton@example.test', $q$select public.records_live_hide('birthday', true)$q$),
+select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('birthday', true)$q$),
   'RC001', 'nor does someone not linked have a birthday to hide');
 select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.records_live_hide('grade', true)$q$),
   'RC001', 'and a grade isn''t a member''s to hide');
