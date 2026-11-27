@@ -278,7 +278,8 @@ the records secret** on the docs site's **Environment variables** page.
      progress, and stops at the first batch the server refuses.
    - **Check first:** only the name agrees, or there's more than one possible
      match. Each is linked by hand; a profile with several possible matches
-     shows them all to choose from.
+     shows them all to choose from, each with its person id in the records,
+     so two records with the same name can be told apart.
    - **No match found:** usually not in the records yet, or spelled
      differently.
 3. **Unlink** a person, **change the key**, or **disconnect**. Disconnecting
@@ -835,6 +836,15 @@ To set it up in Rock:
    or **Administrate**.
 3. Under Admin Tools › Settings › REST Keys, add a key, active, on a new user
    for two42 alone, and add that user to the role.
+4. Clear Rock's cache under Admin › System Information › Clear Cache. Rock
+   applies role and permission changes only after its cache is cleared.
+
+Rock refuses a key without a controller's permission with 401, the same as a
+wrong key, so connecting tries every controller. A key refused by only some is
+told which, such as "The key's role can't view Groups. Add View on Groups to
+its role."; a key refused by all is told Rock didn't accept it. The provider
+names the controllers on `RecordsError.missing`, and the shared message only
+lists them.
 
 On Rock's public demo, a key whose user had no role was refused with 401, and
 adding the user to **RSR - Staff Workers** was enough. That role grants far
@@ -862,16 +872,17 @@ The write key needs exactly these, from the requests in
 
 | # | Permission | Used for | Requests |
 |---|---|---|---|
-| W1 | REST Controllers › **Workflows** › the action `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`: **Edit** | Starting the workflow for a new person | `POST /api/Workflows/WorkflowEntry/<id>?FirstName=…&LastName=…&Email=…&Phone=…`, no body; and at save `POST /api/Workflows/WorkflowEntry/0`, which Rock refuses with 401 without W1 and otherwise answers with nothing started, since no type has id 0 |
-| W2 | REST Controllers › **WorkflowTypes**: **View** | Find workflow types, and the check at save | `GET /api/WorkflowTypes?$select=Id,Name,IsActive`, by `Id` at save |
-| W3 | The chosen **workflow type** › Security: **View** | Rock checks it before starting a workflow from REST | Rock answers 401 without it, which two42 records as a failed send and names on the page |
+| W1 | REST Controllers › **Workflows** › the action `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`: **Edit** | Sending: starting the workflow for a new person, and the check at save | `POST /api/Workflows/WorkflowEntry/<id>?FirstName=…&LastName=…&Email=…&Phone=…`, no body; and at save `POST /api/Workflows/WorkflowEntry/0`, which Rock refuses with 401 without W1 and otherwise answers with nothing started, since no type has id 0 |
+| W2 | REST Controllers › **WorkflowTypes**: **View** | Finding and saving the workflow only: Find workflow types, and the check at save. Sending doesn't use it | `GET /api/WorkflowTypes?$select=Id,Name,IsActive`, by `Id` at save |
+| W3 | The chosen **workflow type** › Security: **View** | From Rock 20.0.12 on, Rock checks it before starting a workflow from REST (`CanLaunchWorkflowType`); Rock 19.x doesn't check it | Rock answers 401 without it, which two42 records as a failed send and names on the page |
 
 Nothing else: no Edit on any other action or controller, no People or
 Person access, no Administrate. Rock checks W1 before it looks up the type,
 so saving proves W1 and W2 without starting anything. W3 is checked by Rock
 only when a workflow starts, so a key missing it saves but its first send
-fails, and the page says so. Rock versions before that check need only W1
-and W2.
+fails, and the page says so. Rock added that check in 20.0.12, so earlier
+versions, such as 19.x, need only W1 and W2. Grant W3 anyway, so sending keeps
+working after an upgrade.
 
 The values go in the request's query string, because that is where Rock reads
 them, so they can appear in the Rock server's own web logs. IIS logs the query
@@ -899,12 +910,16 @@ To set it up in Rock:
 4. Under Admin Tools › Settings › REST Keys, add a second key, active, on a
    new user for this alone, and add that user to the role. Don't reuse the
    read key's user.
-5. In two42, under Church records, **Send new people to Rock RMS**, press
+5. Clear Rock's cache under Admin › System Information › Clear Cache. Rock
+   applies role and permission changes only after its cache is cleared.
+6. In two42, under Church records, **Send new people to Rock RMS**, press
    **Turn on**, paste the key, press **Find workflow types** and choose it, or
    enter its id, and **Save**.
 
-The minimum comes from Rock's source (below). It is still to be confirmed on
-a test Rock by removing each of W1, W2 and W3 in turn.
+The minimum comes from Rock's source (below) and was checked on Rock 19.3.4
+by removing each of W1, W2 and W3 in turn; see
+[Checked against a real Rock](#checked-against-a-real-rock). W3's removal is
+still to be checked on a Rock 20.x.
 
 ### Checked against a real Rock
 
@@ -923,12 +938,27 @@ On 2026-11-21 the client and matching code ran against Rock's public demo
   only by the filter Rock accepted, not by watching one excluded. Pending people
   (status "Pending") are suggested; only Inactive is left out.
 
+On 2026-11-27 the write key was checked on the same demo (Rock 19.3.4) by
+removing each permission in turn, clearing Rock's cache after each change:
+
+- **W1 removed:** Save was refused, and a send was recorded as couldn't send.
+  The person's sign-up still completed.
+- **W2 removed:** Find workflow types and Save were refused. Sending still
+  worked.
+- **W3 removed:** not checked. Sending worked even with an explicit Deny on
+  the workflow type for the role, since 19.3.4 predates
+  `CanLaunchWorkflowType`.
+- Role and permission changes took effect only after Admin › System
+  Information › Clear Cache.
+
 The demo resets nightly and its admin login is shared, so it is for manual
 checks only, never for automated tests. Before turning this on for a church,
 connect it to that church's Rock and check a suggestion end to end.
 
 ### Still open
 
+- **W3 on Rock 20.x:** removing View on the chosen workflow type should make
+  a send fail from 20.0.12 on. Check it once a Rock 20.x is available.
 - **Family roles:** Rock's Adult and Child roles are configurable per install;
   two42 reads `AgeClassification`, which Rock works out from them, rather than
   role ids. Check its values on a real family.
