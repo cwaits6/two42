@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { logError } from "@/lib/log";
+import type { RecordsSecrets } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, intakeFailureMessage, RECORDS_KEY_SHAPE, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { loadIntakeCredentials } from "@/lib/integrations/records/intake";
@@ -12,7 +13,7 @@ import type { RecordsCredentials, RecordsIntake, RecordsProvider } from "@/lib/i
 export interface IntakeContext {
   orgId: string;
   userId: string;
-  secret: Buffer;
+  secret: RecordsSecrets;
   provider: RecordsProvider;
   intake: RecordsIntake;
   connectionId: string;

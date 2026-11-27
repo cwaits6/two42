@@ -67,7 +67,7 @@ describe("/api/admin/church-records", () => {
     expect(orgId).toBe("org-1");
     expect(row).toMatchObject({ provider: "rock", baseUrl: "https://rock.example.org", keyHint: "9012", connectedBy: "admin-1" });
     expect(row.keyCiphertext).not.toContain("AbCdEfGh");
-    expect(openKey(SECRET, "org-1", "rock", row.keyCiphertext)).toBe("AbCdEfGhIjKl9012");
+    expect(openKey({ current: SECRET, previous: null }, "org-1", "rock", row.keyCiphertext)).toBe("AbCdEfGhIjKl9012");
     expect(JSON.stringify(await res.json())).not.toContain("AbCdEfGh");
   });
 

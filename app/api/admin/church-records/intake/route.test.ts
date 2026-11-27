@@ -104,8 +104,8 @@ describe("/api/admin/church-records/intake", () => {
       expect.objectContaining({ connectionId: "c1", keyHint: "1234", destinationId: "42", destinationName: "New people", enabledBy: "admin-1" }),
     );
     expect(saved[1].keyCiphertext).not.toContain(WRITE_KEY);
-    expect(openKey(Buffer.from(secret, "base64"), "org-1", "stub-intake", saved[1].keyCiphertext)).toBe(WRITE_KEY);
-    expect(() => openKey(Buffer.from(secret, "base64"), "org-1", "stub", saved[1].keyCiphertext)).toThrow();
+    expect(openKey({ current: Buffer.from(secret, "base64"), previous: null }, "org-1", "stub-intake", saved[1].keyCiphertext)).toBe(WRITE_KEY);
+    expect(() => openKey({ current: Buffer.from(secret, "base64"), previous: null }, "org-1", "stub", saved[1].keyCiphertext)).toThrow();
     expect((await res.json()).intake).toEqual(
       expect.objectContaining({ keyHint: "1234", destination: { id: "42", name: "New people" }, sent: 0, failed: 0 }),
     );

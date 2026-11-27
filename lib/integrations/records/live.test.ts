@@ -194,7 +194,7 @@ const details = vi.hoisted(() => vi.fn());
 const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown>, selects: {} as Record<string, string> }));
 const org = vi.hoisted(() => ({ answer: { data: null as unknown, error: null as unknown } }));
 vi.mock("./store", () => store);
-vi.mock("./crypto", () => ({ loadRecordsSecret: () => Buffer.alloc(32) }));
+vi.mock("./crypto", () => ({ loadRecordsSecret: () => ({ current: Buffer.alloc(32), previous: null }) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     rpc: async () => org.answer,

@@ -10,15 +10,16 @@
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
-// org_id explicitly. Opens each church's key with RECORDS_KEY_SECRET; without
-// it the integration is off and the run does nothing, and with a value that
-// isn't a key it answers 500 so the schedule shows the fault.
+// org_id explicitly. Opens each church's key with RECORDS_KEY_SECRET (and
+// RECORDS_KEY_SECRET_PREVIOUS during a rotation); without it the integration is
+// off and the run does nothing, and with a value that isn't a key in either it
+// answers 500 so the schedule shows the fault.
 
 // Pinned exactly, in lockstep with the reminder functions and package-lock.json.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
 import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
-import { openKey, parseRecordsSecret, RECORDS_SECRET_ENV } from "../_shared/records-crypto.ts";
+import { openKey, parseRecordsSecrets, RECORDS_SECRET_ENV, RECORDS_SECRET_PREVIOUS_ENV } from "../_shared/records-crypto.ts";
 import { assertAddressGuard } from "../_shared/records-fetch.ts";
 import {
   type RecordsPhotoStorage,
@@ -54,15 +55,20 @@ function json(body: unknown, status: number) {
 }
 
 Deno.serve(serviceKeyCallerOnly(async () => {
-  const raw = Deno.env.get(RECORDS_SECRET_ENV);
-  const secret = parseRecordsSecret(raw);
-  if (!secret && raw?.trim()) {
+  const { secrets, malformed } = parseRecordsSecrets((name) => Deno.env.get(name));
+  if (malformed === RECORDS_SECRET_ENV) {
     logError("church records refresh skipped: RECORDS_KEY_SECRET is not a valid key", undefined, {
       route: "refresh-church-records",
     });
     return json({ error: "RECORDS_KEY_SECRET is not a valid key." }, 500);
   }
-  if (!secret) {
+  if (malformed === RECORDS_SECRET_PREVIOUS_ENV) {
+    logError("church records refresh skipped: RECORDS_KEY_SECRET_PREVIOUS is not a valid key", undefined, {
+      route: "refresh-church-records",
+    });
+    return json({ error: "RECORDS_KEY_SECRET_PREVIOUS is not a valid key." }, 500);
+  }
+  if (!secrets) {
     logInfo("church records refresh skipped: the integration is off", { route: "refresh-church-records" });
     return json({ orgs: 0 }, 200);
   }
@@ -101,7 +107,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
         return await refreshOrg(db, {
           orgId: org.id,
           connectionId: connection.connection_id,
-          creds: { baseUrl: connection.base_url, key: openKey(secret, org.id, connection.provider, connection.key_ciphertext) },
+          creds: { baseUrl: connection.base_url, key: openKey(secrets, org.id, connection.provider, connection.key_ciphertext) },
           source,
           normalizePhone,
           storePhoto: (orgId, profileId, bytes) =>

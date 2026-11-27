@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { logError, logWarn, stepOf } from "@/lib/log";
 import { RecordsError } from "./errors";
-import { loadRecordsSecret } from "./crypto";
+import { loadRecordsSecret, type RecordsSecrets } from "./crypto";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
 import { liveSourceOf, providerFor } from "./providers";
 import { loadCredentials, readConnection, readLiveSources, readMode } from "./store";
@@ -53,7 +53,7 @@ async function liveConnection(orgId: string) {
  * the links were read for that connection, and another one's ids could name
  * other people. The records then can't be reached.
  */
-async function openCredentials(orgId: string, secret: Buffer, connectionId: string) {
+async function openCredentials(orgId: string, secret: RecordsSecrets, connectionId: string) {
   try {
     const loaded = await loadCredentials(orgId, secret);
     return loaded?.connectionId === connectionId ? loaded.creds : null;

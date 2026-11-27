@@ -3,7 +3,7 @@ import { RECORDS_CRYPTO_VECTOR as V } from "@/supabase/functions/_shared/records
 import { openKey, parseRecordsSecret, RecordsCryptoError } from "./crypto";
 
 describe("the sealed key the edge functions open", () => {
-  const secret = parseRecordsSecret(V.secret)!;
+  const secret = { current: parseRecordsSecret(V.secret)!, previous: null };
 
   it("opens in the app", () => {
     expect(openKey(secret, V.orgId, V.provider, V.envelope)).toBe(V.key);

@@ -9,7 +9,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { displayName, hasName } from "@/lib/names";
 import type { FieldSettings } from "./settings";
-import { openKey } from "./crypto";
+import { openKey, type RecordsSecrets } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
 import type { LiveSources } from "./livePlan";
@@ -66,7 +66,7 @@ export async function readConnection(orgId: string): Promise<ConnectionSummary |
  */
 export async function loadCredentials(
   orgId: string,
-  secret: Buffer,
+  secret: RecordsSecrets,
 ): Promise<{ provider: RecordsProvider; creds: RecordsCredentials; connectionId: string } | null> {
   const service = await createServiceClient();
   const { data, error } = await service

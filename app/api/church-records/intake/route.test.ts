@@ -79,7 +79,7 @@ describe("POST /api/church-records/intake", () => {
       "p1",
       "acc-1",
       { firstName: "Nora", lastName: "Setupwell", email: "nora@example.test", phone: "5559876543" },
-      expect.any(Buffer),
+      { current: expect.any(Buffer), previous: null },
     );
   });
 

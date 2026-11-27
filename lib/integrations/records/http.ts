@@ -1,6 +1,6 @@
 // Answers shared by the church admin's church records routes.
 import { NextResponse } from "next/server";
-import { loadRecordsSecret } from "./crypto";
+import { loadRecordsSecret, type RecordsSecrets } from "./crypto";
 import { RecordsError, type RecordsFailure } from "./errors";
 import type { RecordsIntakeSetup } from "./types";
 
@@ -12,7 +12,7 @@ export const RECORDS_KEY_SHAPE = /^[\x21-\x7e]{8,200}$/;
  * RECORDS_KEY_SECRET in the environment every church records route answers
  * 404 before any check, so the setting doesn't exist for any church.
  */
-export function recordsSecretOrNull(): Buffer | null {
+export function recordsSecretOrNull(): RecordsSecrets | null {
   return loadRecordsSecret();
 }
 

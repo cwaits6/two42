@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { logError } from "@/lib/log";
 import { displayName, hasName } from "@/lib/names";
-import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
+import { RecordsCryptoError, type RecordsSecrets } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { compare, normalizeName, suggest, type ProfileForMatch, type Suggestion } from "@/lib/integrations/records/match";
@@ -68,7 +68,7 @@ type Loaded =
   | { ok: true; provider: RecordsProvider; creds: RecordsCredentials; connectionId: string }
   | { ok: false; response: NextResponse };
 
-async function credentials(orgId: string, secret: Buffer): Promise<Loaded> {
+async function credentials(orgId: string, secret: RecordsSecrets): Promise<Loaded> {
   try {
     const loaded = await loadCredentials(orgId, secret);
     if (loaded) return { ok: true, ...loaded };
