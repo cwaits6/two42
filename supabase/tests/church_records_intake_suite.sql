@@ -161,10 +161,12 @@ select is(
   array[
     has_function_privilege('anon', 'public.records_intake_consent(uuid, uuid)', 'execute'),
     has_function_privilege('anon', 'public.records_intake_claim(uuid, uuid)', 'execute'),
+    has_function_privilege('authenticated', 'public.records_intake_consent(uuid, uuid)', 'execute'),
+    has_function_privilege('authenticated', 'public.records_intake_claim(uuid, uuid)', 'execute'),
     has_function_privilege('service_role', 'public.records_intake_consent(uuid, uuid)', 'execute'),
     has_function_privilege('service_role', 'public.records_intake_claim(uuid, uuid)', 'execute')
   ],
-  array[false, false, true, true],
+  array[false, false, false, false, true, true],
   'only the service role executes the functions');
 
 select throws_ok(

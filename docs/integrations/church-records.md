@@ -659,7 +659,8 @@ anyone else, through the suggestions and an admin's confirmation.
   and every consent not yet sent; disconnecting the records, or connecting
   other records, does the same.
 - **Saving checks it.** two42 checks that where new people go exists and is
-  active, and that the write key may send there, without sending anyone. A
+  active, and that the write key holds W1 and W2 below, without sending
+  anyone. It can't check W3, which Rock checks only when a send starts. A
   refusal names what is wrong: the key or a permission, or an unknown
   destination.
 - **The person consents.** On **Set up your account** and on profile setup's
@@ -828,7 +829,10 @@ fails, and the page says so. Rock versions before that check need only W1
 and W2.
 
 The values go in the request's query string, because that is where Rock reads
-them, so they can appear in the Rock server's own web logs. Rock records the
+them, so they can appear in the Rock server's own web logs. IIS logs the query
+string by default: before turning sending on, remove the URI Query field from
+the Rock site's IIS logging, and from any proxy in front of it, and confirm
+with a test person that the name and email no longer appear. Rock records the
 write key's user as the workflow's initiator.
 
 To set it up in Rock:
