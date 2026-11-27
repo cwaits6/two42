@@ -547,7 +547,7 @@ export function SetupWizard({
         .eq("id", profile.id);
       if (setupError) throw setupError;
 
-      if (alreadySent) toast.info(`Profile set up. Your details were already sent to ${share?.churchName}'s office.`);
+      if (alreadySent) toast.info(`Profile set up. Your details may already be on their way to ${share?.churchName}'s office.`);
       else if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
       await forgetSetupRedirects();

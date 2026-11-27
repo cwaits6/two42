@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
  * church's records once, after the response, so a slow or refusing records
  * system never holds up setup; `share: false` withdraws a consent given at
  * sign-up, and answers 409 when a send was already claimed, since that send
- * can't be stopped. Sends nothing while the church has sending off, or for a
+ * can't be stopped; it may have reached the records, be on its way, or have
+ * stopped short. Sends nothing while the church has sending off, or for a
  * person who is linked or was already sent.
  *
  * The org is the caller's own profile, and everything sent is read from that
@@ -48,7 +49,10 @@ export async function POST(request: Request) {
   if (!body.share) {
     try {
       if ((await withdrawConsent(orgId, user.id)) === "too_late") {
-        return NextResponse.json({ error: "Your details were already sent to the church office.", alreadySent: true }, { status: 409 });
+        return NextResponse.json(
+          { error: "Your details may already be on their way to the church office.", alreadySent: true },
+          { status: 409 },
+        );
       }
       return NextResponse.json({ ok: true });
     } catch (err) {

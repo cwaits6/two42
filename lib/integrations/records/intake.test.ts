@@ -5,6 +5,7 @@ type Row = Record<string, unknown>;
 let tables: Record<string, Row[]>;
 let claim: string;
 let accepted: string | null;
+let afterClaim: (() => void) | null;
 let updateError: Row | null;
 const updates: { table: string; values: Row; filters: Row }[] = [];
 const rpcs: { name: string; args: Row }[] = [];
@@ -64,6 +65,17 @@ vi.mock("@/lib/supabase/server", () => ({
         else return { data: "too_late", error: null };
         return { data: "withdrawn", error: null };
       }
+      if (name === "records_intake_claim" && claim === "claimed") {
+        // The claim moves the person's row to sending under the setting current then.
+        const setting = tables.records_intake_settings.find((r) => r.org_id === args._org_id);
+        tables.records_intake_requests.push({
+          org_id: args._org_id,
+          profile_id: args._profile_id,
+          state: "sending",
+          setting_id: setting?.setting_id ?? "s1",
+        });
+        afterClaim?.();
+      }
       return { data: claim, error: null };
     },
   }),
@@ -106,13 +118,14 @@ beforeEach(() => {
   rpcs.length = 0;
   claim = "claimed";
   accepted = "acc-1";
+  afterClaim = null;
   updateError = null;
   tables = {
     records_connections: [
       { org_id: ORG, provider: "stub", base_url: "https://records.example.test", connection_id: "c1" },
       { org_id: "org-2", provider: "stub", base_url: "https://other.example.test", connection_id: "c2" },
     ],
-    records_intake_settings: [{ org_id: ORG, connection_id: "c1", key_ciphertext: "sealed", destination_id: "42" }],
+    records_intake_settings: [{ org_id: ORG, setting_id: "s1", connection_id: "c1", key_ciphertext: "sealed", destination_id: "42" }],
     records_person_links: [],
     records_intake_requests: [],
   };
@@ -162,10 +175,10 @@ describe("sendNewPerson", () => {
 
   it("records a claimed send failed when the write key won't open or can't be found, logging no details", async () => {
     tables.records_intake_settings = [
-      { org_id: ORG, connection_id: "c1", key_ciphertext: "sealed-under-old-secret", destination_id: "42" },
+      { org_id: ORG, setting_id: "s1", connection_id: "c1", key_ciphertext: "sealed-under-old-secret", destination_id: "42" },
     ];
     await sendNewPerson(ORG, "p1", "acc-1", person, SECRET);
-    tables.records_intake_settings = [{ org_id: ORG, connection_id: "old", key_ciphertext: "sealed", destination_id: "42" }];
+    tables.records_intake_settings = [{ org_id: ORG, setting_id: "s1", connection_id: "old", key_ciphertext: "sealed", destination_id: "42" }];
     await sendNewPerson(ORG, "p2", "acc-2", person, SECRET);
     expect(submitNewPerson).not.toHaveBeenCalled();
     expect(updates.map((u) => [u.filters.profile_id, u.values.state, u.values.failure])).toEqual([
@@ -181,6 +194,23 @@ describe("sendNewPerson", () => {
       route: "/api/church-records/intake",
       step: "key",
       ids: { org: ORG, user: "p2" },
+    });
+    expect(JSON.stringify([log.logWarn.mock.calls, log.logError.mock.calls])).not.toMatch(/Nora|Setupwell|nora@|555/);
+  });
+
+  it("sends nothing and records the send failed when sending is turned off and on again after the claim", async () => {
+    afterClaim = () => {
+      tables.records_intake_settings = [
+        { org_id: ORG, setting_id: "s2", connection_id: "c1", key_ciphertext: "sealed", destination_id: "42" },
+      ];
+    };
+    await sendNewPerson(ORG, "p1", "acc-1", person, SECRET);
+    expect(submitNewPerson).not.toHaveBeenCalled();
+    expect(updates.map((u) => [u.filters.profile_id, u.values.state, u.values.failure])).toEqual([["p1", "failed", "unauthorized"]]);
+    expect(log.logWarn).toHaveBeenCalledWith("Church records new person not sent", undefined, {
+      route: "/api/church-records/intake",
+      step: "key",
+      ids: { org: ORG, user: "p1" },
     });
     expect(JSON.stringify([log.logWarn.mock.calls, log.logError.mock.calls])).not.toMatch(/Nora|Setupwell|nora@|555/);
   });

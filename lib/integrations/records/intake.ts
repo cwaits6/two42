@@ -65,22 +65,28 @@ export interface IntakeCredentials {
 }
 
 /**
- * The opened write key and where it sends, or null while sending is off or
- * the provider can't send. Throws when the key can't be opened.
+ * The opened write key and where it sends, or null while sending is off, the
+ * provider can't send, or `settingId` is given and sending was turned off and
+ * on again since that setting. Throws when the key can't be opened.
  */
-export async function loadIntakeCredentials(orgId: string, secret: Buffer): Promise<IntakeCredentials | null> {
+export async function loadIntakeCredentials(
+  orgId: string,
+  secret: Buffer,
+  settingId?: string,
+): Promise<IntakeCredentials | null> {
   const service = await createServiceClient();
   const [connection, settings] = await Promise.all([
     service.from("records_connections").select("provider, base_url, connection_id").eq("org_id", orgId).maybeSingle(),
     service
       .from("records_intake_settings")
-      .select("connection_id, key_ciphertext, destination_id")
+      .select("setting_id, connection_id, key_ciphertext, destination_id")
       .eq("org_id", orgId)
       .maybeSingle(),
   ]);
   const error = connection.error ?? settings.error;
   if (error) throw new RecordsStoreError("records intake credentials read failed", { cause: error });
   if (!connection.data || !settings.data || settings.data.connection_id !== connection.data.connection_id) return null;
+  if (settingId !== undefined && settings.data.setting_id !== settingId) return null;
   const provider = providerFor(connection.data.provider);
   const intake = provider?.intake;
   if (!provider || !intake) return null;
@@ -293,7 +299,26 @@ export async function sendNewPerson(
     if (claimError) throw new RecordsStoreError("records intake claim failed", { cause: claimError });
     if (claim !== "claimed") return;
 
-    const failure = await submitClaimed(orgId, person, secret, ids);
+    // The setting the claim matched; the key is loaded only under that same
+    // setting, so turning sending off and on after the claim sends nothing.
+    const { data: claimed, error: claimedError } = await service
+      .from("records_intake_requests")
+      .select("setting_id")
+      .eq("org_id", orgId)
+      .eq("profile_id", profileId)
+      .eq("state", "sending")
+      .maybeSingle();
+    let failure: RecordsFailure | null;
+    if (claimedError || !claimed?.setting_id) {
+      logError("Church records new person send failed", claimedError ?? undefined, {
+        route: "/api/church-records/intake",
+        step: "setting",
+        ids,
+      });
+      failure = "unauthorized";
+    } else {
+      failure = await submitClaimed(orgId, claimed.setting_id, person, secret, ids);
+    }
     // Typed here because update() doesn't check its values against the enums.
     const result: IntakeRequestUpdate = { state: failure ? "failed" : "sent", failure, finished_at: new Date().toISOString() };
     const { error } = await service
@@ -311,13 +336,14 @@ export async function sendNewPerson(
 /** Why a claimed send failed, or null once the provider took it. A write key that can't be used is "unauthorized". */
 async function submitClaimed(
   orgId: string,
+  settingId: string,
   person: RecordsNewPerson,
   secret: Buffer,
   ids: { org: string; user: string },
 ): Promise<RecordsFailure | null> {
   let loaded: IntakeCredentials | null;
   try {
-    loaded = await loadIntakeCredentials(orgId, secret);
+    loaded = await loadIntakeCredentials(orgId, secret, settingId);
   } catch (err) {
     logError("Church records new person send failed", err, { route: "/api/church-records/intake", step: "key", ids });
     return "unauthorized";

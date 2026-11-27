@@ -102,7 +102,7 @@ describe("POST /api/church-records/intake", () => {
     intake.withdrawConsent.mockResolvedValue("too_late");
     const res = await post({ share: false });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: "Your details were already sent to the church office.", alreadySent: true });
+    expect(await res.json()).toEqual({ error: "Your details may already be on their way to the church office.", alreadySent: true });
     expect(after).not.toHaveBeenCalled();
   });
 
