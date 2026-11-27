@@ -13,8 +13,9 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const router = { replace: vi.fn(), refresh: vi.fn() };
+let query = "token=abc";
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("token=abc"),
+  useSearchParams: () => new URLSearchParams(query),
   useRouter: () => router,
 }));
 
@@ -25,6 +26,7 @@ let root: Root;
 let container: HTMLElement;
 
 beforeEach(() => {
+  query = "token=abc";
   router.replace.mockReset();
   signInWithPassword.mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -66,6 +68,29 @@ describe("SetupAccountForm verification", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector<HTMLInputElement>("#email")?.value).toBe("ada@example.com");
+  });
+
+  it("hides the previous link's church while a new link is checked, and ignores its late answer", async () => {
+    let answerFirst!: (res: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ name: "Ada", email: "ada@example.com", shareWith: "First Church" }))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => (answerFirst = resolve)));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    expect(container.textContent).toContain("First Church");
+
+    query = "token=def";
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    expect(container.textContent).not.toContain("First Church");
+    expect(container.querySelector("#share_details")).toBeNull();
+
+    query = "token=ghi";
+    fetchMock.mockResolvedValueOnce(Response.json({ name: "Bo", email: "bo@example.com", shareWith: "Third Church" }));
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    await act(async () => answerFirst(Response.json({ name: "Ada", email: "ada@example.com", shareWith: "Second Church" })));
+    expect(container.textContent).toContain("Third Church");
+    expect(container.textContent).not.toContain("Second Church");
   });
 
   it("offers a retry when the answer is not readable", async () => {
@@ -169,5 +194,45 @@ describe("SetupAccountForm submit", () => {
     expect(container.textContent).toContain("Your account is set up");
     expect(signInHref()).toBe(`/login?redirect=${encodeURIComponent("/g/group-1/dashboard")}`);
     expect(router.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("SetupAccountForm sharing details with the church office", () => {
+  async function submitShared(link: SetupLink, tick: boolean) {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(link))
+      .mockResolvedValueOnce(Response.json({ redirect: "/dashboard" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    const box = container.querySelector<HTMLInputElement>("#share_details");
+    if (tick) await act(async () => box!.click());
+    for (const id of ["password", "confirmPassword"]) {
+      container.querySelector<HTMLInputElement>(`#${id}`)!.value = PASSWORD;
+    }
+    await act(async () => {
+      container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    return { box, body: JSON.parse(fetchMock.mock.calls[1][1].body as string) };
+  }
+
+  it("shows the box unticked, with the church's name, only when the church asks", async () => {
+    await render(async () => Response.json({ name: "Ada", email: "ada@example.com", shareWith: "Sample Church" }));
+    const box = container.querySelector<HTMLInputElement>("#share_details");
+    expect(box?.checked).toBe(false);
+    expect(container.textContent).toContain("Share my details with Sample Church's office");
+  });
+
+  it("has no box when the church doesn't send new people", async () => {
+    await render(async () => Response.json({ name: "Ada", email: "ada@example.com" }));
+    expect(container.querySelector("#share_details")).toBeNull();
+  });
+
+  it("sends the person's choice with the password", async () => {
+    const link = { name: "Ada", email: "ada@example.com", shareWith: "Sample Church" };
+    expect((await submitShared(link, true)).body.share).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    expect((await submitShared(link, false)).body.share).toBe(false);
   });
 });

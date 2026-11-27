@@ -81,7 +81,52 @@ export interface RecordsLiveSource {
   ): Promise<RecordsLiveDetails>;
 }
 
-/** One kind of church records two42 can read. Every call only reads. */
+/** Everything two42 ever sends about a new person. Nothing about their household. */
+export interface RecordsNewPerson {
+  firstName: string;
+  lastName: string;
+  /** The person's sign-in address. */
+  email: string;
+  phone: string | null;
+}
+
+/** How a provider asks a church admin to turn on sending new people, in that provider's own words. */
+export interface RecordsIntakeSetup {
+  keyLabel: string;
+  /** Where to make the write key, and exactly what it may be allowed to do. */
+  keyHelp: string;
+  /** What receives new people in the provider, in the singular: "workflow type". */
+  destinationLabel: string;
+  destinationHelp: string;
+}
+
+/** Where in the records new people go, as the church admin picks it. */
+export interface RecordsIntakeDestination {
+  id: string;
+  name: string;
+}
+
+/**
+ * Sending a new person to the church's records for its staff to review, with
+ * a write key separate from the read key. Never changes a record. Every call
+ * rejects only with RecordsError.
+ */
+export interface RecordsIntake {
+  setup: RecordsIntakeSetup;
+  /** The provider's id for a destination, or null when the value can't be one. */
+  parseDestinationId(value: unknown): string | null;
+  /** Every destination the write key may read, to pick from. */
+  destinations(creds: RecordsCredentials): Promise<RecordsIntakeDestination[]>;
+  /** Proves the destination exists and the write key may send there, without sending anyone. */
+  checkDestination(creds: RecordsCredentials, id: string): Promise<RecordsIntakeDestination>;
+  /** Hands one new person to the church's staff. */
+  submitNewPerson(creds: RecordsCredentials, id: string, person: RecordsNewPerson): Promise<void>;
+}
+
+/**
+ * One kind of church records two42 can read. Every call only reads, except
+ * `intake`, which sends a new person for the church's staff to review.
+ */
 export interface RecordsProvider {
   id: RecordsProviderId;
   /** The product's name, shown to church admins only. */
@@ -91,6 +136,8 @@ export interface RecordsProvider {
   copy?: RecordsCopySource;
   /** Showing details live from the records instead of copying them, for a provider that offers it. */
   live?: RecordsLiveSource;
+  /** Sending new people to the records, for a provider that offers it. */
+  intake?: RecordsIntake;
   /** Proves the address is this provider and the key can read people. */
   checkConnection(creds: RecordsCredentials): Promise<void>;
   /** People who are linkable and have one of these last names. */

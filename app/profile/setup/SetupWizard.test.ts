@@ -294,3 +294,78 @@ describe("details locked by the church's records", () => {
     for (const key of ["first_name", "last_name", "gender"]) expect(values).not.toHaveProperty(key);
   });
 });
+
+describe("sharing details with the church office in the setup wizard", () => {
+  async function mountShared(share: { churchName: string; consented: boolean } | null) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(SetupWizard, { profile: PROFILE, userEmail: "ada@example.test", householdName: "Lovelace Family", share }),
+      );
+    });
+    await click("Continue");
+    await click("Continue");
+  }
+  async function finish() {
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+  }
+
+  it("shows the box unticked on the Contact step, and sends the choice once the profile is saved", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await mountShared({ churchName: "Sample Church", consented: false });
+    expect(document.body.textContent).toContain("Share my details with Sample Church's office");
+    expect(field("share_details").checked).toBe(false);
+    await act(async () => field("share_details").click());
+    await finish();
+
+    expect(writes.at(-1)).toMatchObject({ table: "profiles", values: { setup_completed: true } });
+    expect(fetchMock).toHaveBeenCalledWith("/api/church-records/intake", expect.objectContaining({ body: '{"share":true}' }));
+  });
+
+  it("sends nothing when left unticked, and shows no box when the church doesn't ask", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await mountShared({ churchName: "Sample Church", consented: false });
+    await finish();
+    await act(async () => root.unmount());
+    await mountShared(null);
+    expect(document.getElementById("share_details")).toBeNull();
+    await finish();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a consent from sign-up ticked, and withdraws it when unticked", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await mountShared({ churchName: "Sample Church", consented: true });
+    expect(field("share_details").checked).toBe(true);
+    await act(async () => field("share_details").click());
+    await finish();
+    expect(fetchMock).toHaveBeenCalledWith("/api/church-records/intake", expect.objectContaining({ body: '{"share":false}' }));
+  });
+
+  it("stays on setup with an error when a withdrawal isn't confirmed, so Finish can try again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    await mountShared({ churchName: "Sample Church", consented: true });
+    await act(async () => field("share_details").click());
+    await finish();
+    expect(writes.some((w) => "setup_completed" in w.values)).toBe(false);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("Finish setup");
+  });
+
+  it("finishes setup when the request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    await mountShared({ churchName: "Sample Church", consented: false });
+    await act(async () => field("share_details").click());
+    await finish();
+    expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+});

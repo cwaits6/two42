@@ -9,6 +9,8 @@ import {
   readSetupToken,
 } from "../setup-link";
 import type { VerifyTokenResponse } from "../setup-response";
+import { recordsIntegrationEnabled } from "@/lib/integrations/records/enabled";
+import { churchName, intakeOnFor } from "@/lib/integrations/records/intake";
 
 const logAccountLookup = (error: unknown) =>
   logError("Setup link: account lookup failed", error, { route: "/api/auth/verify-token" });
@@ -46,5 +48,20 @@ export async function POST(request: Request) {
     return deadLinkResponse(supabase.auth.admin, token, link.state === "expired", logAccountLookup);
   }
 
-  return NextResponse.json<VerifyTokenResponse>({ name: link.row.name, email: link.row.email });
+  return NextResponse.json<VerifyTokenResponse>({
+    name: link.row.name,
+    email: link.row.email,
+    shareWith: await shareWith(link.row.org_id),
+  });
+}
+
+/** The church's name when it sends new people to its records. A failed read leaves the box out. */
+async function shareWith(orgId: string): Promise<string | undefined> {
+  if (!recordsIntegrationEnabled()) return undefined;
+  try {
+    return (await intakeOnFor(orgId)) ? await churchName(orgId) : undefined;
+  } catch (err) {
+    logError("Setup link: church records sending read failed", err, { route: "/api/auth/verify-token", ids: { org: orgId } });
+    return undefined;
+  }
 }

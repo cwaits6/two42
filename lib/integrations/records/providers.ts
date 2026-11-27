@@ -20,3 +20,4 @@ export function listProviders(): RecordsProvider[] {
 export function liveSourceOf(provider: RecordsProvider | null | undefined): RecordsLiveSource | null {
   return provider?.copy && provider.live ? provider.live : null;
 }
+

@@ -1455,6 +1455,64 @@ isOneToOne: false
       referencedColumns: ["org_id","family_id"]
     }
                   ]
+                },"records_intake_requests": {
+                  Row: {
+                    "accept_id": string | null,"claimed_at": string | null,"consented_at": string,"failure": Database["public"]['Enums']["records_failure"] | null,"finished_at": string | null,"org_id": string,"profile_id": string,"setting_id": string | null,"state": Database["public"]['Enums']["records_intake_state"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "accept_id"?: string | null,"claimed_at"?: string | null,"consented_at"?: string,"failure"?: Database["public"]['Enums']["records_failure"] | null,"finished_at"?: string | null,"org_id"?: string,"profile_id": string,"setting_id"?: string | null,"state": Database["public"]['Enums']["records_intake_state"]
+                  }
+                  Update: {
+                    "accept_id"?: string | null,"claimed_at"?: string | null,"consented_at"?: string,"failure"?: Database["public"]['Enums']["records_failure"] | null,"finished_at"?: string | null,"org_id"?: string,"profile_id"?: string,"setting_id"?: string | null,"state"?: Database["public"]['Enums']["records_intake_state"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_intake_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_intake_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_intake_settings": {
+                  Row: {
+                    "connection_id": string,"destination_id": string,"destination_name": string,"enabled_at": string,"enabled_by": string | null,"key_ciphertext": string,"key_hint": string,"org_id": string,"setting_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "connection_id": string,"destination_id": string,"destination_name": string,"enabled_at"?: string,"enabled_by"?: string | null,"key_ciphertext": string,"key_hint": string,"org_id"?: string,"setting_id"?: string
+                  }
+                  Update: {
+                    "connection_id"?: string,"destination_id"?: string,"destination_name"?: string,"enabled_at"?: string,"enabled_by"?: string | null,"key_ciphertext"?: string,"key_hint"?: string,"org_id"?: string,"setting_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_intake_settings_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_intake_settings_enabled_by_fkey"
+      columns: ["enabled_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_intake_settings_enabled_by_fkey"
+      columns: ["enabled_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"records_org_settings": {
                   Row: {
                     "mode": string,"org_id": string,"suggest_children": boolean,"updated_at": string,"updated_by": string | null
@@ -2808,6 +2866,18 @@ isOneToOne: false
 "records_field_columns":
 { Args: { "_field": string }; Returns: (string)[]
                            },
+"records_intake_accept":
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
+                           },
+"records_intake_claim":
+{ Args: { "_accept_id": string,"_org_id": string,"_profile_id": string }; Returns: string
+                           },
+"records_intake_consent":
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
+                           },
+"records_intake_withdraw":
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
+                           },
 "records_is_empty":
 { Args: { "_value": Json }; Returns: boolean
                            },
@@ -2949,7 +3019,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "org_domain_status": "pending"|"verified"|"failed"|"removing","org_status": "active"|"suspended"
+            "org_domain_status": "pending"|"verified"|"failed"|"removing","org_status": "active"|"suspended","records_failure": "unauthorized"|"not_found"|"unreachable"|"not_provider"|"rejected","records_intake_state": "consented"|"withdrawn"|"sending"|"sent"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -3065,7 +3135,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "org_domain_status": ["pending", "verified", "failed", "removing"],"org_status": ["active", "suspended"]
+            "org_domain_status": ["pending", "verified", "failed", "removing"],"org_status": ["active", "suspended"],"records_failure": ["unauthorized", "not_found", "unreachable", "not_provider", "rejected"],"records_intake_state": ["consented", "withdrawn", "sending", "sent", "failed"]
           }
         }
 } as const

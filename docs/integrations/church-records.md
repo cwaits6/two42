@@ -4,11 +4,12 @@ Many churches keep their people in church management software, such as
 [Rock RMS](https://www.rockrms.com/). two42 calls this the church's
 **records**. A church can connect its records to two42 so its members and
 church admins don't have to type what the church already knows. two42 only
-ever **reads** from the records, and works the same for a church that never
-connects them.
+ever **reads** from the records, except for sending new people to them, which
+a church admin turns on with a key of its own. It works the same for a church
+that never connects them.
 
-This document is the design record. **The baseline**, **Copy into two42**
-and **Live from the records** below are built. The rest is decided but not
+This document is the design record. **The baseline**, **Copy into two42**,
+**Live from the records** and **Sending new people** below are built. The rest is decided but not
 built, and each part names its ticket.
 
 ## Decisions
@@ -19,8 +20,10 @@ built, and each part names its ticket.
   birthdays the church already has. Second, keeping two42 accurate when the
   church office updates someone.
 - **One way only.** Data moves from the records into two42. two42 never
-  writes to the records. The one possible exception is under
-  [Later](#later).
+  changes the records. The one exception is
+  [Sending new people](#sending-new-people-built): with a church admin's
+  opt-in and the person's consent, two42 hands a new person's name, email and
+  phone to the church's own intake for its staff to review.
 - **The records own identity facts.** Names, contact details and birthdays
   live there. two42 owns everything about how people use two42: what the
   directory shows, events, replies, serving, lessons and funds.
@@ -57,10 +60,13 @@ built, and each part names its ticket.
 - **Each feature documents the exact minimum it needs** from the records, and
   the setup text asks for no more.
 - **The read key is always view-only.** It never needs edit or write rights.
-- **Writing would use a separate key and role.** If the write idea under
-  [Later](#later) is built, it gets its own key, on its own user and role,
+- **Writing uses a separate key and role.**
+  [Sending new people](#sending-new-people-built) has its own key, on its own
+  user and role ([the write key's user and role](#the-write-keys-user-and-role)),
   granted only by churches that turn it on. The read key never gains write
-  rights.
+  rights and is never used to write; two42 refuses a write key that is the
+  read key. A church that never turns it on is never asked for any write
+  permission.
 
 ### Two modes (T42-272, T42-274)
 
@@ -224,14 +230,6 @@ How it works:
   only what the person can already see, cleared at sign-out, expiring after 30
   days, never prayer requests or admin pages.
 
-### Later
-
-- **Adding new people to the church's records** (T42-277). A church could let
-  two42 capture people who haven't registered with the church and send their
-  details to the records. It's the one possible exception to "one way only":
-  it creates new people only, with the person's consent, under a separate
-  key and role, and only for churches that turn it on.
-
 ## The baseline (built)
 
 ### For the operator
@@ -241,7 +239,9 @@ base64. Without it every church records route answers 404 and the settings
 page is gone; details already copied keep their labels, and a locked one stays
 locked, because the database keeps enforcing the settings it holds. Generate one with `openssl rand -base64 32` and set it in
 Production only, like the prayer keys. Changing it makes every saved key
-unreadable, and each church admin has to connect again; the links stay.
+unreadable, and each church admin has to connect again; the links stay. A
+church that sends new people also enters its write key again with **Change** on the
+**Send new people** card; until then each send is recorded as couldn't send.
 
 ### For a church admin
 
@@ -641,6 +641,84 @@ run as two parallel chains. `lib/integrations/rock/live.test.ts` pins this.
   the profile page's directory preview and the church admin's member page show
   two42's stored values only in live mode.
 
+## Sending new people (built)
+
+People often join a church's groups in two42 before the church office has
+them in its records. A church admin can let two42 hand those people to the
+church's own intake, for the church's staff to review. two42 never creates or
+changes a record itself: once the office adds the person, they are linked like
+anyone else, through the suggestions and an admin's confirmation.
+
+### How it works
+
+- **Off by default.** It is off until a church admin turns it on, under
+  **Church records**, **People**, **Send new people to Rock RMS**, with a
+  second key of its own (the **write key**) and where in the records new
+  people go. While it is off, two42 stores no write key, asks for no write
+  permission, and shows nobody the box. Turning it off removes the write key
+  and every consent not yet sent; disconnecting the records, or connecting
+  other records, does the same.
+- **Saving checks it.** two42 checks that where new people go exists and is
+  active, and that the write key holds W1 and W2 below, without sending
+  anyone. It can't check W3, which Rock checks only when a send starts. A
+  refusal names what is wrong: the key or a permission, or an unknown
+  destination.
+- **The person consents.** On **Set up your account** and on profile setup's
+  **Contact** step, a box reads **Share my details with [church]'s office**,
+  using the church's name, unticked. It shows only while the church has
+  sending on, and at profile setup only to someone who isn't linked and wasn't
+  already sent. A box ticked at sign-up shows ticked at profile setup, and can
+  be unticked there. Unticked sends nothing. Unticking is kept, so a sign-up
+  consent written after it, or a send queued before it, does nothing; ticking
+  the box again at profile setup sends. Once a send has started it can't be
+  withdrawn: unticking then says the details may already be on their way, and
+  setup finishes.
+- **What is sent: name, email and phone, nothing else.** The first and last
+  name as saved at profile setup, the sign-in email, and one phone: the
+  mobile, or the home phone if there is no mobile. Never a preferred name,
+  birthday, address, work phone or anything about the household.
+- **When.** On the server, after profile setup is saved, and after the answer
+  goes back to the person, so a slow or refusing records system never holds
+  up setup. Consent at sign-up is saved then, and sent at profile setup,
+  because the phone isn't known before.
+- **Once.** Each person is sent at most once
+  (`records_intake_requests`, one row per person): a second save or a retry
+  sends nobody. A linked person is never sent. A failed send is recorded and
+  **never retried**, because a timeout can follow a send the records already
+  took. A send is queued with the acceptance profile setup saved, and goes only
+  if that acceptance is still current and sending hasn't been turned off and on
+  since.
+- **What the admin sees.** How many were sent and how many couldn't be, how
+  many two42 couldn't record an outcome for (a send started over ten minutes
+  ago with no result, never retried), and why the newest send since the
+  setting was saved failed. A failure is logged
+  with a fixed message and ids only, never the person's details or the
+  records' answer.
+
+### What is stored
+
+| Table | Holds |
+|---|---|
+| `records_intake_settings` | One row per church while sending is on: the write key sealed with `RECORDS_KEY_SECRET` under its own label (so it can't open as the read key, nor the read key as it), its last four characters, the destination's id and name, who turned it on and when. Goes with the connection |
+| `records_intake_requests` | One row per person: consented, withdrawn, sending, sent, or failed and why, with its times and the setting and acceptance a send must match. No details |
+
+No client role can read or write either table; server code writes them with
+the service key after a church admin check, or for the person's own row from
+their own session. `records_intake_consent()`, `records_intake_accept()`,
+`records_intake_withdraw()` and `records_intake_claim()` store nothing while
+sending is off (a withdrawal is kept either way) and never accept or claim a
+linked person
+(`supabase/migrations/20261212000000_church_records_intake.sql`).
+
+### Each provider's own way
+
+Sending is an optional `intake` capability on `RecordsProvider`
+(`lib/integrations/records/types.ts`): the provider's setup wording,
+`destinations()`, `checkDestination()` and `submitNewPerson()`. Shared code
+asks for `provider.intake` and offers nothing for a provider without it. For
+Rock it starts a workflow type the church picks; see
+[the write key's user and role](#the-write-keys-user-and-role).
+
 ## Rock RMS
 
 ### API facts
@@ -681,7 +759,7 @@ Recommended setup, following [Permissions](#permissions):
 - A **dedicated user** for two42's REST key, used for nothing else.
 - In a **dedicated security role** that has **View** on only the REST
   controllers two42 reads, and **no edit or write permission** anywhere.
-  two42 needs no edit or write permission at all.
+  The read key needs no edit or write permission at all.
 
 The controllers, from the requests the code makes
 (`supabase/functions/_shared/rock-client.ts`, `rock-copy.ts` and
@@ -729,6 +807,69 @@ more than two42 needs, so don't use it for a real church. The minimum above
 comes from the requests the code makes; it is still to be confirmed on a test
 Rock by removing each permission in turn and checking what still works. Each
 later feature adds the controllers it reads to this list.
+
+### The write key's user and role
+
+Only for a church that turns on [sending new people](#sending-new-people-built).
+A church that doesn't is never asked for any of this, and the read key's role
+above stays exactly as it is.
+
+two42 starts a **workflow type the church picks**, with the person's details
+as the workflow's attribute values, through
+`POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`. It never files a
+connection request: a Rock connection request needs a Person already
+(`ConnectionRequest.PersonAliasId` is required), and someone new has none. It
+never creates or changes a Person either; the church's workflow decides how
+the person enters Rock.
+
+The write key needs exactly these, from the requests in
+`lib/integrations/rock/intake.ts`:
+
+| # | Permission | Used for | Requests |
+|---|---|---|---|
+| W1 | REST Controllers › **Workflows** › the action `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`: **Edit** | Starting the workflow for a new person | `POST /api/Workflows/WorkflowEntry/<id>?FirstName=…&LastName=…&Email=…&Phone=…`, no body; and at save `POST /api/Workflows/WorkflowEntry/0`, which Rock refuses with 401 without W1 and otherwise answers with nothing started, since no type has id 0 |
+| W2 | REST Controllers › **WorkflowTypes**: **View** | Find workflow types, and the check at save | `GET /api/WorkflowTypes?$select=Id,Name,IsActive`, by `Id` at save |
+| W3 | The chosen **workflow type** › Security: **View** | Rock checks it before starting a workflow from REST | Rock answers 401 without it, which two42 records as a failed send and names on the page |
+
+Nothing else: no Edit on any other action or controller, no People or
+Person access, no Administrate. Rock checks W1 before it looks up the type,
+so saving proves W1 and W2 without starting anything. W3 is checked by Rock
+only when a workflow starts, so a key missing it saves but its first send
+fails, and the page says so. Rock versions before that check need only W1
+and W2.
+
+The values go in the request's query string, because that is where Rock reads
+them, so they can appear in the Rock server's own web logs. IIS logs the query
+string by default: before turning sending on, remove the URI Query field from
+the Rock site's IIS logging, and from any proxy in front of it, and confirm
+with a test person that the name and email no longer appear. Rock records the
+write key's user as the workflow's initiator.
+
+To set it up in Rock:
+
+1. Under Admin Tools › Settings › Security Roles, add a role, such as
+   "two42 send new people", with no members but the user below.
+2. Under Admin Tools › Settings › REST Controllers, open **Workflows**, and
+   under its actions open `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`;
+   under that action's Security, allow **Edit** for the role. Then open
+   **WorkflowTypes** and, under Security, allow **View** for the role. Grant
+   nothing else.
+3. Under Admin Tools › Settings › Workflow Configuration, add a workflow type
+   for new people, such as "New people from two42", active, with four
+   attributes whose keys are exactly `FirstName`, `LastName`, `Email` and
+   `Phone` (text). Give it your own activities for staff to review the person
+   and decide how they enter Rock, and make sure it is persisted (Automatically
+   Persisted, or an activity that saves it), so staff can find it. Under the
+   workflow type's Security, allow **View** for the role.
+4. Under Admin Tools › Settings › REST Keys, add a second key, active, on a
+   new user for this alone, and add that user to the role. Don't reuse the
+   read key's user.
+5. In two42, under Church records, **Send new people to Rock RMS**, press
+   **Turn on**, paste the key, press **Find workflow types** and choose it, or
+   enter its id, and **Save**.
+
+The minimum comes from Rock's source (below). It is still to be confirmed on
+a test Rock by removing each of W1, W2 and W3 in turn.
 
 ### Checked against a real Rock
 
@@ -780,3 +921,9 @@ connect it to that church's Rock and check a suggestion end to end.
   `Rock.Rest/Filters/AuthenticateAttribute.cs` (the `Authorization-Token`
   header), `Rock.Rest/ApiController.cs` (OData v3, no default page size),
   `Rock/SystemGuid/DefinedValue.cs` (record type and status Guids).
+  For sending new people: `Rock.Rest/Controllers/WorkflowsController.Partial.cs`
+  (`WorkflowEntry`: attribute values from the query string, nothing started
+  for a missing or inactive type, View on the type checked before a start),
+  `Rock.Rest/Filters/SecuredAttribute.cs` (Edit for a `POST`, checked on the
+  action before it runs, 401 when refused) and `Rock/Model/ConnectionRequest.cs`
+  (`PersonAliasId` required).

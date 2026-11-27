@@ -1,5 +1,6 @@
-// The only way a church's key leaves two42: a GET over https that checks every
-// address the host name resolves to at the moment it connects, so a public
+// The only way a church's key leaves two42: a GET, or a POST with no body that
+// sends a new person, over https that checks every address the host name
+// resolves to at the moment it connects, so a public
 // name pointed at a private address (by DNS, or by rebinding between a check
 // and the request) is refused before the key is sent. Redirects are refused
 // too, since one could carry the request somewhere the address check never saw.
@@ -92,16 +93,20 @@ function responseHeaders(raw: Record<string, string | string[] | undefined>): He
 }
 
 /**
- * A fetch-shaped GET for a church's records. Rejects, as fetch would on a
+ * A fetch-shaped GET, or POST with no body, for a church's records. Rejects, as fetch would on a
  * network failure, when the address isn't public, the response redirects,
  * runs past the timeout or is larger than any answer two42 asks for.
  */
 export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<Response> {
+  const method = init.method?.toUpperCase() ?? "GET";
+  if (method !== "GET" && method !== "POST") return Promise.reject(new TypeError("Only GET and POST are allowed."));
+  if (init.body != null) return Promise.reject(new TypeError("Request bodies aren't sent."));
   const url = new URL(String(input));
   if (url.protocol !== "https:") return Promise.reject(new TypeError("Only https is allowed."));
   const literal = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(literal) && !isPublicAddress(literal)) return Promise.reject(new RefusedAddressError());
   const headers = Object.fromEntries(new Headers(init.headers).entries());
+  if (method === "POST") headers["content-length"] = "0";
   // Bodies are returned as received, never decoded, so none may be compressed.
   headers["accept-encoding"] ??= "identity";
 
@@ -109,7 +114,7 @@ export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<
   // A caller's signal can outlive this request, so its listener goes once the request settles.
   let onAbort: (() => void) | undefined;
   return new Promise<Response>((resolve, reject) => {
-    const req = request(url, { method: "GET", headers, lookup: guardedLookup() }, (res) => {
+    const req = request(url, { method, headers, lookup: guardedLookup() }, (res) => {
       const status = res.statusCode ?? 0;
       if (status >= 300 && status < 400) {
         res.resume();

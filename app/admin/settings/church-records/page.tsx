@@ -9,6 +9,11 @@ export const generateMetadata = () => (recordsIntegrationEnabled() ? pageTitle("
 
 export default function ChurchRecordsSettingsPage() {
   if (!recordsIntegrationEnabled()) notFound();
-  const providers = listProviders().map(({ id, label, connect }) => ({ id, label, connect }));
+  const providers = listProviders().map(({ id, label, connect, intake }) => ({
+    id,
+    label,
+    connect,
+    intake: intake?.setup ?? null,
+  }));
   return <ChurchRecordsSettings providers={providers} />;
 }

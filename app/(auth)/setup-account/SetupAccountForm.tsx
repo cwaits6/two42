@@ -10,6 +10,7 @@ import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ErrorState } from "@/components/states/ErrorState";
+import { ShareDetailsRow } from "@/components/profile/ShareDetailsRow";
 import { AccountAgeNotice } from "../_components/AccountAgeNotice";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
@@ -56,13 +57,23 @@ export function SetupAccountForm() {
   const [attempt, setAttempt] = useState(0);
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
   const [formError, setFormError] = useState<ReactNode>(null);
+  // Held with the link it was given for, so a different link starts unticked.
+  const [sharedFor, setSharedFor] = useState<string | null>(null);
   const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
+  const share = token !== null && sharedFor === token;
+  // A different link must not show the previous link's church while it is checked.
+  const [viewToken, setViewToken] = useState(token);
+  if (viewToken !== token) {
+    setViewToken(token);
+    setView({ kind: "verifying" });
+  }
 
   useEffect(() => {
+    let current = true;
     async function verifyToken() {
       if (!token) {
         setView({ kind: "invalid" });
@@ -74,12 +85,14 @@ export function SetupAccountForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
       });
+      if (!current) return;
 
       if (!res.ok) {
         // A used link set up an account; if that account is signed in here,
         // Home is where it belongs.
         if (res.status === 404 || res.status === 409) {
           const { data } = await supabase.auth.getSession();
+          if (!current) return;
           if (data.session) {
             router.replace("/dashboard");
             return;
@@ -94,12 +107,16 @@ export function SetupAccountForm() {
       }
 
       const link: SetupLink = await res.json();
-      setView({ kind: "ready", link: { name: link.name, email: link.email } });
+      if (!current) return;
+      setView({ kind: "ready", link: { name: link.name, email: link.email, shareWith: link.shareWith } });
     }
     verifyToken().catch((err) => {
       logError("Failed to verify the account setup link", err, { route: "/setup-account" });
-      setView({ kind: "failed" });
+      if (current) setView({ kind: "failed" });
     });
+    return () => {
+      current = false;
+    };
   }, [token, supabase, router, attempt]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -125,7 +142,7 @@ export function SetupAccountForm() {
       res = await fetch("/api/auth/setup-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password, ...(link.shareWith ? { share } : {}) }),
       });
       body = await res.json().catch(() => ({}));
     } catch (err) {
@@ -251,6 +268,9 @@ export function SetupAccountForm() {
           errors={errors}
           onEdit={(field) => setErrors((prev) => ({ ...prev, [field]: undefined }))}
         />
+        {view.link.shareWith && (
+          <ShareDetailsRow churchName={view.link.shareWith} checked={share} onChange={(on) => setSharedFor(on ? token : null)} />
+        )}
         {formError && (
           <p role="alert" className="text-base text-destructive">
             {formError}

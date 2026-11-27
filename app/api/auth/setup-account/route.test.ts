@@ -19,6 +19,11 @@ vi.mock("@/lib/log", () => ({
   logWarn: (...args: unknown[]) => logWarn(...args),
 }));
 
+const recordConsent = vi.fn();
+vi.mock("@/lib/integrations/records/intake", () => ({ recordConsent: (...args: unknown[]) => recordConsent(...args) }));
+const recordsOn = { value: true };
+vi.mock("@/lib/integrations/records/enabled", () => ({ recordsIntegrationEnabled: () => recordsOn.value }));
+
 const { POST } = await import("./route");
 
 const TOKEN = "a".repeat(64);
@@ -159,6 +164,8 @@ const householdWrites = (calls: Call[]) =>
   calls.filter((c) => c.op === "update" && c.table !== "access_requests");
 
 beforeEach(() => {
+  recordConsent.mockReset().mockResolvedValue(undefined);
+  recordsOn.value = true;
   createServiceClient.mockReset();
   logError.mockReset();
   logWarn.mockReset();
@@ -571,5 +578,38 @@ describe("POST /api/auth/setup-account — partial failure and retry", () => {
     expect(logError).toHaveBeenCalled();
     expect(logged).not.toContain(PASSWORD);
     expect(logged).not.toContain(TOKEN);
+  });
+});
+
+describe("POST /api/auth/setup-account — sharing details with the church office", () => {
+  it("records the consent for the link's own person and church once the account is set up", async () => {
+    fakeService({});
+    const res = await post({ token: TOKEN, password: PASSWORD, share: true });
+    expect(await res.json()).toEqual({ redirect: "/dashboard" });
+    expect(recordConsent).toHaveBeenCalledWith(ORG, USER_ID);
+  });
+
+  it("records nothing unticked, or while church records are off", async () => {
+    fakeService({});
+    await post({ token: TOKEN, password: PASSWORD });
+    await post({ token: TOKEN, password: PASSWORD, share: "yes" });
+    recordsOn.value = false;
+    await post({ token: TOKEN, password: PASSWORD, share: true });
+    expect(recordConsent).not.toHaveBeenCalled();
+  });
+
+  it("still sets the account up when the consent can't be saved", async () => {
+    fakeService({});
+    recordConsent.mockRejectedValue(new Error("down"));
+    const res = await post({ token: TOKEN, password: PASSWORD, share: true });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ redirect: "/dashboard" });
+    expect(logError).toHaveBeenCalledWith("Setup account: saving the records consent failed", expect.anything(), expect.anything());
+  });
+
+  it("records nothing when the link fails", async () => {
+    fakeService({ row: null });
+    await post({ token: TOKEN, password: PASSWORD, share: true });
+    expect(recordConsent).not.toHaveBeenCalled();
   });
 });

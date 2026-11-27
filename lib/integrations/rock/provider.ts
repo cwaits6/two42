@@ -10,6 +10,7 @@ import {
   type PersonFilterIds,
   type RockPerson,
 } from "./client";
+import { ROCK_INTAKE_ATTRIBUTES, rockIntake } from "./intake";
 import { rockLiveSource } from "./live";
 
 /** Whether Rock's record is one two42 may link: a living person, not a business or an inactive record. */
@@ -48,6 +49,17 @@ export const rockProvider: RecordsProvider = {
   },
   copy: COPY_SOURCES.rock,
   live: rockLiveSource(),
+  intake: {
+    setup: {
+      keyLabel: "Write REST key",
+      keyHelp:
+        "A second REST key, on a user and security role of their own, used only for sending new people. Give the role Edit on the WorkflowEntry action of the Workflows REST controller, View on the WorkflowTypes REST controller, and View on the workflow type you choose, and nothing else. Your read key stays as it is. The key isn't shown again after you save it.",
+      destinationLabel: "workflow type",
+      destinationHelp:
+        `The workflow Rock RMS starts for each new person, with ${attributeList()} attributes. Your staff decide in it how the person is added.`,
+    },
+    ...rockIntake(),
+  },
   checkConnection: (creds: RecordsCredentials) => checkConnection(creds),
   async findByLastNames(creds, lastNames) {
     const ids = await definedValueIds(creds);
@@ -65,3 +77,8 @@ export const rockProvider: RecordsProvider = {
   },
   personUrl: (baseUrl, id) => `${baseUrl}/Person/${encodeURIComponent(id)}`,
 };
+
+function attributeList(): string {
+  const keys: string[] = Object.values(ROCK_INTAKE_ATTRIBUTES);
+  return `${keys.slice(0, -1).join(", ")} and ${keys.at(-1)}`;
+}

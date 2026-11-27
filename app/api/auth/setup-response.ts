@@ -17,7 +17,10 @@ export type SetupAccountResponse =
   | { field: "password"; error: string }
   | { error: string };
 
-/** The person a live setup link was issued to. */
-export type SetupLink = { name: string; email: string };
+/**
+ * The person a live setup link was issued to. `shareWith` is the church's
+ * name, present only when the church sends new people to its records.
+ */
+export type SetupLink = { name: string; email: string; shareWith?: string };
 
 export type VerifyTokenResponse = SetupLink | { status: SetupStatus } | { error: string };

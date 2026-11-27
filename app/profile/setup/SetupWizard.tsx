@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
+import { ShareDetailsRow } from "@/components/profile/ShareDetailsRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { isChildWithoutAccount } from "@/lib/household";
@@ -41,7 +42,7 @@ import {
   type PersonDraft,
   type StepErrors,
 } from "./setupValidation";
-import { logError } from "@/lib/log";
+import { logError, logWarn } from "@/lib/log";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { forgetSetupRedirects } from "./actions";
 
@@ -57,6 +58,8 @@ interface PendingPerson extends PersonDraft {
 }
 
 /** Each step's label in the progress list is also its heading. */
+const INTAKE_TIMEOUT_MS = 10_000;
+
 const STEPS = ["About you", "Gender", "Contact", "Household", "Work"] as const;
 type StepName = (typeof STEPS)[number];
 
@@ -246,6 +249,8 @@ interface SetupWizardProps {
   householdName: string | null;
   /** Which of their details came from the church's records, so a locked one isn't offered for editing. */
   records?: ProfileRecords | null;
+  /** Offered when the church sends new people to its records; `consented` when they ticked the box at sign-up. */
+  share?: { churchName: string; consented: boolean } | null;
 }
 
 export function SetupWizard({
@@ -253,6 +258,7 @@ export function SetupWizard({
   userEmail,
   householdName: initialHouseholdName,
   records = null,
+  share = null,
 }: SetupWizardProps) {
   const nameLocked = isLocked(records, "name");
   const genderLocked = isLocked(records, "gender");
@@ -285,6 +291,7 @@ export function SetupWizard({
     !!(profile.phone_home || profile.phone_work),
   );
   const [hideEmail, setHideEmail] = useState(profile.hide_email ?? false);
+  const [shareDetails, setShareDetails] = useState(share?.consented ?? false);
 
   const [gender, setGender] = useState<Gender | null>(profile.gender);
 
@@ -511,6 +518,28 @@ export function SetupWizard({
         setSavedPeople(new Set([...savedPeople, ...unsavedPeople.map((m) => m.tempId)]));
       }
 
+      // Sent by the server after the response; setup finishes whatever happens
+      // to a send, but a withdrawal must be confirmed before setup is marked
+      // complete, since a finished setup can't be reopened to withdraw it.
+      let alreadySent = false;
+      if (share && (shareDetails || share.consented)) {
+        let saved = false;
+        try {
+          const res = await fetch("/api/church-records/intake", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ share: shareDetails }),
+            signal: AbortSignal.timeout(INTAKE_TIMEOUT_MS),
+          });
+          // 409 on a withdrawal: a send already started and can't be stopped.
+          alreadySent = !shareDetails && res.status === 409;
+          saved = res.ok || alreadySent;
+        } catch (err) {
+          logWarn("Sharing details with the church office failed", err, { route: "/profile/setup" });
+        }
+        if (!saved && !shareDetails) throw new Error("church records consent withdraw failed");
+      }
+
       // Marked complete only after every dependent write succeeds.
       const { error: setupError } = await supabase
         .from("profiles")
@@ -518,7 +547,8 @@ export function SetupWizard({
         .eq("id", profile.id);
       if (setupError) throw setupError;
 
-      if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
+      if (alreadySent) toast.info(`Profile set up. Your details may already be on their way to ${share?.churchName}'s office.`);
+      else if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
       await forgetSetupRedirects();
       router.push("/dashboard");
@@ -817,6 +847,13 @@ export function SetupWizard({
                   </div>
                 </>
               )}
+
+              {share && (
+                <>
+                  <Separator />
+                  <ShareDetailsRow churchName={share.churchName} checked={shareDetails} onChange={setShareDetails} />
+                </>
+              )}
             </>
           )}
 
@@ -1030,7 +1067,7 @@ export function SetupWizard({
 
       <div className="flex flex-wrap-reverse items-center justify-between gap-3">
         {step > 1 ? (
-          <Button type="button" variant="outline" onClick={() => goTo(step - 1)}>
+          <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={saving}>
             Back
           </Button>
         ) : (

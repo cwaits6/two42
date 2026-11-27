@@ -62,7 +62,7 @@ Keep two copies of each prayer key outside the host. Text sealed with a lost bod
 
 | Variable | Kind | Required | What it does, and what breaks without it |
 |---|---|---|---|
-| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. Changing it makes every saved key unreadable, and each church admin connects again; the links stay. Set the same value in the edge function secrets. |
+| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. Changing it makes every saved key unreadable, and each church admin connects again; the links stay. A church that sends new people also enters its write key again with **Change** on the **Send new people** card; until then each send is recorded as couldn't send. Set the same value in the edge function secrets. |
 
 ### Serving
 
