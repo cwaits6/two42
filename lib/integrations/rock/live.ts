@@ -6,13 +6,7 @@ import { safeFetch } from "@/lib/integrations/records/safeFetch";
 import type { RecordsAddress, RecordsCredentials } from "@/supabase/functions/_shared/records-types";
 import { type FetchLike, getJson } from "@/supabase/functions/_shared/rock-client";
 import { byIdChunks, int, parseRockDate, rockIds, rows } from "@/supabase/functions/_shared/rock-copy";
-import {
-  GROUP_LOCATION_FIELDS,
-  homeLocationIds,
-  LOCATION_FIELDS,
-  parseAddress,
-  ROCK_FAMILY_GUIDS,
-} from "@/supabase/functions/_shared/rock-households";
+import { GROUP_LOCATION_FIELDS, homeAddresses, ROCK_FAMILY_GUIDS } from "@/supabase/functions/_shared/rock-households";
 
 export const LIVE_PERSON_FIELDS = ["Id", "BirthMonth", "BirthDay", "AnniversaryDate", "GraduationYear"] as const;
 
@@ -46,19 +40,10 @@ async function families(creds: RecordsCredentials, ids: readonly string[], fetch
   const groups = (
     await byIdChunks(creds, "/api/Groups", "Id", numeric, GROUP_LOCATION_FIELDS, fetcher, { $expand: "GroupLocations" })
   ).filter((row) => numeric.includes(int(row.Id) ?? 0));
-  const homes = homeLocationIds(groups, homeType);
-  const locationIds = [...new Set(homes.values())];
-  const locations = new Map<number, RecordsAddress>();
-  for (const row of locationIds.length
-    ? await byIdChunks(creds, "/api/Locations", "Id", locationIds, LOCATION_FIELDS, fetcher)
-    : []) {
-    const id = int(row.Id);
-    if (id && locationIds.includes(id)) locations.set(id, parseAddress(row));
-  }
+  const addresses = await homeAddresses(creds, groups, homeType, fetcher);
   for (const row of groups) {
     const id = int(row.Id) as number;
-    const location = homes.get(id);
-    found.set(String(id), location === undefined ? null : locations.get(location) ?? null);
+    found.set(String(id), addresses.get(id) ?? null);
   }
   return found;
 }
