@@ -62,7 +62,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
         toast.success("Saved. Details now come live from your church's records.");
       } else {
         toast.success("Saved. Your church's records fill these details in at the refresh.");
-        // Started now rather than waiting for the night; a failure here leaves it to the nightly run.
+        // Fills the details in without waiting for the night; a failure here leaves it to the nightly run.
         await call("/api/admin/church-records/refresh", { method: "POST" }).catch(() => null);
       }
       await load();
