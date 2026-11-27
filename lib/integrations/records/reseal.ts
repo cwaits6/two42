@@ -73,6 +73,8 @@ export async function resealOrg(
     .eq("org_id", orgId)
     .maybeSingle();
   if (connection.error) throw new Error("records keys read failed");
+  if (!connection.data) return [];
+  const { provider } = connection.data;
   const intake = await client
     .from("records_intake_settings")
     .select("key_ciphertext")
@@ -80,20 +82,16 @@ export async function resealOrg(
     .maybeSingle();
   if (intake.error) throw new Error("records keys read failed");
 
-  const sealed: { table: SealedTable; key: SealedKeyResult["key"]; label: string | null; ciphertext: string }[] = [];
-  const provider = connection.data?.provider ?? "unknown";
-  if (connection.data) {
-    sealed.push({ table: "records_connections", key: "read key", label: provider, ciphertext: connection.data.key_ciphertext });
-  }
+  const sealed: { table: SealedTable; key: SealedKeyResult["key"]; label: string; ciphertext: string }[] = [
+    { table: "records_connections", key: "read key", label: provider, ciphertext: connection.data.key_ciphertext },
+  ];
   if (intake.data) {
-    // The write key's provider is its connection's, so without one its label is unknown.
-    const label = connection.data ? intakeKeyLabel(provider) : null;
-    sealed.push({ table: "records_intake_settings", key: "write key", label, ciphertext: intake.data.key_ciphertext });
+    sealed.push({ table: "records_intake_settings", key: "write key", label: intakeKeyLabel(provider), ciphertext: intake.data.key_ciphertext });
   }
 
   const results: SealedKeyResult[] = [];
   for (const { table, key, label, ciphertext } of sealed) {
-    const plan: SealPlan = label ? planSeal(secrets, orgId, label, ciphertext) : { action: "unopenable" };
+    const plan = planSeal(secrets, orgId, label, ciphertext);
     const result: SealedKeyResult = { orgId, provider, key, action: plan.action };
     if (apply && plan.action === "reseal") result.outcome = await writeSeal(client, table, orgId, ciphertext, plan.next);
     results.push(result);

@@ -15,7 +15,6 @@ const intakeStore = vi.hoisted(() => ({
   saveIntakeSettings: vi.fn(),
   deleteIntakeSettings: vi.fn(),
   loadIntakeCredentials: vi.fn(),
-  intakeKeyLabel: (id: string) => `${id}-intake`,
 }));
 vi.mock("@/lib/integrations/records/intake", () => intakeStore);
 

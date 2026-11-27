@@ -21,8 +21,6 @@ import type { Database } from "@/lib/supabase/database.types";
 type IntakeState = Database["public"]["Enums"]["records_intake_state"];
 type IntakeRequestUpdate = Database["public"]["Tables"]["records_intake_requests"]["Update"];
 
-export { intakeKeyLabel } from "./crypto";
-
 export interface IntakeSettings {
   connectionId: string;
   keyHint: string;
