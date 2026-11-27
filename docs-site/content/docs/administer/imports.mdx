@@ -55,7 +55,7 @@ When the operator has set `RECORDS_KEY_SECRET`, **Church settings → Church rec
 
 ### Connect
 
-The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers**, **DefinedValues**, **Groups**, **GroupMembers** and **Locations** REST controllers, with no edit rights. two42 checks the key can view all six before it saves it. two42 never writes to Rock.
+The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers**, **DefinedValues**, **Groups**, **GroupMembers** and **Locations** REST controllers, with no edit rights. two42 checks the key can view all six before it saves it. This key only ever reads; two42 writes to Rock only if you turn on [sending new people](#send-new-people-to-rock-rms), with a separate key.
 
 ### How two42 uses your church's records
 
@@ -103,6 +103,19 @@ Suggestions are worked out by each refresh, nightly or **Refresh now**; the tab 
 ### Needs review
 
 **Needs review** lists linked people who became inactive in Rock or can't be found there any more, with **Open in Rock RMS** for an inactive person and **Unlink**. Nothing happens to them automatically.
+
+### Send new people to Rock RMS
+
+**Send new people to Rock RMS**, at the bottom of the **People** tab, is off until you turn it on. When it's on, someone who joins two42 and ticks **Share my details with your church's office** is sent to Rock once, as their first and last name, sign-in email and phone (mobile, or home if there's no mobile), for your staff to review. Nothing about their household is sent. two42 never changes anyone already in Rock, and never sends someone who is linked or was already sent.
+
+1. Select **Turn on**.
+2. Paste the **Write REST key**: a second key, on a user and security role of their own, used only for sending new people. Its role needs **Edit** on the WorkflowEntry action of the Workflows REST controller, **View** on the WorkflowTypes REST controller, and **View** on the workflow type you choose, and nothing else. The steps, and the workflow type to make, are in [the write key's user and role](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md#the-write-keys-user-and-role). Your read key stays view-only; two42 refuses the read key here.
+3. Select **Find workflow types** and choose one, or type its number under **Or enter its id**. The workflow type needs FirstName, LastName, Email and Phone attributes; your staff decide in it how the person is added.
+4. Select **Save**. two42 checks the workflow type and the key's permissions without sending anyone. If Rock refuses, it says what's wrong, such as **Rock RMS didn't accept the write key, or its role is missing a permission.** or **Rock RMS has no active workflow type with that id.**
+
+Once it's on, the card shows where new people go, the write key's last four characters, how many were **Sent** and how many two42 **Couldn't send**, and why the newest send failed, if it did. A send that fails isn't tried again, and never stops the person's sign-up. **Change** changes the workflow type or the key; leave the key empty to keep the saved one. **Turn off** asks first, then removes the write key and every consent not yet sent; people already sent stay in Rock. Disconnecting Rock turns it off too.
+
+What members see is in [Signing in](/docs/use/sign-in) and [Joining](/docs/use/joining).
 
 ### Disconnecting or unlinking
 

@@ -223,8 +223,8 @@ function IntakeForm({
       <div className="space-y-2">
         <Label htmlFor="intake-key" className="text-lg">
           {setup.keyLabel}
-          {current && <span className="font-normal text-muted-foreground"> (leave empty to keep the saved one)</span>}
         </Label>
+        {current && <p className="text-base text-muted-foreground">Leave it empty to keep the saved key.</p>}
         <Input
           id="intake-key"
           type="password"

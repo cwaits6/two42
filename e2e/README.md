@@ -124,6 +124,14 @@ copy mode with two birthdays from the records and one Henry changed. `afterAll`
 deletes the connection, which takes the rest, the settings and the mode, and puts the
 three seeded birthdays back. It needs `RECORDS_KEY_SECRET` the same way.
 
+`church-records-intake.spec.ts` makes no call to any church's records either: it
+writes a fixture connection and the church's setting for sending new people (a
+dummy sealed write key and a fixture workflow type id), and a newcomer who hasn't
+finished setup (Owen Sharewell), through the same container in `beforeAll`. It
+never ticks the box or finishes setup, so nothing is sent. `afterAll` deletes the
+connection, which takes the setting, and the newcomer. It needs
+`RECORDS_KEY_SECRET` the same way.
+
 ## Personas
 
 Every persona comes from `supabase/seed.sql` and signs in with
@@ -189,6 +197,7 @@ not covered here.
 | `church-records-copy.spec.ts`       | A member whose church copied their details sees the one-time notice until Got it, and never again after a reload; a locked name shows as text with "Managed by your church" and no First name or Last name field; a mobile number they changed shows "Changed in two42" and Use your church's value puts the church's number back, labelled "From your church's records"; a household's primary sees their linked spouse's locked name as "Managed by your church" with no First name field on the edit sheet, and "From your church's records" under the household's anniversary |
 | `church-records-households.spec.ts` | At 390 and 1280 wide, a household's primary and spouse each see the children the church's records suggest for their household, with the birthday and no year, while someone in another household sees none; the primary's Add to household puts the child among the household's people with no birth year stored, and after a reload they aren't suggested again; the spouse's Dismiss leaves the child dismissed and gone after a reload; with the children switch off, a suggestion still stored shows to nobody; the church admin sees the household suggestions under Ready to confirm and Check first, named from two42 only, and the switch on |
 | `church-records-live.spec.ts`       | In a church that shows details live, a member's card shows their birthday from the church's records with Don't show, and Birthdays lists them under that month, from one live request; with the records unreachable the directory still loads, their card shows "Birthday — Not available right now", Birthdays says "Birthdays from your church's records: Not available right now" and still lists a birthday the member entered in two42; when the live request itself fails, the card says "Details from your church's records: Not available right now" and Birthdays says it too, rather than showing no details; a church admin choosing Live is told "This removes 2 details copied from your church's records.", and after confirming the two are gone and the one a member changed stays |
+| `church-records-intake.spec.ts`     | With sending new people on, profile setup's Contact step offers Share my details with the church's office unticked, under the church's name; with it off, there is no box |
 
 ## Adding a spec
 
