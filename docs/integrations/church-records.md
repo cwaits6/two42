@@ -7,9 +7,9 @@ church admins don't have to type what the church already knows. two42 only
 ever **reads** from the records, and works the same for a church that never
 connects them.
 
-This document is the design record. **The baseline** and **Copy into two42**
-below are built. The rest is decided but not built, and each part names its
-ticket.
+This document is the design record. **The baseline**, **Copy into two42**
+and **Live from the records** below are built. The rest is decided but not
+built, and each part names its ticket.
 
 ## Decisions
 
@@ -70,7 +70,7 @@ A church admin picks one:
   stored in two42's own fields. A nightly job asks the records only for people
   changed since the last run. A church admin can also press **Refresh now**.
   This is what makes the directory fast, searchable and viewable offline.
-- **Live from the records** (later, T42-274). two42 stores what it needs to
+- **Live from the records** (built, T42-274; see [Live from the records](#live-from-the-records-built)). two42 stores what it needs to
   run: name, sign-in email, phones, gender and photo. Address, birthday,
   anniversary and a child's grade are fetched from the records when a screen
   needs them, only for the people the viewer may already see, and are never
@@ -342,6 +342,13 @@ address, family, group or giving data; copying reads listed phones.
   `_shared/address-case.ts`; `app/api/admin/church-records/households/`,
   `RecordsHouseholds.tsx` and `householdLists.ts`; and
   `components/household/SuggestedChildren.tsx`.
+- For live details: `supabase/migrations/20261211000000_church_records_live.sql`
+  (the mode, `records_save_mode()`, the count, the guards and
+  `records_live_hide()`), with `supabase/tests/church_records_live_suite.sql`;
+  `lib/integrations/records/live.ts` and `livePlan.ts`,
+  `lib/integrations/rock/live.ts`, `app/api/directory/live/`,
+  `app/api/admin/church-records/mode/`, `RecordsMode.tsx`, and
+  `components/directory/liveDetails.ts` and `LiveDetailsContext.tsx`.
 
 Outside these paths, three kinds of code import it: the link on Church
 settings; the pages and forms that show a detail's records state
@@ -516,6 +523,103 @@ with a 500 if it doesn't.
 - **The hosted Edge Runtime**: the loopback check above, and the time a first
   copy of a large church takes.
 
+## Live from the records (built)
+
+T42-274. A church admin chooses **Live from your church's records** under
+**How two42 uses your church's records** on the church records page.
+
+### How it works
+
+- **The mode** is `records_org_settings.mode`, `copy` (the default, and what
+  no row means) or `live`. It belongs to the church, like the field settings
+  it qualifies, so it survives reconnecting. The field settings still say
+  which fields come from the records; the mode says whether the live-only
+  ones are copied or read live.
+- **Live-only fields** are a person's `birthday`, a household's `anniversary`
+  and `address`, and a child's `grade` (`LIVE_ONLY_FIELDS` in
+  `_shared/records-copy.ts`, `records_live_only_field()` in SQL). Everything
+  else a church copies, names, phones, gender and photo, is copied as before.
+- **Switching** goes through `records_save_mode()`, refused while a refresh
+  holds its claim. **Copy → Live**, in one transaction: every live-only value
+  whose source is still `records` is cleared from two42 (birthday, the
+  person's own grade row, a household's anniversary when every linked
+  person's source for it is the church's, a linked household's address), its
+  source is removed, the church's last value is forgotten on the sources
+  members changed or cleared, and open child suggestions lose their birthday
+  and grade. The confirmation's count is `records_live_copied_count()`, one
+  per value (two spouses' anniversary is one). Values a member changed stay
+  theirs. A child already added from a suggestion holds no source, so their
+  details are ordinary two42 data and stay, like values left after a link
+  ends. **Live → Copy** asks the next refresh to copy everyone in full, and
+  the admin's page starts **Refresh now**; households and children are read in
+  full every refresh already.
+- **Never stored.** The refresh, nightly and **Refresh now**, reads the mode
+  inside its claim and plans no live-only field (`storedFields()`), copies no
+  household address, and suggests children with names and photo only. Under
+  that, `records_live_value_guard` and `records_live_child_guard` refuse, in
+  live mode, any source of a live-only field that is `records` or keeps a
+  church value, and any suggested child with a birthday or grade. Every copy
+  of one of these fields writes its source in the same call, so a write path
+  that forgot live mode fails rather than storing anything.
+  `supabase/tests/church_records_live_suite.sql` checks no such value is
+  stored after the switch.
+- **Reading them.** The directory layouts ask `liveDirectoryOn()` (no provider
+  call); only when it is on does the directory's client make one request to
+  `GET /api/directory/live` per directory open, shared by all five tabs.
+  `readLiveDirectory()` reads the people and households the viewer may see
+  through the viewer's own RLS-scoped `profiles_directory` and
+  `families_directory_full`, then, on the service client filtered on the
+  request's `app_request_org_id()`, only those people's links and sources.
+  `planLiveRequest()` decides each detail by the copy rules applied at read
+  time: a value the member entered or changed in two42 is theirs, a cleared
+  one stays hidden, and only an empty one with no source of its own is the
+  records'. The provider is asked once, for exactly those ids. The answer is
+  normalized as the copy would store it (`formDate()`,
+  `householdChurchValues()`), merged into the rows the cards and lists already
+  read (`applyLiveDetails()`), so live and copied details render through one
+  path. Grades are fetched only for children added from a suggestion while
+  the church suggests children: a linked person's own grade row is on no
+  directory screen.
+- **Hiding.** A live value is never in two42 for a member to leave out, so
+  `records_live_hide()` records a `cleared` source instead: a member's own
+  birthday, or, for a household's primary or spouse, its address and
+  anniversary. **Don't show** and **Show again** are on the member's own entry
+  and household in the directory. A clear made in live mode stays the
+  member's if the church switches back to copy.
+- **Not reachable.** When the provider fails, or the key can't be opened,
+  every detail that would have come from it shows "Not available right now";
+  the rest of the directory is unaffected. The log line carries the error's
+  kind only.
+- **Never cached.** The route answers `Cache-Control: private, no-store` and
+  is dynamic, the browser fetches it with `cache: "no-store"`, and the
+  provider's requests are `no-store`. Nothing is kept server-side. Caching on
+  the person's device is T42-275, not built.
+- **Providers.** Live is the optional `live` capability of `RecordsProvider`
+  (`RecordsLiveSource.details()`); shared code asks whether a provider has it.
+  Rock's is `lib/integrations/rock/live.ts`.
+
+### What is read
+
+| | Read from the records | Stored in two42 |
+|---|---|---|
+| Directory, live | For the visible linked people and added children: birth month and day, anniversary date, graduation year; never the birth year. For the visible linked households: the home address | Nothing |
+| Refresh, live mode | As in copy mode | Only what live mode keeps: names, phones, gender, photo, and suggested children's names and photo |
+
+Requests per directory open, from the code: `ceil(P/50)` People requests for P
+people, and when any household's address is due, one DefinedValues lookup
+plus `ceil(F/50)` Groups and `ceil(L/50)` Locations requests for F households
+and L home locations. For 200 people and 80 households: 4 + 1 + 2 + 2 = 9,
+run as two parallel chains. `lib/integrations/rock/live.test.ts` pins this.
+
+### Still open
+
+- **Measured on a real Rock.** The request count above comes from the code;
+  how long a directory open takes against a real Rock, and how a large church
+  fares, is still to measure on Rock's public demo.
+- **Other screens.** Group Home's "this week" list, the contact card download,
+  the profile page's directory preview and the church admin's member page show
+  two42's stored values only in live mode.
+
 ## Rock RMS
 
 ### API facts
@@ -560,22 +664,26 @@ Recommended setup, following [Permissions](#permissions):
 
 The controllers, from the requests the code makes
 (`supabase/functions/_shared/rock-client.ts`, `rock-copy.ts` and
-`rock-households.ts`, every one a `GET`):
+`rock-households.ts`, and `lib/integrations/rock/live.ts`, every one a `GET`).
+Live details read no controller the list didn't already have:
 
 | REST controller | Read for | Requests |
 |---|---|---|
-| **People** | Connecting, suggesting, linking, copying, review | `GET /api/People` with `$select` of the fields in the tables above |
-| **DefinedValues** | Connecting, record type and status, phone types, and the names of titles and suffixes | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
+| **People** | Connecting, suggesting, linking, copying, review, live details | `GET /api/People` with `$select` of the fields in the tables above |
+| **DefinedValues** | Connecting, record type and status, phone types, the names of titles and suffixes, and the home location type for live addresses | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
 | **PhoneNumbers** | Connecting, copying phones, families' home phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId`; or by `ModifiedDateTime` then `Id`, `$select=PersonId,Id,ModifiedDateTime` |
-| **Groups** | Connecting, and each family's home address | `GET /api/Groups` by `Id`, `$expand=GroupLocations&$select=Id,GroupLocations/LocationId,GroupLocations/GroupLocationTypeValueId,GroupLocations/IsMailingLocation` |
+| **Groups** | Connecting, and each family's home address, copied or live | `GET /api/Groups` by `Id`, `$expand=GroupLocations&$select=Id,GroupLocations/LocationId,GroupLocations/GroupLocationTypeValueId,GroupLocations/IsMailingLocation` |
 | **GroupMembers** | Connecting, and who is in each family | `GET /api/GroupMembers?$filter=(GroupId eq …) and IsArchived eq false&$select=GroupId,PersonId,GroupMemberStatus&$orderby=Id`, paged |
-| **Locations** | Connecting, and the address itself | `GET /api/Locations` by `Id`, `$select=Id,Street1,Street2,City,State,PostalCode,Country` |
+| **Locations** | Connecting, and the address itself, copied or live | `GET /api/Locations` by `Id`, `$select=Id,Street1,Street2,City,State,PostalCode,Country` |
 
 For families, People is also read by `Id` with
 `$select=Id,PrimaryFamilyId`, and for the family's members
 `Id,AgeClassification,MaritalStatusValueId,RecordTypeValueId,RecordStatusValueId,IsDeceased`,
 adding `FirstName,LastName,BirthMonth,BirthDay,GraduationYear,PhotoId` only
-while the church suggests children. `BirthYear` is never requested.
+while the church suggests children. Live details read People by `Id` with
+`$select=Id,BirthMonth,BirthDay,AnniversaryDate,GraduationYear`, and a
+family's home address the way households do (`lib/integrations/rock/live.ts`).
+`BirthYear` is never requested.
 
 Photos aren't read through the REST API: Rock has no endpoint for them. They
 come from `GetImage.ashx?id=<PhotoId>&maxwidth=400&maxheight=400&format=jpg`,
