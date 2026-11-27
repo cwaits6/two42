@@ -174,7 +174,10 @@ How it works:
   a person counts only in their own primary family.
 - **Confirming** (`records_confirm_household()`, all or nothing) moves exactly
   the people the suggestion names, by their household and relationship, and
-  links the household to the family. Whoever stays behind keeps their
+  links the household to the family, and asks the next refresh to copy the
+  people it moved in full: the anniversary is copied only through a person
+  already in the household, so someone copied before they had one would
+  otherwise never bring it in. Whoever stays behind keeps their
   household with its address, phone, photo, anniversary and the people in it
   without an account; it is never deleted. A suggestion where anyone leaves a
   household they're in is **Check first**, confirmed one at a time; the rest
@@ -408,8 +411,12 @@ and kept up to date.
   both),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
-  sources, so its values become ordinary two42 data; any change asks the next
-  refresh to copy everyone in full. A save is refused while a refresh holds
+  `records` and `changed` sources, so its values become ordinary two42 data,
+  but keeps each `cleared` one with the church's value forgotten, so turning
+  the field on again leaves a member's clear empty in copy mode and hidden in
+  live mode. A changed value needs no source to survive, since a first fill
+  never replaces what a member entered; an empty one does. Any change asks
+  the next refresh to copy everyone in full. A save is refused while a refresh holds
   its claim, because that refresh works from the settings it read when it
   started.
 - **Where each value came from** (`records_field_values`): per linked person

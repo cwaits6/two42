@@ -2,6 +2,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 import {
   childSuggestionRows,
   householdChurchValues,
+  householdPlanChanges,
   type HouseholdStoredValue,
   type PlanProfile,
   planHouseholdCopy,
@@ -256,6 +257,23 @@ Deno.test("a cleared address stays cleared, keeping only the church's latest val
     state: "cleared",
     church_value: { address_line1: "12 Oak St", address_line2: null, city: "Austin", state: "TX", postal_code: "78701-1234" },
   });
+});
+
+Deno.test("a kept clear of a field not from the records doesn't count as a change", () => {
+  const phone = { phone_home: "+15125550122" };
+  const stored = new Map<"address" | "phone_home", HouseholdStoredValue>([
+    ["address", { state: "cleared", churchValue: {} }],
+    ["phone_home", { state: "records", churchValue: phone }],
+  ]);
+  const plan = planHouseholdCopy({
+    fields: new Set(["phone_home"] as const),
+    current: { ...EMPTY_HOUSEHOLD, ...phone },
+    stored,
+    family: ADDRESS_FAMILY,
+    normalizePhone,
+  });
+  assertEquals(householdPlanChanges(plan, stored), false);
+  assertEquals(householdPlanChanges(plan, new Map([["phone_home", { state: "changed", churchValue: phone }]])), true);
 });
 
 Deno.test("a value still the church's follows the records, a removal included", () => {

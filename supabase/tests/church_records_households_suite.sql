@@ -532,8 +532,9 @@ select is(
   public.records_save_field_settings(pg_temp.fx('org'), '{"phone_home": "member"}', pg_temp.fx('admin')),
   'saved', 'the church admin stops filling the address from the records');
 select is(
-  (select array_agg(field) from public.records_household_values where family_id = pg_temp.fx('home')),
-  array['phone_home'], 'and the address''s source goes, leaving it ordinary household data');
+  (select array_agg(field || ':' || state || ':' || church_value::text order by field)
+     from public.records_household_values where family_id = pg_temp.fx('home') and field = 'address'),
+  array['address:cleared:{}'], 'the household''s clear of the address stays, without the church''s value');
 select is(
   (select array_agg(field) from public.records_field_settings where org_id = pg_temp.fx('org')),
   array['phone_home'], 'the address is no longer filled from the records');

@@ -119,10 +119,13 @@ export function planHouseholdCopy(input: {
   return plan;
 }
 
-/** Whether the plan writes the household or a source that differs from what is stored. */
+/**
+ * Whether the plan writes the household or a source that differs from what is
+ * stored. A stored source the plan has no row for is a field not copied, such
+ * as a household's kept clear of a field turned off, and the copy never writes it.
+ */
 export function householdPlanChanges(plan: HouseholdCopyPlan, stored: ReadonlyMap<HouseholdField, HouseholdStoredValue>) {
   if (Object.keys(plan.household).length > 0) return true;
-  if (plan.values.length !== stored.size) return true;
   return plan.values.some((row) => {
     const prior = stored.get(row.field);
     return !prior || prior.state !== row.state ||

@@ -1023,6 +1023,16 @@ it also accepts `address` and `phone_home` (member-changeable only) and, for a
 field turned off, deletes that church's household sources
 (`records_household_values where org_id = _org_id`) as well as its people's.
 
+`20261213000000_church_records_value_sources.sql` replaces
+`records_save_field_settings()` and `records_confirm_household()` with the
+same signatures, answers, `SECURITY INVOKER` and grants. For a field turned
+off, the settings save keeps that church's `cleared` sources and empties
+their church value, still filtering every statement on `org_id = _org_id`; a
+confirmation also resets the person state of the people it moved
+(`org_id = _org_id and profile_id = any(…)`, the same ids it locks and
+moves). `supabase/tests/church_records_value_sources_suite.sql` proves another
+church's sources and person state are untouched.
+
 ## Church records households — service-key only, SECURITY INVOKER
 
 `records_save_children_setting(_org_id, _on, _updated_by)`,
