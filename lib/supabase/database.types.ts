@@ -1455,6 +1455,64 @@ isOneToOne: false
       referencedColumns: ["org_id","family_id"]
     }
                   ]
+                },"records_intake_requests": {
+                  Row: {
+                    "consented_at": string,"failure": string | null,"finished_at": string | null,"org_id": string,"profile_id": string,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "consented_at"?: string,"failure"?: string | null,"finished_at"?: string | null,"org_id"?: string,"profile_id": string,"state": string
+                  }
+                  Update: {
+                    "consented_at"?: string,"failure"?: string | null,"finished_at"?: string | null,"org_id"?: string,"profile_id"?: string,"state"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_intake_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_intake_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_intake_settings": {
+                  Row: {
+                    "connection_id": string,"destination_id": string,"destination_name": string,"enabled_at": string,"enabled_by": string | null,"key_ciphertext": string,"key_hint": string,"org_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "connection_id": string,"destination_id": string,"destination_name": string,"enabled_at"?: string,"enabled_by"?: string | null,"key_ciphertext": string,"key_hint": string,"org_id"?: string
+                  }
+                  Update: {
+                    "connection_id"?: string,"destination_id"?: string,"destination_name"?: string,"enabled_at"?: string,"enabled_by"?: string | null,"key_ciphertext"?: string,"key_hint"?: string,"org_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_intake_settings_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_intake_settings_enabled_by_fkey"
+      columns: ["enabled_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_intake_settings_enabled_by_fkey"
+      columns: ["enabled_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"records_org_settings": {
                   Row: {
                     "mode": string,"org_id": string,"suggest_children": boolean,"updated_at": string,"updated_by": string | null
@@ -2807,6 +2865,12 @@ isOneToOne: false
                            },
 "records_field_columns":
 { Args: { "_field": string }; Returns: (string)[]
+                           },
+"records_intake_claim":
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
+                           },
+"records_intake_consent":
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
                            },
 "records_is_empty":
 { Args: { "_value": Json }; Returns: boolean

@@ -234,6 +234,10 @@ begin
     values (_org, (select connection_id from public.records_connections where org_id = _org), '2', _family, '[]', true);
   insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name)
     values (_org, _family, '3', _tag || ' child', 'Leak');
+  insert into public.records_intake_settings (org_id, connection_id, key_ciphertext, key_hint, destination_id, destination_name, enabled_by)
+    values (_org, (select connection_id from public.records_connections where org_id = _org), 'k1.k.c.d', 'efgh', '42', _tag || ' intake', _owner);
+  insert into public.records_intake_requests (org_id, profile_id, state, finished_at)
+    values (_org, _owner, 'sent', now());
 end;
 $$;
 
@@ -428,6 +432,7 @@ begin
                          'event_reminder_passes', 'event_reminder_sends', 'prayer_comments',
                          'records_connections', 'records_person_links', 'records_refresh_state',
                          'records_household_links', 'records_household_suggestions',
+                         'records_intake_settings', 'records_intake_requests',
                          'supper_reminder_passes', 'supper_reminder_sends') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
@@ -435,7 +440,8 @@ begin
       -- serving_reminder_sends / event_reminder_passes /
       -- event_reminder_sends / prayer_comments / records_connections /
       -- records_person_links / records_refresh_state / records_household_links /
-      -- records_household_suggestions / supper_reminder_passes /
+      -- records_household_suggestions / records_intake_settings /
+      -- records_intake_requests / supper_reminder_passes /
       -- supper_reminder_sends): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing

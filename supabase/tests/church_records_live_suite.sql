@@ -198,6 +198,9 @@ begin
     values (_other, _connection, 'B1', _family, '[]', true);
   insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name)
     values (_other, _family, '901', 'Boundary', 'Child');
+  insert into public.records_intake_settings (org_id, connection_id, key_ciphertext, key_hint, destination_id, destination_name)
+    values (_other, _connection, 'k1.kid.iv.write', '2222', '77', 'Boundary intake');
+  insert into public.records_intake_requests (org_id, profile_id, state, finished_at) values (_other, _owner, 'sent', now());
   insert into fx values ('other_org', _other), ('other_owner', _owner);
 end $$;
 
@@ -374,7 +377,7 @@ create temp table records_tables (name text primary key) on commit drop;
 insert into records_tables values
   ('records_child_suggestions'), ('records_connections'), ('records_field_settings'), ('records_field_values'),
   ('records_household_links'), ('records_household_suggestions'), ('records_household_values'),
-  ('records_org_settings'), ('records_person_links'), ('records_person_state'), ('records_refresh_state');
+  ('records_intake_requests'), ('records_intake_settings'), ('records_org_settings'), ('records_person_links'), ('records_person_state'), ('records_refresh_state');
 select is(
   (select array_agg(tablename::text order by tablename) from pg_tables where schemaname = 'public' and tablename like 'records\_%'),
   (select array_agg(name order by name) from records_tables),
