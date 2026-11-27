@@ -564,7 +564,8 @@ T42-274. A church admin chooses **Live from your church's records** under
   `supabase/tests/church_records_live_suite.sql` checks no such value is
   stored after the switch.
 - **Reading them.** The directory layouts ask `liveDirectoryOn()` (no provider
-  call); only when it is on does the directory's client make one request to
+  call; a failed mode read answers on, so the request below decides between
+  "off" and unavailable); only when it is on does the directory's client make one request to
   `GET /api/directory/live` per directory open, shared by all five tabs.
   `readLiveDirectory()` reads the people and households the viewer may see
   through the viewer's own RLS-scoped `profiles_directory` and
