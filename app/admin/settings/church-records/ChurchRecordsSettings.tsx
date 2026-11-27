@@ -117,17 +117,24 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
 
 function PeopleSettings({ connection }: { connection: Connection }) {
   const [mode, setMode] = useState<Mode>("copy");
+  const [modeSaves, setModeSaves] = useState(0);
   return (
     <>
       <PersonLinks key={connection.provider + connection.baseUrl + connection.keyHint} label={connection.providerLabel} />
       {connection.canShowLive && (
-        <RecordsMode key={`mode:${connection.provider}${connection.baseUrl}`} label={connection.providerLabel} onChange={setMode} />
+        <RecordsMode
+          key={`mode:${connection.provider}${connection.baseUrl}`}
+          label={connection.providerLabel}
+          onChange={setMode}
+          onSaved={() => setModeSaves((n) => n + 1)}
+        />
       )}
       {connection.canCopy && (
         <RecordsCopySettings
           key={`copy:${connection.provider}${connection.baseUrl}`}
           label={connection.providerLabel}
           live={connection.canShowLive && mode === "live"}
+          reloads={modeSaves}
         />
       )}
     </>

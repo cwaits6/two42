@@ -19,7 +19,16 @@ export function removalText(count: number): string {
   return `This removes ${count.toLocaleString("en-US")} ${count === 1 ? "detail" : "details"} copied from your church's records.`;
 }
 
-export function RecordsMode({ label, onChange }: { label: string; onChange: (mode: Mode) => void }) {
+export function RecordsMode({
+  label,
+  onChange,
+  onSaved,
+}: {
+  label: string;
+  onChange: (mode: Mode) => void;
+  /** After a switch and its refresh, whose results the copy settings show. */
+  onSaved: () => void;
+}) {
   const [data, setData] = useState<ModeAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -66,6 +75,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
         // Fills the details in without waiting for the night; a failure here leaves it to the nightly run.
         await call("/api/admin/church-records/refresh", { method: "POST" }).catch(() => null);
       }
+      onSaved();
       await load();
     } catch (err) {
       logError("Church records mode save failed", err, { route: "/admin/settings/church-records" });

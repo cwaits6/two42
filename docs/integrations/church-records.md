@@ -579,7 +579,9 @@ T42-274. A church admin chooses **Live from your church's records** under
   `planLiveRequest()` decides each detail by the copy rules applied at read
   time: a value the member entered or changed in two42 is theirs, a cleared
   one stays hidden, and only an empty one with no source of its own is the
-  records'. The provider is asked once, for exactly those ids. The answer is
+  records'. The provider is asked once, for exactly those ids, with the key
+  of the connection the links were read under: a connection replaced in
+  between leaves the records unreachable for that request. The answer is
   normalized as the copy would store it (`formDate()`,
   `householdChurchValues()`), merged into the rows the cards and lists already
   read (`applyLiveDetails()`), so live and copied details render through one

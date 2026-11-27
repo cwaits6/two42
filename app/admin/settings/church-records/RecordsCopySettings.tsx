@@ -44,7 +44,7 @@ function when(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function RecordsCopySettings({ label, live }: { label: string; live: boolean }) {
+export function RecordsCopySettings({ label, live, reloads = 0 }: { label: string; live: boolean; reloads?: number }) {
   const [data, setData] = useState<CopyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choices, setChoices] = useState<Choices>({});
@@ -83,6 +83,10 @@ export function RecordsCopySettings({ label, live }: { label: string; live: bool
   useEffect(() => {
     load(true);
   }, [load]);
+
+  useEffect(() => {
+    if (reloads > 0) load(false);
+  }, [reloads, load]);
 
   async function save() {
     setSaving(true);

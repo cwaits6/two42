@@ -205,6 +205,8 @@ vi.mock("@/lib/supabase/server", () => ({
           return chain;
         },
         eq: () => chain,
+        order: () => chain,
+        range: () => chain,
         maybeSingle: async () => result,
         then: (resolve: (value: unknown) => void) => resolve(result),
       };
@@ -221,7 +223,7 @@ describe("readLiveDirectory", () => {
     tables.data = { profiles_directory: VISIBLE_PEOPLE, families_directory_full: VISIBLE_HOUSEHOLDS, profiles: VIEWER_ROW };
     store.readMode.mockResolvedValue({ mode: "live", suggestChildren: true });
     provider.current = { id: "rock", copy: {}, live: { details } };
-    store.readConnection.mockResolvedValue({ provider: "rock", baseUrl: "https://rock.example.org" });
+    store.readConnection.mockResolvedValue({ provider: "rock", baseUrl: "https://rock.example.org", connectionId: "c" });
     store.loadCredentials.mockResolvedValue({
       provider: provider.current,
       creds: { baseUrl: "https://rock.example.org", key: "k" },
@@ -301,6 +303,17 @@ describe("readLiveDirectory", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const live = await readLiveDirectory(VIEWER);
     vi.mocked(console.log).mockRestore();
+    expect(live.mode === "live" && live.households[HOME].address).toEqual({ state: "unavailable" });
+    expect(details).not.toHaveBeenCalled();
+  });
+
+  it("when the connection is replaced after its links were read, answers unavailable details without asking the records", async () => {
+    store.loadCredentials.mockResolvedValue({
+      provider: provider.current,
+      creds: { baseUrl: "https://other.example.org", key: "k" },
+      connectionId: "replaced",
+    });
+    const live = await readLiveDirectory(VIEWER);
     expect(live.mode === "live" && live.households[HOME].address).toEqual({ state: "unavailable" });
     expect(details).not.toHaveBeenCalled();
   });

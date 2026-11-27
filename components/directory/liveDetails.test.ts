@@ -242,6 +242,31 @@ describe("live details", () => {
     expect(birthdayEntries(merged.members, merged.families, true).map((e) => e.key)).toEqual([`profile-${EVE}`]);
   });
 
+  it("keep a detail entered in two42 after the live answer was planned", () => {
+    const { people, families } = rows(
+      (id) => (id === ANN ? { birth_month: 3, birth_day: 3 } : {}),
+      (id) => (id === MILLER ? { anniversary_month: 6, anniversary_day: 6, address_line1: "1 Elm St" } : {}),
+      { birth_month: 4, birth_day: 4, graduation_year: 2030 },
+    );
+    const shown = <T,>(value: T) => ({ state: "shown" as const, value });
+    const merged = applyLiveDetails(people, families, {
+      ...LIVE_UNAVAILABLE,
+      unavailable: false,
+      people: { [ANN]: { birthday: shown({ month: 11, day: 28 }) }, [BOB]: { birthday: shown({ month: 2, day: 28 }) } },
+      households: {
+        [MILLER]: {
+          anniversary: shown({ month: 12, day: 1, year: 1985 }),
+          address: shown({ address_line1: "9 Oak Ave", address_line2: null, city: null, state: null, postal_code: null }),
+        },
+      },
+      children: { [KID]: { birthday: shown({ month: 11, day: 30 }), grade: shown(2034) } },
+    });
+    expect(merged.members.find((m) => m.id === ANN)).toMatchObject({ birth_month: 3, birth_day: 3 });
+    expect(merged.members.find((m) => m.id === BOB)).toMatchObject({ birth_month: 2, birth_day: 28 });
+    expect(merged.families[0]).toMatchObject({ anniversary_month: 6, anniversary_day: 6, address_line1: "1 Elm St" });
+    expect(merged.families[0].family_members_list[0]).toMatchObject({ birth_month: 4, birth_day: 4, graduation_year: 2030 });
+  });
+
   it("say so for both lists when nothing could be read, without changing a row", () => {
     const { people, families } = rows(() => ({}), () => ({}), {});
     expect(someUnavailable(LIVE_UNAVAILABLE, "birthday")).toBe(true);

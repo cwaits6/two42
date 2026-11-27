@@ -3,8 +3,17 @@
 // through the same code. Pure, for the tests that hold the two modes alike.
 import type { LiveDirectory, LiveDirectoryOn } from "@/lib/integrations/records/livePlan";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
+import { isEmptyValue } from "@/supabase/functions/_shared/records-copy";
+import { ADDRESS_COLUMNS } from "@/supabase/functions/_shared/records-households";
 
-/** With no live details the rows come back as the very same arrays, so a church that doesn't show any sees no change. */
+const empty = (month: number | null, day: number | null) => !month || !day;
+
+/**
+ * With no live details the rows come back as the very same arrays, so a church
+ * that doesn't show any sees no change. A live value fills only a detail still
+ * empty in these rows: they can be read after a member's edit the live answer
+ * was planned before.
+ */
 export function applyLiveDetails(
   members: DirectoryProfile[],
   families: FamilyDirectoryFull[],
@@ -14,28 +23,33 @@ export function applyLiveDetails(
   return {
     members: members.map((member) => {
       const birthday = live.people[member.id]?.birthday;
-      return birthday?.state === "shown"
+      return birthday?.state === "shown" && empty(member.birth_month, member.birth_day)
         ? { ...member, birth_month: birthday.value.month, birth_day: birthday.value.day }
         : member;
     }),
     families: families.map((family) => {
-      const { address, anniversary } = live.households[family.id] ?? {};
+      const slots = live.households[family.id] ?? {};
+      const address = slots.address?.state === "shown" && isEmptyValue(Object.fromEntries(ADDRESS_COLUMNS.map((c) => [c, family[c]]))) ? slots.address : undefined;
+      const anniversary =
+        slots.anniversary?.state === "shown" && empty(family.anniversary_month, family.anniversary_day) ? slots.anniversary : undefined;
       const children = family.family_members_list.map((child) => {
-        const { birthday, grade } = live.children[child.id] ?? {};
-        if (birthday?.state !== "shown" && grade?.state !== "shown") return child;
+        const slot = live.children[child.id] ?? {};
+        const birthday = slot.birthday?.state === "shown" && empty(child.birth_month, child.birth_day) ? slot.birthday : undefined;
+        const grade = slot.grade?.state === "shown" && child.graduation_year === null ? slot.grade : undefined;
+        if (!birthday && !grade) return child;
         return {
           ...child,
-          ...(birthday?.state === "shown" ? { birth_month: birthday.value.month, birth_day: birthday.value.day } : {}),
-          ...(grade?.state === "shown" ? { graduation_year: grade.value } : {}),
+          ...(birthday ? { birth_month: birthday.value.month, birth_day: birthday.value.day } : {}),
+          ...(grade ? { graduation_year: grade.value } : {}),
         };
       });
-      if (address?.state !== "shown" && anniversary?.state !== "shown" && children.every((c, i) => c === family.family_members_list[i])) {
+      if (!address && !anniversary && children.every((c, i) => c === family.family_members_list[i])) {
         return family;
       }
       return {
         ...family,
-        ...(address?.state === "shown" ? address.value : {}),
-        ...(anniversary?.state === "shown"
+        ...(address ? address.value : {}),
+        ...(anniversary
           ? {
               anniversary_month: anniversary.value.month,
               anniversary_day: anniversary.value.day,

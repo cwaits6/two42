@@ -8,6 +8,7 @@
 // Imports next/headers through @/lib/supabase/server; never import it from a
 // "use client" module.
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { logError, logWarn } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { RecordsError } from "./errors";
@@ -21,16 +22,23 @@ const OFF: LiveDirectory = { mode: "off" };
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
 async function liveConnection(orgId: string) {
-  const source = liveSourceOf(providerFor((await readConnection(orgId))?.provider));
-  if (!source) return null;
+  const connection = await readConnection(orgId);
+  const source = liveSourceOf(providerFor(connection?.provider));
+  if (!connection || !source) return null;
   const church = await readMode(orgId);
-  return church.mode === "live" ? { ...church, source } : null;
+  return church.mode === "live" ? { ...church, source, connectionId: connection.connectionId } : null;
 }
 
-/** The key, or null when it can't be opened, such as after RECORDS_KEY_SECRET changed; the records then can't be reached. */
-async function openCredentials(orgId: string, secret: Buffer) {
+/**
+ * The key, or null when it can't be opened, such as after RECORDS_KEY_SECRET
+ * changed, or when the connection was replaced since `connectionId` was read:
+ * the links were read for that connection, and another one's ids could name
+ * other people. The records then can't be reached.
+ */
+async function openCredentials(orgId: string, secret: Buffer, connectionId: string) {
   try {
-    return (await loadCredentials(orgId, secret))?.creds ?? null;
+    const loaded = await loadCredentials(orgId, secret);
+    return loaded?.connectionId === connectionId ? loaded.creds : null;
   } catch (err) {
     logError("Church records key couldn't be opened for live details", err, { route: "/api/directory/live", ids: { org: orgId } });
     return null;
@@ -86,12 +94,22 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   if (!connection) return OFF;
 
   const [people, households, viewer] = await Promise.all([
-    supabase.from("profiles_directory").select("id, family_id, relationship, birth_month, birth_day"),
-    supabase
-      .from("families_directory_full")
-      .select(
-        "id, address_line1, address_line2, city, state, postal_code, anniversary_month, anniversary_day, family_members_list",
-      ),
+    fetchAll((from, to) =>
+      supabase
+        .from("profiles_directory")
+        .select("id, family_id, relationship, birth_month, birth_day")
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("families_directory_full")
+        .select(
+          "id, address_line1, address_line2, city, state, postal_code, anniversary_month, anniversary_day, family_members_list",
+        )
+        .order("id")
+        .range(from, to),
+    ),
     supabase.from("profiles").select("id, family_id, relationship").eq("id", viewerId).maybeSingle(),
   ]);
   const readError = people.error ?? households.error ?? viewer.error;
@@ -128,7 +146,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
 
   const plan = planLiveRequest({ viewer: viewer.data, people: visiblePeople, households: visibleHouseholds, sources });
   let details: RecordsLiveDetails | null = null;
-  const creds = plan.planned.length > 0 ? await openCredentials(orgId, secret) : null;
+  const creds = plan.planned.length > 0 ? await openCredentials(orgId, secret, connection.connectionId) : null;
   if (creds) {
     try {
       details = await connection.source.details(creds, { people: plan.people, families: plan.families });

@@ -130,6 +130,25 @@ begin
   end if;
 
   if _mode = 'live' then
+    -- Locks the rows to clear before any statement below reads their sources.
+    -- An UPDATE that waits on a member's edit rechecks the row it updates but
+    -- not the source it joined, so it would clear the member's new value;
+    -- once locked, the next statements see the source that edit wrote.
+    perform 1 from public.profiles p
+      join public.records_field_values v on v.profile_id = p.id and v.org_id = p.org_id
+     where p.org_id = _org_id and v.field = 'birthday' and v.state = 'records'
+       for update of p;
+    perform 1 from public.family_members m
+      join public.records_field_values v on v.profile_id = m.claimed_profile_id and v.org_id = m.org_id
+     where m.org_id = _org_id and v.field = 'grade' and v.state = 'records'
+       for update of m;
+    perform 1 from public.family_units f
+     where f.org_id = _org_id
+       and (f.id in (select h.family_id from public.records_live_anniversary_households(_org_id) h)
+            or f.id in (select hv.family_id from public.records_household_values hv
+                         where hv.org_id = _org_id and hv.field = 'address' and hv.state = 'records'))
+       for update of f;
+
     _removed := public.records_live_copied_count(_org_id);
 
     update public.profiles p set birth_month = null, birth_day = null, birth_year = null

@@ -28,6 +28,8 @@ export interface ConnectionSummary {
   /** The key's last characters, so an admin can tell which key is in use without it being shown. */
   keyHint: string;
   connectedAt: string;
+  /** Replaced, with its links, when the connection moves to other records. */
+  connectionId: string;
 }
 
 export interface PersonLink {
@@ -42,12 +44,18 @@ export async function readConnection(orgId: string): Promise<ConnectionSummary |
   const service = await createServiceClient();
   const { data, error } = await service
     .from("records_connections")
-    .select("provider, base_url, key_hint, connected_at")
+    .select("provider, base_url, key_hint, connected_at, connection_id")
     .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw new RecordsStoreError("records connection read failed", { cause: error });
   return (
-    data && { provider: data.provider, baseUrl: data.base_url, keyHint: data.key_hint, connectedAt: data.connected_at }
+    data && {
+      provider: data.provider,
+      baseUrl: data.base_url,
+      keyHint: data.key_hint,
+      connectedAt: data.connected_at,
+      connectionId: data.connection_id,
+    }
   );
 }
 
