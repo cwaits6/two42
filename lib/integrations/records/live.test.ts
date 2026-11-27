@@ -160,9 +160,12 @@ describe("liveDirectory", () => {
 
 const store = vi.hoisted(() => ({
   readMode: vi.fn(),
+  readConnection: vi.fn(),
   loadCredentials: vi.fn(),
   readLiveSources: vi.fn(),
 }));
+const provider = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("./providers", () => ({ providerFor: (id: unknown) => (id === "rock" ? provider.current : null) }));
 const details = vi.hoisted(() => vi.fn());
 const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 vi.mock("./store", () => store);
@@ -190,8 +193,10 @@ describe("readLiveDirectory", () => {
     vi.clearAllMocks();
     tables.data = { profiles_directory: VISIBLE_PEOPLE, families_directory_full: VISIBLE_HOUSEHOLDS, profiles: VIEWER_ROW };
     store.readMode.mockResolvedValue({ mode: "live", suggestChildren: true });
+    provider.current = { id: "rock", live: { details } };
+    store.readConnection.mockResolvedValue({ provider: "rock", baseUrl: "https://rock.example.org" });
     store.loadCredentials.mockResolvedValue({
-      provider: { id: "rock", live: { details } },
+      provider: provider.current,
       creds: { baseUrl: "https://rock.example.org", key: "k" },
       connectionId: "c",
     });
@@ -200,7 +205,7 @@ describe("readLiveDirectory", () => {
   });
 
   it("for a church that never connected, is off and never asks the records", async () => {
-    store.loadCredentials.mockResolvedValue(null);
+    store.readConnection.mockResolvedValue(null);
     expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
     expect(details).not.toHaveBeenCalled();
     expect(store.readLiveSources).not.toHaveBeenCalled();
@@ -213,8 +218,17 @@ describe("readLiveDirectory", () => {
   });
 
   it("is off for a provider that can't show details live", async () => {
-    store.loadCredentials.mockResolvedValue({ provider: { id: "rock" }, creds: {}, connectionId: "c" });
+    provider.current = { id: "rock" };
     expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+  });
+
+  it("with a key that can't be opened, answers unavailable details without asking the records", async () => {
+    store.loadCredentials.mockRejectedValue(new Error("key unreadable"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const live = await readLiveDirectory(VIEWER);
+    vi.mocked(console.log).mockRestore();
+    expect(live.mode === "live" && live.households[HOME].address).toEqual({ state: "unavailable" });
+    expect(details).not.toHaveBeenCalled();
   });
 
   it("reads sources only for the people the viewer's own directory read returned, and asks the records once, for them alone", async () => {

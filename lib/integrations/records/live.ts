@@ -13,7 +13,8 @@ import { resolveRequestOrgId } from "@/lib/org";
 import { RecordsError } from "./errors";
 import { loadRecordsSecret } from "./crypto";
 import { liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
-import { loadCredentials, readLiveSources, readMode } from "./store";
+import { providerFor } from "./providers";
+import { loadCredentials, readConnection, readLiveSources, readMode } from "./store";
 import type { RecordsLiveDetails } from "./types";
 
 const ROUTE = "/api/directory/live";
@@ -21,13 +22,20 @@ const OFF: LiveDirectory = { mode: "off" };
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
 async function liveConnection(orgId: string) {
-  const secret = loadRecordsSecret();
-  if (!secret) return null;
   const church = await readMode(orgId);
   if (church.mode !== "live") return null;
-  const loaded = await loadCredentials(orgId, secret);
-  const source = loaded?.provider.live;
-  return loaded && source ? { ...church, source, creds: loaded.creds } : null;
+  const source = providerFor((await readConnection(orgId))?.provider)?.live;
+  return source ? { ...church, source } : null;
+}
+
+/** The key, or null when it can't be opened, such as after RECORDS_KEY_SECRET changed; the records then can't be reached. */
+async function openCredentials(orgId: string, secret: Buffer) {
+  try {
+    return (await loadCredentials(orgId, secret))?.creds ?? null;
+  } catch (err) {
+    logError("Church records key couldn't be opened for live details", err, { route: ROUTE, ids: { org: orgId } });
+    return null;
+  }
 }
 
 /** Whether the directory should ask for live details; read by the directory layouts without calling the provider. */
@@ -52,7 +60,8 @@ export async function liveDirectoryOn(): Promise<boolean> {
  * directory is unaffected.
  */
 export async function readLiveDirectory(viewerId: string, today = new Date()): Promise<LiveDirectory> {
-  if (!loadRecordsSecret()) return OFF;
+  const secret = loadRecordsSecret();
+  if (!secret) return OFF;
   const supabase = await createClient();
   const orgId = await resolveRequestOrgId(supabase, { label: "directory live" });
   if (!orgId) return OFF;
@@ -102,9 +111,10 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
 
   const plan = planLiveRequest({ viewer: viewer.data, people: visiblePeople, households: visibleHouseholds, sources });
   let details: RecordsLiveDetails | null = null;
-  if (plan.planned.length > 0) {
+  const creds = plan.planned.length > 0 ? await openCredentials(orgId, secret) : null;
+  if (creds) {
     try {
-      details = await connection.source.details(connection.creds, { people: plan.people, families: plan.families });
+      details = await connection.source.details(creds, { people: plan.people, families: plan.families });
     } catch (err) {
       // The error's kind only: a provider's answer is never logged.
       logWarn("Church records live details unavailable", undefined, {

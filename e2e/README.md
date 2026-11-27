@@ -113,6 +113,16 @@ Mockingham) and two household suggestions naming seeded accounts, through the sa
 container in `beforeAll`; `afterAll` deletes the child Henry adds, then the connection,
 which takes the rest, and the switch. It needs `RECORDS_KEY_SECRET` the same way.
 
+`church-records-live.spec.ts` makes no call to any church's records either: it writes
+a fixture connection whose sealed key can't be opened, links for Isaac, Chloe and
+Henry, the birthday setting and live mode, and clears Isaac's seeded birthday, through
+the same container in `beforeAll`. Its first test answers `/api/directory/live` itself
+with a fixture birthday; the second lets the real route run, which can't open the key
+and so answers that the records aren't available; the third puts the church back in
+copy mode with two birthdays from the records and one Henry changed. `afterAll`
+deletes the connection, which takes the rest, the settings and the mode, and puts the
+three seeded birthdays back. It needs `RECORDS_KEY_SECRET` the same way.
+
 ## Personas
 
 Every persona comes from `supabase/seed.sql` and signs in with
@@ -177,6 +187,7 @@ not covered here.
 | `supper-club.spec.ts`               | A guest at a published table sees their own host's address and not another table's; on Home they see their next supper, with their host's address and what they bring and nothing of another table's, while a member of the group at no table and a member of a group with the Supper club off see no supper on Home, nor does anyone once it is turned off; the group calendar shows no supper; their calendar link carries their own supper's address and not another table's, privately, and once reset the old link returns nothing; a guest sees what their own party brings and not another table's; a member of the group at no table sees no address; a waitlisted party sees no table, no address and no list; someone outside the group gets a 404; Supper club is in the menu only of the group that turned it on, and turned off the page is a 404 while the rotation is kept |
 | `church-records-copy.spec.ts`       | A member whose church copied their details sees the one-time notice until Got it, and never again after a reload; a locked name shows as text with "Managed by your church" and no First name or Last name field; a mobile number they changed shows "Changed in two42" and Use your church's value puts the church's number back, labelled "From your church's records"; a household's primary sees their linked spouse's locked name as "Managed by your church" with no First name field on the edit sheet, and "From your church's records" under the household's anniversary |
 | `church-records-households.spec.ts` | At 390 and 1280 wide, a household's primary and spouse each see the children the church's records suggest for their household, with the birthday and no year, while someone in another household sees none; the primary's Add to household puts the child among the household's people with no birth year stored, and after a reload they aren't suggested again; the spouse's Dismiss leaves the child dismissed and gone after a reload; with the children switch off, a suggestion still stored shows to nobody; the church admin sees the household suggestions under Ready to confirm and Check first, named from two42 only, and the switch on |
+| `church-records-live.spec.ts`       | In a church that shows details live, a member's card shows their birthday from the church's records with Don't show, and Birthdays lists them under that month, from one live request; with the records unreachable the directory still loads, their card shows "Birthday — Not available right now", Birthdays says "Birthdays from your church's records: Not available right now" and still lists a birthday the member entered in two42; a church admin choosing Live is told "This removes 2 details copied from your church's records.", and after confirming the two are gone and the one a member changed stays |
 
 ## Adding a spec
 
