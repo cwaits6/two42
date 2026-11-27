@@ -12,6 +12,7 @@ import { DirRow, PhoneText } from "@/components/directory/DirRow";
 import { isOwnHousehold } from "@/components/directory/ownEntry";
 import { profileHouseholdHref } from "@/lib/profileTabs";
 import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
+import { LiveHideButton, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import type {
   DirectoryProfile,
   FamilyDirectoryFull,
@@ -62,6 +63,24 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, t
     family.family_members_list.some((fm) => fm.relationship === "spouse");
 
   const showAnniversary = !!(family.anniversary_month && family.anniversary_day && hasSpouse);
+  const live = useLiveControls()?.live;
+  const slots = live?.households[family.id];
+  const own = live?.canHide.household === family.id;
+  const addressFallback = family.address_line1
+    ? null
+    : slots?.address?.state === "unavailable"
+      ? NOT_AVAILABLE
+      : own && slots?.address?.state === "hidden"
+        ? "not shown in the directory"
+        : null;
+  const anniversaryFallback =
+    showAnniversary || !hasSpouse
+      ? null
+      : slots?.anniversary?.state === "unavailable"
+        ? NOT_AVAILABLE
+        : own && slots?.anniversary?.state === "hidden"
+          ? "not shown in the directory"
+          : null;
 
   const members = [...family.members].sort(
     (a, b) => relRank(a.relationship) - relRank(b.relationship),
@@ -113,13 +132,14 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, t
             title={displayName(fm)}
             subtitle={
               childGradeLabel(fm, today) ??
+              (live?.children[fm.id]?.grade?.state === "unavailable" ? `Grade — ${NOT_AVAILABLE}` : undefined) ??
               (isChildWithoutAccount(fm) ? undefined : relLabel(fm.relationship))
             }
           />
         ))}
       </div>
 
-      {(family.phone_home || family.address_line1 || showAnniversary) && (
+      {(family.phone_home || family.address_line1 || showAnniversary || addressFallback || anniversaryFallback) && (
         <div>
           {family.phone_home && (
             <div className="flex items-center gap-3 py-1.5">
@@ -148,6 +168,21 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, t
                 {family.city}
                 {family.state && `, ${family.state}`}
                 {family.postal_code && ` ${family.postal_code}`}
+                {own && slots?.address?.state === "shown" && (
+                  <>
+                    <br />
+                    <LiveHideButton field="address" hidden={false} />
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+          {addressFallback && (
+            <div className="flex items-center gap-3 py-1.5">
+              <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="text-base">
+                Address — {addressFallback}
+                {addressFallback !== NOT_AVAILABLE && <LiveHideButton field="address" hidden />}
               </span>
             </div>
           )}
@@ -157,6 +192,16 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, t
               <span className="text-base">
                 Anniversary —{" "}
                 {formatAnniversary(family.anniversary_month!, family.anniversary_day!, family.anniversary_year)}
+                {own && slots?.anniversary?.state === "shown" && <LiveHideButton field="anniversary" hidden={false} />}
+              </span>
+            </div>
+          )}
+          {anniversaryFallback && (
+            <div className="flex items-center gap-3 py-1.5">
+              <Heart className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="text-base">
+                Anniversary — {anniversaryFallback}
+                {anniversaryFallback !== NOT_AVAILABLE && <LiveHideButton field="anniversary" hidden />}
               </span>
             </div>
           )}

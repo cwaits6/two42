@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { DirectoryShell } from "@/components/directory/DirectoryShell";
 import { getRequestBranding } from "@/lib/branding";
+import { liveDirectoryOn } from "@/lib/integrations/records/live";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getViewerFamilyId } from "@/lib/directory/viewerFamily";
 import { todayIn } from "@/lib/serving/dates";
@@ -12,11 +13,12 @@ export default async function DirectoryLayout({ children }: { children: React.Re
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const [branding, visibility, timeZone, viewerFamilyId] = await Promise.all([
+  const [branding, visibility, timeZone, viewerFamilyId, recordsLive] = await Promise.all([
     getRequestBranding(),
     getDirectoryVisibility(),
     getOrgTimeZone(),
     getViewerFamilyId(user.id),
+    liveDirectoryOn(),
   ]);
 
   return (
@@ -28,6 +30,7 @@ export default async function DirectoryLayout({ children }: { children: React.Re
       currentUserId={user.id}
       currentFamilyId={viewerFamilyId}
       today={todayIn(timeZone)}
+      recordsLive={recordsLive}
     >
       {children}
     </DirectoryShell>
