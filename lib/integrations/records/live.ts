@@ -99,7 +99,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     logError("Church records live directory read failed", readError ?? undefined, { route: "/api/directory/live", ids: { org: orgId } });
     return LIVE_UNAVAILABLE;
   }
-  const visiblePeople = (people.data ?? []) as VisiblePerson[];
+  const visiblePeople: VisiblePerson[] = people.data ?? [];
   const visibleHouseholds = (households.data ?? []).map(
     (h) =>
       ({
@@ -107,7 +107,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
         family_members_list: Array.isArray(h.family_members_list)
           ? (h.family_members_list as unknown as VisibleHousehold["family_members_list"])
           : [],
-      }) as VisibleHousehold,
+      }) satisfies VisibleHousehold,
   );
 
   let sources;
