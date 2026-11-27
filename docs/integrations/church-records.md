@@ -249,6 +249,8 @@ locked, because the database keeps enforcing the settings it holds. Generate one
 Production only, like the prayer keys. It can be rotated without any church
 admin connecting again: set the old value as `RECORDS_KEY_SECRET_PREVIOUS`,
 re-seal the saved keys with `scripts/reseal-records-keys.mjs`, then remove it.
+Changing it any other way, or removing the previous secret before the re-seal,
+leaves the saved keys unreadable, and each church admin enters both keys again.
 The steps, and what to do if the secret may have leaked, are under **Rotating
 the records secret** on the docs site's **Environment variables** page.
 

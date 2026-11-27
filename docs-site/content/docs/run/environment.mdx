@@ -64,7 +64,7 @@ Keep two copies of each prayer key outside the host. Text sealed with a lost bod
 
 | Variable | Kind | Required | What it does, and what breaks without it |
 |---|---|---|---|
-| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. To replace it without any church connecting again, follow [Rotating the records secret](#rotating-the-records-secret). Set the same value in the edge function secrets. |
+| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. To replace it without any church connecting again, follow [Rotating the records secret](#rotating-the-records-secret). Changed any other way, or with the previous secret removed before the re-seal, saved keys no longer open and each church admin enters their read and write keys again. Set the same value in the edge function secrets. |
 | `RECORDS_KEY_SECRET_PREVIOUS` | secret | no | The old secret, set only while rotating it, so keys sealed with it still open. A value that is set but isn't a 32-byte base64 key turns church records off, the same as a malformed `RECORDS_KEY_SECRET`, and the app logs which variable is at fault. Set the same value in the edge function secrets. |
 
 ### Serving
