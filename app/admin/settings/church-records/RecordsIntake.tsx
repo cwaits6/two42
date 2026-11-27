@@ -92,8 +92,9 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
             current={intake}
             onCancel={() => setEditing(false)}
             onSaved={(saved) => {
-              setIntake(saved);
               setEditing(false);
+              if (saved) setIntake(saved);
+              else void load();
             }}
           />
         ) : intake ? (
@@ -118,6 +119,11 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
                 <dd>{intake.failed.toLocaleString("en-US")}</dd>
               </div>
             </dl>
+            {intake.failed > 0 && (
+              <p className="text-lg">
+                two42 doesn&apos;t send these people again. Add them in {label} yourself.
+              </p>
+            )}
             {intake.lastFailure && (
               <p className="rounded-lg border border-destructive/40 p-4 text-lg" role="alert">
                 {intake.lastFailure}
@@ -165,16 +171,18 @@ function IntakeForm({
   setup: RecordsIntakeSetup;
   current: IntakeAnswer | null;
   onCancel: () => void;
-  onSaved: (saved: IntakeAnswer) => void;
+  /** null when it saved but the answer didn't include the setting, so the card reloads it. */
+  onSaved: (saved: IntakeAnswer | null) => void;
 }) {
   const [key, setKey] = useState("");
   const [destinationId, setDestinationId] = useState(current?.destination.id ?? "");
   const [destinations, setDestinations] = useState<RecordsIntakeDestination[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [finding, setFinding] = useState(false);
   const items = (destinations ?? []).map((d) => ({ value: d.id, label: d.name }));
 
   async function find() {
-    setBusy(true);
+    setFinding(true);
     try {
       const res = await call(`${INTAKE}/destinations`, {
         method: "POST",
@@ -190,7 +198,7 @@ function IntakeForm({
       logError("Church records new people destinations failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
     } finally {
-      setBusy(false);
+      setFinding(false);
     }
   }
 
@@ -203,12 +211,12 @@ function IntakeForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key, destinationId }),
       });
-      if (!res.ok || !res.data?.intake) {
+      if (!res.ok || !(res.data?.intake || res.data?.saved === true)) {
         toast.error(errorText("save sending new people", res.status, res.data));
         return;
       }
       toast.success(`Saved. New people who share their details go to ${label}.`);
-      onSaved(res.data.intake as IntakeAnswer);
+      onSaved((res.data.intake as IntakeAnswer | undefined) ?? null);
     } catch (err) {
       logError("Church records new people save failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
@@ -246,9 +254,9 @@ function IntakeForm({
           variant="outline"
           className="py-6 text-lg"
           onClick={find}
-          disabled={busy || (needsKey && !key.trim())}
+          disabled={busy || finding || (needsKey && !key.trim())}
         >
-          Find {setup.destinationLabel}s
+          {finding ? "Finding…" : `Find ${setup.destinationLabel}s`}
         </Button>
         {destinations !== null &&
           (destinations.length === 0 ? (
@@ -293,11 +301,11 @@ function IntakeForm({
           type="submit"
           size="lg"
           className="py-6 text-lg"
-          disabled={busy || !destinationId || (needsKey && !key.trim())}
+          disabled={busy || finding || !destinationId || (needsKey && !key.trim())}
         >
           {busy ? "Checking…" : "Save"}
         </Button>
-        <Button type="button" size="lg" variant="outline" className="py-6 text-lg" onClick={onCancel} disabled={busy}>
+        <Button type="button" size="lg" variant="outline" className="py-6 text-lg" onClick={onCancel} disabled={busy || finding}>
           Cancel
         </Button>
       </div>

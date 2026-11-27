@@ -23,7 +23,9 @@ import { badRequest, type IntakeContext, intakeContext, providerRefusal, serverE
  *   PUT     `{ key?, destinationId }` turns it on, or changes the key or the
  *           destination. The key may be left out to keep the saved one; the
  *           read key is refused. The destination and the key's permission are
- *           checked with the provider before anything is saved.
+ *           checked with the provider before anything is saved. Answers
+ *           `{ saved: true }` alone when it saved but couldn't read the
+ *           setting back.
  *   DELETE  turns it off: removes the write key and every consent not yet sent.
  *
  * Answers 404 while the church isn't connected, or its provider can't send new
@@ -95,8 +97,9 @@ export async function PUT(request: Request) {
     return serverError("Couldn't check the write key. Try again.");
   }
 
+  let saved;
   try {
-    const saved = await saveIntakeSettings(ctx.orgId, {
+    saved = await saveIntakeSettings(ctx.orgId, {
       connectionId: ctx.connectionId,
       keyCiphertext: sealKey(ctx.secret, ctx.orgId, intakeKeyLabel(ctx.provider.id), creds.key),
       keyHint: creds.key.slice(-4),
@@ -104,13 +107,19 @@ export async function PUT(request: Request) {
       destinationName: destination.name,
       enabledBy: ctx.userId,
     });
-    if (saved === "connection_changed") {
-      return NextResponse.json({ error: "The connection changed. Reload and try again." }, { status: 409 });
-    }
-    return NextResponse.json({ intake: await answer(ctx) });
   } catch (err) {
     logError("Church records new people save failed", err, { route: "/api/admin/church-records/intake", step: "save", ids: { org: ctx.orgId } });
     return serverError("Couldn't save sending new people.");
+  }
+  if (saved === "connection_changed") {
+    return NextResponse.json({ error: "The connection changed. Reload and try again." }, { status: 409 });
+  }
+
+  try {
+    return NextResponse.json({ intake: await answer(ctx) });
+  } catch (err) {
+    logError("Church records new people read failed", err, { route: "/api/admin/church-records/intake", step: "status", ids: { org: ctx.orgId } });
+    return NextResponse.json({ saved: true });
   }
 }
 

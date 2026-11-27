@@ -47,6 +47,8 @@ export function intakeFailureMessage(error: RecordsError, product: string, setup
       return `${product} didn't accept the write key, or its role is missing a permission. Check the key is active and its role has every permission the write key instructions list, including View on the ${setup.destinationLabel}.`;
     case "not_found":
       return `${product} has no active ${setup.destinationLabel} with that id. Choose another, or check it is active in ${product}.`;
+    case "unreachable":
+      return `Couldn't reach ${product}. Check that ${product} is up and answers at the connected address.`;
     default:
       return recordsFailureMessage(error, product);
   }

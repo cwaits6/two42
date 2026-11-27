@@ -133,7 +133,7 @@ describe("/api/admin/church-records/intake", () => {
       new RecordsError("not_found"),
       "Stub Records has no active inbox with that id. Choose another, or check it is active in Stub Records.",
     ],
-    [new RecordsError("unreachable"), "Couldn't reach Stub Records at that address. Check the address and try again."],
+    [new RecordsError("unreachable"), "Couldn't reach Stub Records. Check that Stub Records is up and answers at the connected address."],
   ])("names the refusal %s plainly and saves nothing", async (refusal, message) => {
     stubIntake.checkDestination.mockRejectedValue(refusal);
     const res = await put({ key: WRITE_KEY, destinationId: "42" });
@@ -147,6 +147,15 @@ describe("/api/admin/church-records/intake", () => {
     intakeStore.readIntakeSettings.mockResolvedValue(SETTINGS);
     expect((await put({ destinationId: "42" })).status).toBe(200);
     expect(stubIntake.checkDestination).toHaveBeenCalledWith({ baseUrl: CONNECTION.baseUrl, key: WRITE_KEY }, "42");
+  });
+
+  it("answers saved, not a failure, when the setting saved but couldn't be read back", async () => {
+    intakeStore.readIntakeSettings.mockResolvedValue(SETTINGS);
+    intakeStore.readIntakeStatus.mockRejectedValue(new Error("status read failed"));
+    const res = await put({ key: WRITE_KEY, destinationId: "42" });
+    expect(intakeStore.saveIntakeSettings).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ saved: true });
   });
 
   it("says so when the connection changed since it was read", async () => {
