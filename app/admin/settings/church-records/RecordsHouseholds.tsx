@@ -156,8 +156,8 @@ export function RecordsHouseholds({ label }: { label: string }) {
       setBatchError(`Confirmed ${households(confirmed)}, then stopped. ${NETWORK_ERROR}`);
     } finally {
       setProgress(null);
-      setBusy(false);
       await load();
+      setBusy(false);
     }
   }
 
@@ -180,6 +180,8 @@ export function RecordsHouseholds({ label }: { label: string }) {
     }
   }
 
+  // One lock for the switch and confirmations: a confirmation's reload must not land after a switch save.
+  const locked = busy || savingSwitch;
   const toConfirm = found.ready.filter((s) => !excluded.has(s.id));
   const ready = page(found.ready, pages.ready);
   const checkFirst = page(found.checkFirst, pages.checkFirst);
@@ -201,7 +203,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
               id="records-suggest-children"
               className="shrink-0"
               checked={data.suggestChildren}
-              disabled={savingSwitch}
+              disabled={locked}
               onCheckedChange={saveChildren}
             />
           </div>
@@ -258,10 +260,10 @@ export function RecordsHouseholds({ label }: { label: string }) {
           ) : (
             <>
               <div className="flex flex-wrap gap-3">
-                <Button size="lg" variant="outline" disabled={busy} onClick={() => setReviewing((r) => !r)} aria-expanded={reviewing}>
+                <Button size="lg" variant="outline" disabled={locked} onClick={() => setReviewing((r) => !r)} aria-expanded={reviewing}>
                   {reviewing ? "Hide list" : "Review list"}
                 </Button>
-                <Button size="lg" disabled={busy || toConfirm.length === 0} onClick={() => setConfirming(true)}>
+                <Button size="lg" disabled={locked || toConfirm.length === 0} onClick={() => setConfirming(true)}>
                   {confirmLabel}
                 </Button>
               </div>
@@ -281,7 +283,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
                                 return next;
                               })
                             }
-                            disabled={busy}
+                            disabled={locked}
                           />
                           Include
                         </label>
@@ -328,7 +330,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
               <ul className="divide-y divide-border">
                 {checkFirst.rows.map((s) => (
                   <SuggestionCard key={s.id} s={s}>
-                    <Button size="lg" variant="outline" disabled={busy} onClick={() => setChecking(s)}>
+                    <Button size="lg" variant="outline" disabled={locked} onClick={() => setChecking(s)}>
                       Confirm household
                     </Button>
                   </SuggestionCard>
