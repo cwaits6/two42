@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { RecordsError } from "@/lib/integrations/records/errors";
-import { rockIntake } from "./intake";
+import { ROCK_INTAKE_ATTRIBUTES, rockIntake } from "./intake";
 
 const creds = { baseUrl: "https://rock.example.org", key: "write-key-1234" };
 const person = { firstName: "Nora", lastName: "Setupwell", email: "nora@example.test", phone: "(555) 123-4567" };
@@ -120,5 +121,20 @@ describe("rockIntake().parseDestinationId", () => {
     expect(intake.parseDestinationId("42")).toBe("42");
     expect(intake.parseDestinationId(42)).toBe("42");
     for (const value of ["0", "-1", "abc", "1e3", "", null, 4.2]) expect(intake.parseDestinationId(value)).toBeNull();
+  });
+});
+
+describe("the setup docs", () => {
+  const keys: string[] = Object.values(ROCK_INTAKE_ATTRIBUTES);
+  const list = (quote: string) =>
+    `${keys.slice(0, -1).map((k) => `${quote}${k}${quote}`).join(", ")} and ${quote}${keys.at(-1)}${quote}`;
+
+  it.each([
+    ["docs/integrations/church-records.md", "`"],
+    ["docs-site/content/docs/administer/imports.mdx", ""],
+  ])("%s name the attribute keys and REST controllers two42 uses", (path, quote) => {
+    const text = readFileSync(path, "utf8").replace(/\s+/g, " ");
+    expect(text).toContain(list(quote));
+    for (const controller of ["WorkflowEntry", "Workflows", "WorkflowTypes"]) expect(text).toContain(controller);
   });
 });
