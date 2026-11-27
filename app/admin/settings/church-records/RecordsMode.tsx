@@ -12,7 +12,6 @@ import { logError } from "@/lib/log";
 import type { RecordsMode as Mode } from "@/supabase/functions/_shared/records-copy";
 import { call, errorText } from "./requests";
 
-const ROUTE = "/admin/settings/church-records";
 
 /** "This removes 1,240 details copied from your church's records." */
 export function removalText(count: number): string {
@@ -37,7 +36,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
       setData(loaded);
       onChange(loaded.mode);
     } catch (err) {
-      logError("Church records mode load failed", err, { route: ROUTE });
+      logError("Church records mode load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
     }
   }, [onChange]);
@@ -68,7 +67,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
       }
       await load();
     } catch (err) {
-      logError("Church records mode save failed", err, { route: ROUTE });
+      logError("Church records mode save failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
     } finally {
       setSaving(false);

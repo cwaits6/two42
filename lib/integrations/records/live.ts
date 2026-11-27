@@ -17,7 +17,6 @@ import { providerFor } from "./providers";
 import { loadCredentials, readConnection, readLiveSources, readMode } from "./store";
 import type { RecordsLiveDetails } from "./types";
 
-const ROUTE = "/api/directory/live";
 const OFF: LiveDirectory = { mode: "off" };
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
@@ -33,7 +32,7 @@ async function openCredentials(orgId: string, secret: Buffer) {
   try {
     return (await loadCredentials(orgId, secret))?.creds ?? null;
   } catch (err) {
-    logError("Church records key couldn't be opened for live details", err, { route: ROUTE, ids: { org: orgId } });
+    logError("Church records key couldn't be opened for live details", err, { route: "/api/directory/live", ids: { org: orgId } });
     return null;
   }
 }
@@ -70,7 +69,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   try {
     connection = await liveConnection(orgId);
   } catch (err) {
-    logError("Church records live mode read failed", err, { route: ROUTE, ids: { org: orgId } });
+    logError("Church records live mode read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
     return OFF;
   }
   if (!connection) return OFF;
@@ -84,7 +83,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   ]);
   const readError = people.error ?? households.error ?? viewer.error;
   if (readError || !viewer.data) {
-    logError("Church records live directory read failed", readError ?? undefined, { route: ROUTE, ids: { org: orgId } });
+    logError("Church records live directory read failed", readError ?? undefined, { route: "/api/directory/live", ids: { org: orgId } });
     return OFF;
   }
   const visiblePeople = (people.data ?? []) as VisiblePerson[];
@@ -105,7 +104,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
       connection.suggestChildren,
     );
   } catch (err) {
-    logError("Church records live sources read failed", err, { route: ROUTE, ids: { org: orgId } });
+    logError("Church records live sources read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
     return OFF;
   }
 
@@ -118,7 +117,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     } catch (err) {
       // The error's kind only: a provider's answer is never logged.
       logWarn("Church records live details unavailable", undefined, {
-        route: ROUTE,
+        route: "/api/directory/live",
         step: err instanceof RecordsError ? err.kind : "provider",
         ids: { org: orgId },
       });

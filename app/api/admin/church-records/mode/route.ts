@@ -20,7 +20,6 @@ import { isRecordsMode, liveCopiedCount, readConnection, readMode, saveMode } fr
  * details live. The org is the caller's own, from requireOrgAdmin().
  */
 
-const ROUTE = "/api/admin/church-records/mode";
 
 async function liveProvider(orgId: string) {
   const connection = await readConnection(orgId);
@@ -37,7 +36,7 @@ export async function GET() {
     const [{ mode }, copiedCount] = await Promise.all([readMode(gate.orgId), liveCopiedCount(gate.orgId)]);
     return NextResponse.json({ mode, copiedCount });
   } catch (err) {
-    logError("Church records mode read failed", err, { route: ROUTE, ids: { org: gate.orgId } });
+    logError("Church records mode read failed", err, { route: "/api/admin/church-records/mode", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't load how two42 uses your church's records." }, { status: 500 });
   }
 }
@@ -62,7 +61,7 @@ export async function PUT(request: Request) {
     }
     return NextResponse.json({ mode, removed: saved.removed });
   } catch (err) {
-    logError("Church records mode save failed", err, { route: ROUTE, ids: { org: gate.orgId } });
+    logError("Church records mode save failed", err, { route: "/api/admin/church-records/mode", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't save how two42 uses your church's records." }, { status: 500 });
   }
 }
