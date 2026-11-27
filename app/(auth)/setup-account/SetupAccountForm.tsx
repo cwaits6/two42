@@ -65,8 +65,15 @@ export function SetupAccountForm() {
   const router = useRouter();
   const token = searchParams.get("token");
   const share = token !== null && sharedFor === token;
+  // A different link must not show the previous link's church while it is checked.
+  const [viewToken, setViewToken] = useState(token);
+  if (viewToken !== token) {
+    setViewToken(token);
+    setView({ kind: "verifying" });
+  }
 
   useEffect(() => {
+    let current = true;
     async function verifyToken() {
       if (!token) {
         setView({ kind: "invalid" });
@@ -78,12 +85,14 @@ export function SetupAccountForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
       });
+      if (!current) return;
 
       if (!res.ok) {
         // A used link set up an account; if that account is signed in here,
         // Home is where it belongs.
         if (res.status === 404 || res.status === 409) {
           const { data } = await supabase.auth.getSession();
+          if (!current) return;
           if (data.session) {
             router.replace("/dashboard");
             return;
@@ -98,12 +107,16 @@ export function SetupAccountForm() {
       }
 
       const link: SetupLink = await res.json();
+      if (!current) return;
       setView({ kind: "ready", link: { name: link.name, email: link.email, shareWith: link.shareWith } });
     }
     verifyToken().catch((err) => {
       logError("Failed to verify the account setup link", err, { route: "/setup-account" });
-      setView({ kind: "failed" });
+      if (current) setView({ kind: "failed" });
     });
+    return () => {
+      current = false;
+    };
   }, [token, supabase, router, attempt]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

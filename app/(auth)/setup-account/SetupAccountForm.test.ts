@@ -13,8 +13,9 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const router = { replace: vi.fn(), refresh: vi.fn() };
+let query = "token=abc";
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("token=abc"),
+  useSearchParams: () => new URLSearchParams(query),
   useRouter: () => router,
 }));
 
@@ -25,6 +26,7 @@ let root: Root;
 let container: HTMLElement;
 
 beforeEach(() => {
+  query = "token=abc";
   router.replace.mockReset();
   signInWithPassword.mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -66,6 +68,29 @@ describe("SetupAccountForm verification", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector<HTMLInputElement>("#email")?.value).toBe("ada@example.com");
+  });
+
+  it("hides the previous link's church while a new link is checked, and ignores its late answer", async () => {
+    let answerFirst!: (res: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ name: "Ada", email: "ada@example.com", shareWith: "First Church" }))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => (answerFirst = resolve)));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    expect(container.textContent).toContain("First Church");
+
+    query = "token=def";
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    expect(container.textContent).not.toContain("First Church");
+    expect(container.querySelector("#share_details")).toBeNull();
+
+    query = "token=ghi";
+    fetchMock.mockResolvedValueOnce(Response.json({ name: "Bo", email: "bo@example.com", shareWith: "Third Church" }));
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    await act(async () => answerFirst(Response.json({ name: "Ada", email: "ada@example.com", shareWith: "Second Church" })));
+    expect(container.textContent).toContain("Third Church");
+    expect(container.textContent).not.toContain("Second Church");
   });
 
   it("offers a retry when the answer is not readable", async () => {
