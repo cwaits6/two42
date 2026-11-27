@@ -377,9 +377,13 @@ the integration keeps `name-case.ts`.
   address: private, loopback, link-local, shared, benchmarking, documentation,
   multicast and reserved ranges are refused, and so is any IPv6 literal.
   Because DNS can point a public name at a private address, `safeFetch()`
-  checks every address the name resolves to at the moment it connects, and
-  refuses before the key is sent. It also refuses redirects, gives up after 10
-  seconds and stops reading past 5 MB.
+  checks every address the name resolves to and refuses before the key is
+  sent, and the address it checked is the one it connects to. In the app
+  (Node) the check runs in the connection's `lookup`. In the edge functions it
+  resolves the name once, refuses unless every answer is public, opens the
+  socket to a checked address and does TLS under the name: the Supabase Edge
+  Runtime doesn't implement `lookup` on `node:https`. It also refuses
+  redirects, gives up after 10 seconds and stops reading past 5 MB.
 - **A connection has an id that changes with the records it points at.**
   Saving runs in one transaction (`records_save_connection()`): a new key for
   the same records keeps the id and the links; another provider or address
@@ -526,6 +530,13 @@ doesn't count its responses: see the docs site's **Edge functions** page. Before
 function checks the runtime refuses a request to a loopback address, and stops
 with a 500 if it doesn't.
 
+It runs on the Supabase Edge Runtime, hosted or the CLI's, with no version to
+pin: it needs `Deno.connect` and `Deno.startTls`, which the Deno 2.1 line the
+runtime is built on has. Schedule it only after a first call on the hosted
+project has passed that check: call it once with the service key, and expect
+no "didn't refuse a loopback address" 500 and no "the address check failed"
+line in the function's log.
+
 ### Still open
 
 - **A phone removed in the records** without any other change to the person
@@ -535,8 +546,9 @@ with a 500 if it doesn't.
   handler, which follows Rock's own photo security rather than the REST key.
   Where Rock doesn't let a request without a sign-in see a photo, two42
   counts it as skipped. Check on a real install.
-- **The hosted Edge Runtime**: the loopback check above, and the time a first
-  copy of a large church takes.
+- **The hosted Edge Runtime**: the loopback check passes on the CLI's Edge
+  Runtime (1.78.1 and 1.79.1) and awaits a first call on the hosted project;
+  the time a first copy of a large church takes.
 
 ## Live from the records (built)
 

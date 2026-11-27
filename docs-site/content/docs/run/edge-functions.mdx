@@ -8,6 +8,7 @@ sources:
   - "supabase/functions/clean-up-expired-data/**"
   - "supabase/functions/refresh-church-records/**"
   - "supabase/functions/_shared/records-refresh.ts"
+  - "supabase/functions/_shared/records-fetch.ts"
   - "supabase/functions/_shared/event-reminder-due.ts"
   - "supabase/functions/_shared/event-reminder-schedule.ts"
   - "supabase/functions/_shared/supper-reminder-due.ts"
@@ -66,7 +67,26 @@ For every church connected to its church records, copies the details of people c
 
 It needs `RECORDS_KEY_SECRET` in the edge function secrets, the same value as the app's; without it the function answers 200 and does nothing, and with a value that isn't a 32-byte base64 key it answers 500 and does nothing. Before it opens any church's key it checks that the runtime refuses a request to a loopback address, and stops with a 500 if it doesn't, saying so in the response.
 
-No migration schedules it. To run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:30 UTC:
+It runs on the Supabase Edge Runtime, hosted or the CLI's, with no version to pin. It opens its own connections to the church's records, to an address it has checked, so it needs `Deno.connect` and `Deno.startTls`, which the runtime has.
+
+No migration schedules it. Schedule it only once a first call on the hosted project has passed the loopback check. Call it once with the service key, from the SQL editor:
+
+```sql
+select net.http_post(
+  url := (select decrypted_secret from vault.decrypted_secrets where name = 'cron_project_url')
+    || '/functions/v1/refresh-church-records',
+  headers := jsonb_build_object(
+    'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_service_role_key'),
+    'Content-Type', 'application/json'
+  ),
+  body := '{}'::jsonb,
+  timeout_milliseconds := 120000
+);
+```
+
+Read the answer in `net._http_response` and the function's log under **Edge Functions**, **refresh-church-records**, **Logs**. It passed when the answer isn't the 500 "The runtime didn't refuse a loopback address, so no church was refreshed." and the log has no "church records refresh stopped: the address check failed" line. A 200, or a 500 that lists churches under `cutShort`, `notStarted`, `busy` or `copyFailed`, means the check passed.
+
+Then, to run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:30 UTC:
 
 ```sql
 select private.schedule_edge_reminder(
