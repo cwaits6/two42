@@ -43,6 +43,30 @@ CREATE TYPE "public"."org_status" AS ENUM (
 ALTER TYPE "public"."org_status" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."records_failure" AS ENUM (
+    'unauthorized',
+    'not_found',
+    'unreachable',
+    'not_provider',
+    'rejected'
+);
+
+
+ALTER TYPE "public"."records_failure" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."records_intake_state" AS ENUM (
+    'consented',
+    'withdrawn',
+    'sending',
+    'sent',
+    'failed'
+);
+
+
+ALTER TYPE "public"."records_intake_state" OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."admin_member_emails"() RETURNS TABLE("profile_id" "uuid", "email" "text")
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -3094,6 +3118,122 @@ $$;
 
 
 ALTER FUNCTION "public"."records_household_value_edit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_intake_accept"("_org_id" "uuid", "_profile_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _setting uuid;
+  _accept uuid := gen_random_uuid();
+begin
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
+  if not found then
+    return null;
+  end if;
+  if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
+    return null;
+  end if;
+  insert into public.records_intake_requests (org_id, profile_id, state, setting_id, accept_id)
+  values (_org_id, _profile_id, 'consented', _setting, _accept)
+  on conflict (org_id, profile_id) do update
+    set state = 'consented', setting_id = _setting, accept_id = _accept, consented_at = now()
+    where public.records_intake_requests.state in ('consented', 'withdrawn');
+  if not found then
+    return null;
+  end if;
+  return _accept;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_accept"("_org_id" "uuid", "_profile_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_intake_claim"("_org_id" "uuid", "_profile_id" "uuid", "_accept_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _setting uuid;
+  _claimed integer;
+begin
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
+  if not found then
+    return 'off';
+  end if;
+  if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
+    return 'linked';
+  end if;
+  update public.records_intake_requests
+    set state = 'sending', claimed_at = now()
+    where org_id = _org_id and profile_id = _profile_id
+      and state = 'consented' and accept_id = _accept_id and setting_id = _setting;
+  get diagnostics _claimed = row_count;
+  return case when _claimed = 1 then 'claimed' else 'stale' end;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_claim"("_org_id" "uuid", "_profile_id" "uuid", "_accept_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _setting uuid;
+begin
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
+  if not found then
+    return 'off';
+  end if;
+  if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
+    return 'linked';
+  end if;
+  insert into public.records_intake_requests (org_id, profile_id, state, setting_id)
+  values (_org_id, _profile_id, 'consented', _setting)
+  on conflict (org_id, profile_id) do nothing;
+  return 'saved';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_intake_settings_cleanup"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.records_intake_requests where org_id = old.org_id and state = 'consented';
+  return old;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_settings_cleanup"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_intake_withdraw"("_org_id" "uuid", "_profile_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  insert into public.records_intake_requests (org_id, profile_id, state)
+  values (_org_id, _profile_id, 'withdrawn')
+  on conflict (org_id, profile_id) do update
+    set state = 'withdrawn', setting_id = null, accept_id = null, consented_at = now()
+    where public.records_intake_requests.state in ('consented', 'withdrawn');
+  return case when found then 'withdrawn' else 'too_late' end;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_withdraw"("_org_id" "uuid", "_profile_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."records_is_empty"("_value" "jsonb") RETURNS boolean
@@ -6944,6 +7084,50 @@ COMMENT ON TABLE "public"."records_household_values" IS 'Per linked household: w
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."records_intake_requests" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "state" "public"."records_intake_state" NOT NULL,
+    "failure" "public"."records_failure",
+    "setting_id" "uuid",
+    "accept_id" "uuid",
+    "consented_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "claimed_at" timestamp with time zone,
+    "finished_at" timestamp with time zone,
+    CONSTRAINT "records_intake_requests_failed_has_failure" CHECK ((("state" = 'failed'::"public"."records_intake_state") = ("failure" IS NOT NULL)))
+);
+
+
+ALTER TABLE "public"."records_intake_requests" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_intake_requests" IS 'Each person''s consent to be sent to the church''s records, and whether they were sent: at most one row per person, so nobody is sent twice. Holds no details, only the state and its times. Read and written by the service key only.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_intake_settings" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "setting_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "connection_id" "uuid" NOT NULL,
+    "key_ciphertext" "text" NOT NULL,
+    "key_hint" "text" NOT NULL,
+    "destination_id" "text" NOT NULL,
+    "destination_name" "text" NOT NULL,
+    "enabled_by" "uuid",
+    "enabled_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_intake_settings_destination_id_check" CHECK (("destination_id" ~ '^[A-Za-z0-9_-]{1,64}$'::"text")),
+    CONSTRAINT "records_intake_settings_destination_name_check" CHECK ((("char_length"("destination_name") >= 1) AND ("char_length"("destination_name") <= 200))),
+    CONSTRAINT "records_intake_settings_key_hint_check" CHECK ((("char_length"("key_hint") >= 1) AND ("char_length"("key_hint") <= 4)))
+);
+
+
+ALTER TABLE "public"."records_intake_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_intake_settings" IS 'A church''s setting for sending new people to its church records: the write key sealed by the server with RECORDS_KEY_SECRET (separate from the read key), and where in the records new people go. One row per church while it is on; none while it is off. Read and written by the service key only, after a church admin check.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."records_org_settings" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "suggest_children" boolean DEFAULT false NOT NULL,
@@ -8015,6 +8199,16 @@ ALTER TABLE ONLY "public"."records_household_values"
 
 
 
+ALTER TABLE ONLY "public"."records_intake_requests"
+    ADD CONSTRAINT "records_intake_requests_pkey" PRIMARY KEY ("org_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."records_intake_settings"
+    ADD CONSTRAINT "records_intake_settings_pkey" PRIMARY KEY ("org_id");
+
+
+
 ALTER TABLE ONLY "public"."records_org_settings"
     ADD CONSTRAINT "records_org_settings_pkey" PRIMARY KEY ("org_id");
 
@@ -8580,6 +8774,22 @@ CREATE INDEX "records_household_values_family_id_idx" ON "public"."records_house
 
 
 
+CREATE INDEX "records_intake_requests_profile_id_idx" ON "public"."records_intake_requests" USING "btree" ("profile_id");
+
+
+
+CREATE INDEX "records_intake_requests_state_idx" ON "public"."records_intake_requests" USING "btree" ("org_id", "state", "finished_at");
+
+
+
+CREATE INDEX "records_intake_settings_connection_idx" ON "public"."records_intake_settings" USING "btree" ("org_id", "connection_id");
+
+
+
+CREATE INDEX "records_intake_settings_enabled_by_idx" ON "public"."records_intake_settings" USING "btree" ("enabled_by") WHERE ("enabled_by" IS NOT NULL);
+
+
+
 CREATE INDEX "records_org_settings_updated_by_idx" ON "public"."records_org_settings" USING "btree" ("updated_by") WHERE ("updated_by" IS NOT NULL);
 
 
@@ -8947,6 +9157,10 @@ CREATE OR REPLACE TRIGGER "records_household_member_edit" BEFORE UPDATE OF "anni
 
 
 CREATE OR REPLACE TRIGGER "records_household_value_edit" BEFORE UPDATE OF "address_line1", "address_line2", "city", "state", "postal_code", "phone_home", "phone_profile_id" ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."records_household_value_edit"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_intake_settings_cleanup" AFTER DELETE ON "public"."records_intake_settings" FOR EACH ROW EXECUTE FUNCTION "public"."records_intake_settings_cleanup"();
 
 
 
@@ -9633,6 +9847,21 @@ ALTER TABLE ONLY "public"."records_household_suggestions"
 
 ALTER TABLE ONLY "public"."records_household_values"
     ADD CONSTRAINT "records_household_values_link_fkey" FOREIGN KEY ("org_id", "family_id") REFERENCES "public"."records_household_links"("org_id", "family_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_intake_requests"
+    ADD CONSTRAINT "records_intake_requests_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_intake_settings"
+    ADD CONSTRAINT "records_intake_settings_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_intake_settings"
+    ADD CONSTRAINT "records_intake_settings_enabled_by_fkey" FOREIGN KEY ("enabled_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("enabled_by");
 
 
 
@@ -11030,6 +11259,14 @@ CREATE POLICY "org isolation" ON "public"."records_household_values" AS RESTRICT
 
 
 
+CREATE POLICY "org isolation" ON "public"."records_intake_requests" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_intake_settings" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."records_org_settings" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -11210,6 +11447,12 @@ ALTER TABLE "public"."records_household_suggestions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."records_household_values" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_intake_requests" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_intake_settings" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."records_org_settings" ENABLE ROW LEVEL SECURITY;
@@ -11702,6 +11945,31 @@ GRANT ALL ON FUNCTION "public"."records_household_member_edit"() TO "service_rol
 
 REVOKE ALL ON FUNCTION "public"."records_household_value_edit"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_household_value_edit"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_accept"("_org_id" "uuid", "_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_accept"("_org_id" "uuid", "_profile_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_claim"("_org_id" "uuid", "_profile_id" "uuid", "_accept_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_claim"("_org_id" "uuid", "_profile_id" "uuid", "_accept_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_settings_cleanup"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_settings_cleanup"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_withdraw"("_org_id" "uuid", "_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_withdraw"("_org_id" "uuid", "_profile_id" "uuid") TO "service_role";
 
 
 
@@ -12637,6 +12905,14 @@ GRANT SELECT("state") ON TABLE "public"."records_household_values" TO "authentic
 
 
 GRANT SELECT("church_value") ON TABLE "public"."records_household_values" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."records_intake_requests" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_intake_settings" TO "service_role";
 
 
 
