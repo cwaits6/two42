@@ -230,11 +230,19 @@ Deno.test("an already aborted request never resolves the name", async () => {
 Deno.test("an abort while waiting for the answer closes the connection", async () => {
   const fake = fakeSockets(PUBLIC, OK);
   const controller = new AbortController();
-  const hanging: SocketConn = { read: () => new Promise(() => {}), write: (p) => Promise.resolve(p.length), close() {} };
+  let closed = false;
+  const hanging: SocketConn = {
+    read: () => new Promise(() => {}),
+    write: (p) => Promise.resolve(p.length),
+    close() {
+      closed = true;
+    },
+  };
   const sockets: Sockets = { ...fake.sockets, startTls: () => Promise.resolve(hanging) };
   const pending = socketFetch(sockets)("https://rock.example.org/", { signal: controller.signal });
   setTimeout(() => controller.abort(), 0);
   await assertRejects(() => pending, TypeError, "The request was aborted.");
+  assertEquals(closed, true);
 });
 
 Deno.test("the next checked address is tried when one won't connect", async () => {

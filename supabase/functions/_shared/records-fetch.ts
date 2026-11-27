@@ -70,15 +70,18 @@ export class RefusedAddressError extends Error {
   }
 }
 
+/** The one rule both transports connect by: at least one address, and every one public. */
+function allPublic(addresses: readonly LookupAddress[]): boolean {
+  return addresses.length > 0 && addresses.every((a) => isPublicAddress(a.address));
+}
+
 /** A `lookup` for node:https that fails unless every address the name resolves to is public. */
 export function guardedLookup(resolve: Resolve = dnsLookup as unknown as Resolve) {
   return (hostname: string, options: { all?: boolean; family?: number | string }, callback: LookupCallback) => {
     const family = options.family === "IPv4" ? 4 : options.family === "IPv6" ? 6 : Number(options.family ?? 0);
     resolve(hostname, { all: true, family }, (err, addresses) => {
       if (err) return callback(err, "");
-      if (addresses.length === 0 || addresses.some((a) => !isPublicAddress(a.address))) {
-        return callback(new RefusedAddressError(), "");
-      }
+      if (!allPublic(addresses)) return callback(new RefusedAddressError(), "");
       if (options.all) return callback(null, addresses);
       callback(null, addresses[0].address, addresses[0].family);
     });
@@ -96,6 +99,8 @@ function responseHeaders(raw: Record<string, string | string[] | undefined>): He
 
 interface Prepared {
   url: URL;
+  /** The URL's host without IPv6 brackets: the name resolved, or the literal checked. */
+  hostname: string;
   method: "GET" | "POST";
   headers: Record<string, string>;
   signal: AbortSignal | null | undefined;
@@ -107,13 +112,14 @@ function prepare(input: URL | string, init: RequestInit): Prepared {
   if (init.body != null) throw new TypeError("Request bodies aren't sent.");
   const url = new URL(String(input));
   if (url.protocol !== "https:") throw new TypeError("Only https is allowed.");
-  const literal = url.hostname.replace(/^\[|\]$/g, "");
-  if (isIP(literal) && !isPublicAddress(literal)) throw new RefusedAddressError();
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const literalFamily = isIP(hostname);
+  if (literalFamily && !allPublic([{ address: hostname, family: literalFamily }])) throw new RefusedAddressError();
   const headers = Object.fromEntries(new Headers(init.headers).entries());
   if (method === "POST") headers["content-length"] = "0";
   // Bodies are returned as received, never decoded, so none may be compressed.
   headers["accept-encoding"] ??= "identity";
-  return { url, method, headers, signal: init.signal };
+  return { url, hostname, method, headers, signal: init.signal };
 }
 
 type Bytes = Uint8Array<ArrayBuffer>;
@@ -223,9 +229,9 @@ function denoSockets(): Sockets | null {
 
 /** Every address `hostname` resolves to, IPv4 first, or a refusal unless all of them are public. */
 async function checkedAddresses(hostname: string, resolve: Sockets["resolve"]): Promise<string[]> {
-  if (isIP(hostname)) return [hostname];
-  const addresses = await resolve(hostname);
-  if (addresses.length === 0 || addresses.some((a) => !isPublicAddress(a.address))) throw new RefusedAddressError();
+  const literalFamily = isIP(hostname);
+  const addresses = literalFamily ? [{ address: hostname, family: literalFamily }] : await resolve(hostname);
+  if (!allPublic(addresses)) throw new RefusedAddressError();
   return [...addresses].sort((a, b) => a.family - b.family).map((a) => a.address);
 }
 
@@ -244,7 +250,7 @@ function closeQuietly(conn: SocketConn | undefined) {
  */
 export function socketFetch(sockets: Sockets): FetchLike {
   return async (input, init = {}) => {
-    const { url, method, headers, signal } = prepare(input, init);
+    const { url, hostname, method, headers, signal } = prepare(input, init);
     if (signal?.aborted) throw new TypeError("The request was aborted.");
 
     let conn: SocketConn | undefined;
@@ -270,7 +276,6 @@ export function socketFetch(sockets: Sockets): FetchLike {
     };
 
     const run = async () => {
-      const hostname = url.hostname.replace(/^\[|\]$/g, "");
       const addresses = await checkedAddresses(hostname, sockets.resolve);
       if (halted) throw halted;
       const port = Number(url.port || 443);
