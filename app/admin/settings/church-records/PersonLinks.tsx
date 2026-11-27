@@ -161,10 +161,11 @@ export function PersonLinks({ label }: { label: string }) {
       setBatchError(`Linked ${count(done)} of ${count(rows.length)}, then stopped. ${NETWORK_ERROR}`);
     } finally {
       setProgress(null);
-      setBusy(false);
       // Closed before the reload, which empties the list the dialog's title counts.
       setConfirming(false);
+      // Held busy through the reload so the old suggestions can't be acted on again.
       await load();
+      setBusy(false);
     }
   }
 
