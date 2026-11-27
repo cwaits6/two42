@@ -182,7 +182,7 @@ test.describe("the household's spouse at desktop width", () => {
     await expect(page.getByText("Dismissed. Max won't be suggested again.")).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Household details" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: SUGGESTED })).toHaveCount(0);
+    await expect(page.getByText("Max Mockingham")).toHaveCount(0);
     expect(
       sql(`select state from public.records_child_suggestions where org_id = ${org} and external_person_id = 'e2e-c-2';`),
     ).toBe("dismissed");

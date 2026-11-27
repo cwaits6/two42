@@ -693,6 +693,9 @@ begin
      or _me.family_id is null then
     raise exception 'records_add_suggested_child: no such suggestion' using errcode = 'RC001';
   end if;
+  -- Locked so a concurrent add by the other adult sees this one's claim before
+  -- looking for a same-named child to settle by.
+  perform 1 from public.family_units where id = _me.family_id and org_id = _me.org_id for update;
   select * into _s from public.records_child_suggestions
    where id = _suggestion_id and org_id = _me.org_id and family_id = _me.family_id and state = 'open'
      for update;

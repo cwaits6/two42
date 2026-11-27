@@ -93,7 +93,7 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
                   Households
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="people" className="space-y-8">
+              <TabsContent value="people" keepMounted className="space-y-8">
                 <PeopleSettings connection={connection} />
               </TabsContent>
               <TabsContent value="households">

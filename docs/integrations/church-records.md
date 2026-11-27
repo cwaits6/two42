@@ -200,7 +200,8 @@ How it works:
   only while the switch is on. They add (`records_add_suggested_child()`,
   which writes a child without an account, no birth year) or dismiss
   (`records_dismiss_suggested_child()`); either keeps only the record of the
-  decision, so the child is never suggested again. An added child's photo is
+  decision, so the child isn't suggested again. Disconnecting cascades
+  through the household links and deletes those decisions. An added child's photo is
   fetched by the next refresh, stored under the child's own storage key, and
   never replaces a photo the household uploaded. Turning the switch off
   removes every open suggestion and every photo still waiting. Saving the
