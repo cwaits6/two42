@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordsError } from "./errors";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveSources, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
 import type { RecordsLiveDetails } from "./types";
+import { ADDRESS_COLUMNS } from "@/supabase/functions/_shared/records-households";
 
 const ORG = "00000000-0000-0000-0000-0000000000aa";
 const VIEWER = "00000000-0000-0000-0000-00000000a001";
@@ -190,7 +191,7 @@ vi.mock("./providers", async (actual) => ({
   providerFor: (id: unknown) => (id === "rock" ? provider.current : null),
 }));
 const details = vi.hoisted(() => vi.fn());
-const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown>, selects: {} as Record<string, string> }));
 vi.mock("./store", () => store);
 vi.mock("./crypto", () => ({ loadRecordsSecret: () => Buffer.alloc(32) }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -199,7 +200,10 @@ vi.mock("@/lib/supabase/server", () => ({
     from: (table: string) => {
       const result = { data: tables.data[table], error: null };
       const chain = {
-        select: () => chain,
+        select: (columns: string) => {
+          tables.selects[table] = columns;
+          return chain;
+        },
         eq: () => chain,
         maybeSingle: async () => result,
         then: (resolve: (value: unknown) => void) => resolve(result),
@@ -209,7 +213,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-const { readLiveDirectory } = await import("./live");
+const { liveDirectoryOn, readLiveDirectory } = await import("./live");
 
 describe("readLiveDirectory", () => {
   beforeEach(() => {
@@ -257,6 +261,21 @@ describe("readLiveDirectory", () => {
     expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
     spy.mockRestore();
     expect(details).not.toHaveBeenCalled();
+  });
+
+  it("reads every address column the planner checks for a household's own address", async () => {
+    await readLiveDirectory(VIEWER);
+    const columns = tables.selects.families_directory_full.split(",").map((c) => c.trim());
+    for (const column of ADDRESS_COLUMNS) expect(columns).toContain(column);
+  });
+
+  it("asks for live details when the mode can't be read, so a live church shows them as unavailable", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    store.readMode.mockRejectedValueOnce(new Error("mode"));
+    expect(await liveDirectoryOn()).toBe(true);
+    spy.mockRestore();
+    store.readConnection.mockResolvedValue(null);
+    expect(await liveDirectoryOn()).toBe(false);
   });
 
   it("with a key that can't be opened, answers unavailable details without asking the records", async () => {

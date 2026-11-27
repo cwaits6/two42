@@ -56,7 +56,8 @@ export async function liveDirectoryOn(): Promise<boolean> {
     return (await liveConnection(orgId)) !== null;
   } catch (err) {
     logError("Church records live mode read failed", err, { route: "/directory", ids: { org: orgId } });
-    return false;
+    // The live request answers "off" for a copy church and "unavailable" for a live one, so it decides.
+    return true;
   }
 }
 
