@@ -141,7 +141,7 @@ describe("the setup docs", () => {
 
   it.each([
     ["docs/integrations/church-records.md", "`"],
-    ["docs-site/content/docs/administer/imports.mdx", ""],
+    ["docs-site/content/docs/administer/church-records.mdx", ""],
   ])("%s name the attribute keys and REST controllers two42 uses", (path, quote) => {
     const text = readFileSync(path, "utf8").replace(/\s+/g, " ");
     expect(text).toContain(list(quote));
