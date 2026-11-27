@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { FIELD_LABELS } from "@/lib/integrations/records/labels";
 import { logError } from "@/lib/log";
+import { isLiveOnly } from "@/supabase/functions/_shared/records-copy";
 import {
   choicesFor,
   type FieldChoice,
@@ -43,7 +44,7 @@ function when(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function RecordsCopySettings({ label }: { label: string }) {
+export function RecordsCopySettings({ label, live }: { label: string; live: boolean }) {
   const [data, setData] = useState<CopyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choices, setChoices] = useState<Choices>({});
@@ -196,6 +197,11 @@ export function RecordsCopySettings({ label }: { label: string }) {
                     value={choices[field] ?? "off"}
                     onChange={(value) => setChoices((prev) => ({ ...prev, [field]: value }))}
                   />
+                  {live && isLiveOnly(field) && (
+                    <p className="text-base font-medium text-muted-foreground">
+                      Shown live from {label}, never stored in two42.
+                    </p>
+                  )}
                   {field === "address" && (
                     <p className="text-base text-muted-foreground">
                       The family&apos;s address and home phone go to its household, once you confirm the household on

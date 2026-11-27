@@ -35,6 +35,7 @@ function summary(connection: Awaited<ReturnType<typeof readConnection>>) {
     providerLabel: provider?.label ?? connection.provider,
     canCopy: !!provider?.copy,
     canSuggestHouseholds: !!provider?.copy?.households,
+    canShowLive: !!provider?.copy && !!provider.live,
   };
 }
 
