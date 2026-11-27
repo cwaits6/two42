@@ -895,13 +895,48 @@ Deno.test("an unused child photo that couldn't be removed keeps its token for th
   });
   const { source } = householdSource();
   source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
-  await logged(() =>
-    refreshOrg(db, options(source, {
+  const attempts: string[] = [];
+  let run: ReturnType<typeof refreshOrg> | undefined;
+  await logged(async () => {
+    run = refreshOrg(db, options(source, {
       storeChildPhoto: () => Promise.resolve("https://storage/child.jpg"),
-      removeChildPhoto: () => Promise.reject(new Error("storage down")),
-    }))
-  );
+      removeChildPhoto: (_org, id) => (attempts.push(id), Promise.reject(new Error("storage down"))),
+    }));
+    await run.catch(() => {});
+  });
+  // Awaited outside the log capture, so a refresh that threw fails here.
+  await run;
+  assertEquals(attempts, [MEMBER]);
   assertFalse(calls.some((c) => c.table === "records_child_suggestions" && c.op === "update"));
+});
+
+Deno.test("when the records no longer give a child's photo, one stored earlier and not shown is removed before the token goes", async () => {
+  const removed: string[] = [];
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }],
+    familyMembers: [{ id: MEMBER, avatar_url: "https://storage/own.jpg" }],
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(null);
+  await refreshOrg(db, options(source, { removeChildPhoto: (_org, id) => (removed.push(id), Promise.resolve()) }));
+  assertEquals(removed, [MEMBER]);
+  const cleared = calls.filter((c) => c.table === "records_child_suggestions" && c.op === "update");
+  assertEquals(cleared.map((c) => c.filters.find(([, column]) => column === "id")?.[2]), ["c1"]);
+});
+
+Deno.test("when the records no longer give a child's photo, one the child shows is kept", async () => {
+  const removed: string[] = [];
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }],
+    familyMembers: [{ id: MEMBER, avatar_url: `https://storage/avatars/org/family-members/${MEMBER}/records-photo.jpg` }],
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(null);
+  await refreshOrg(db, options(source, { removeChildPhoto: (_org, id) => (removed.push(id), Promise.resolve()) }));
+  assertEquals(removed, []);
+  assert(calls.some((c) => c.table === "records_child_suggestions" && c.op === "update"));
 });
 
 Deno.test("a retried child photo already in place is kept", async () => {

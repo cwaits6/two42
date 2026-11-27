@@ -57,6 +57,7 @@ describe("POST /api/admin/church-records/refresh", () => {
     const res = await POST();
     expect(await res.json()).toEqual({
       copied: 2,
+      householdsCopied: 0,
       pending: 0,
       review: 1,
       photosSkipped: 0,

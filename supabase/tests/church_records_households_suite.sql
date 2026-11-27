@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(99);
+select plan(102);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -486,6 +486,10 @@ select is(
   'stale', 'a copy worked out from values that changed meanwhile isn''t written');
 
 select is(
+  public.records_save_field_settings(pg_temp.fx('org'), '{"address": "member", "phone_home": "member"}', pg_temp.fx('admin')),
+  'saved', 'the church admin fills the address and home phone from the records');
+
+select is(
   public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'),
     jsonb_build_object('family', 'F1',
       'household', (select public.records_pick(to_jsonb(f), array['address_line1', 'address_line2', 'city', 'state', 'postal_code', 'phone_home', 'phone_profile_id'])
@@ -530,6 +534,12 @@ select is(
 select is(
   (select array_agg(field) from public.records_household_values where family_id = pg_temp.fx('home')),
   array['phone_home'], 'and the address''s source goes, leaving it ordinary household data');
+select is(
+  (select array_agg(field) from public.records_field_settings where org_id = pg_temp.fx('org')),
+  array['phone_home'], 'the address is no longer filled from the records');
+select is(
+  (select address_line1 from public.family_units where id = pg_temp.fx('home')),
+  '1 Service Way', 'and the household keeps the address it has');
 
 select * from finish();
 rollback;

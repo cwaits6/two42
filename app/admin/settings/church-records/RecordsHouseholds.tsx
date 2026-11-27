@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -66,9 +66,13 @@ export function RecordsHouseholds({ label }: { label: string }) {
   const [savingSwitch, setSavingSwitch] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  // Bumped by each saved children setting, so a load that started before it
+  // can't put the old setting back on screen.
+  const childrenSaves = useRef(0);
 
   const load = useCallback(async () => {
     setError(null);
+    const savesAtStart = childrenSaves.current;
     try {
       const res = await call("/api/admin/church-records/households");
       if (!res.ok) {
@@ -76,7 +80,9 @@ export function RecordsHouseholds({ label }: { label: string }) {
         return;
       }
       const loaded = res.data as unknown as HouseholdsData;
-      setData(loaded);
+      setData((prev) =>
+        prev && childrenSaves.current !== savesAtStart ? { ...loaded, suggestChildren: prev.suggestChildren } : loaded,
+      );
       // A reload after a stopped batch must not re-select what the admin excluded.
       const ids = new Set(loaded.suggestions.map((s) => s.id));
       setExcluded((prev) => new Set([...prev].filter((id) => ids.has(id))));
@@ -120,6 +126,7 @@ export function RecordsHouseholds({ label }: { label: string }) {
         toast.error(errorText("save whether to suggest children", res.status, res.data));
         return;
       }
+      childrenSaves.current++;
       setData((prev) => prev && { ...prev, suggestChildren: on });
       toast.success(on ? "Children are suggested from the next refresh." : "Children are no longer suggested.");
     } catch (err) {

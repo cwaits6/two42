@@ -116,6 +116,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
       const counted = (key: keyof RefreshCounts) => Number(res.data?.[key] ?? 0);
       const message = refreshMessage({
         copied: counted("copied"),
+        householdsCopied: counted("householdsCopied"),
         pending: counted("pending"),
         failed: counted("failed"),
         photosSkipped: counted("photosSkipped"),

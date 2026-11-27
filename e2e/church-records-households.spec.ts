@@ -72,6 +72,15 @@ test.beforeAll(() => {
     throw new Error("The seeded church has a children setting without a connection on this stack; this spec won't remove it.");
   }
   removeFixtures();
+  // Adding a suggested child reuses a same-named child already in the household,
+  // and removeFixtures would then delete that child too. Checked after the
+  // cleanup, so a child left by an earlier run of this spec doesn't count.
+  const sameNamed = sql(`select count(*) from public.family_members
+                          where org_id = ${org} and family_id = ${henrysHousehold}
+                            and lower(last_name) = 'mockingham' and lower(first_name) in ('lily', 'max', 'rosa');`);
+  if (sameNamed !== "0") {
+    throw new Error("Henry's household already has a child named like this spec's suggestions; this spec won't remove them.");
+  }
   fixturesWritten = true;
   sql(`
     insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint)

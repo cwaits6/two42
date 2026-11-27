@@ -1076,7 +1076,7 @@ parameter; the caller must be an approved member whose relationship is
 household, with the church's switch on. Anything else raises `RC001`, so
 another household's or church's suggestion reads the same as a missing one.
 The `family_members` row it inserts carries `_me.org_id` and `_me.family_id`;
-the decision keeps no child details. `set search_path = ''`, everything
+the decision keeps no child details. An added suggestion keeps only the church's photo token, so the next refresh can store the child's photo and then clears it; a dismissed suggestion clears the token at once. `set search_path = ''`, everything
 schema-qualified, EXECUTE revoked from `public` and `anon` and granted to
 `authenticated` only. `supabase/tests/church_records_households_suite.sql`
 covers another household, another church, a child, the switch off and a

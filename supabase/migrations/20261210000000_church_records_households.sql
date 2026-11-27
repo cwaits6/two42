@@ -336,7 +336,8 @@ grant execute on function public.records_save_children_setting(uuid, boolean, uu
 
 -- Replaces the connection's household suggestions with the refresh's. Changes
 -- no household. A suggestion into a household deleted since the refresh read
--- it is left out.
+-- it is left out: the target is locked as it is checked, so a delete that
+-- lands meanwhile drops that one suggestion rather than failing the batch.
 --
 -- SECURITY INVOKER and executable by the service role only, like
 -- records_save_children_setting().
@@ -360,6 +361,7 @@ begin
    where s.target_family_id is null
       or exists (
         select 1 from public.family_units f where f.id = s.target_family_id and f.org_id = _org_id
+           for key share
       );
   get diagnostics _count = row_count;
   return _count;
@@ -614,7 +616,11 @@ as $$
 declare
   _count integer;
 begin
-  if not exists (select 1 from public.records_org_settings where org_id = _org_id and suggest_children) then
+  -- Locked so turning the switch off waits for these writes, and then removes them.
+  perform 1 from public.records_org_settings
+   where org_id = _org_id and suggest_children
+     for share;
+  if not found then
     return 0;
   end if;
   -- Locked so the link can't end, and its suggestions with it, while they are written.

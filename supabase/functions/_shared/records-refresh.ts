@@ -1030,6 +1030,26 @@ async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOption
         // The token is kept so the next run removes it again.
         if (!removed) continue;
       }
+    } else if (memberId) {
+      // An earlier run may have stored the photo and failed to remove it when
+      // the member had their own; the kept token is the only record of it.
+      const { data: member, error: readError } = await db
+        .from("family_members")
+        .select("avatar_url")
+        .eq("org_id", orgId)
+        .eq("id", memberId);
+      if (readError) throw new Error(`child photo read failed: ${readError.message}`);
+      const showsStored = member?.some((m) => m.avatar_url?.includes(`/family-members/${memberId}/records-photo.jpg`));
+      if (!showsStored) {
+        const removed = await options.removeChildPhoto(orgId, memberId).then(() => true, (err) => {
+          logError("church records copy couldn't remove an unused child photo", err, {
+            route: "refresh-church-records",
+            ids: { org: orgId, householdMember: memberId },
+          });
+          return false;
+        });
+        if (!removed) continue;
+      }
     }
     await must(
       db.from("records_child_suggestions").update({ photo: null }).eq("org_id", orgId).eq("id", row.id),

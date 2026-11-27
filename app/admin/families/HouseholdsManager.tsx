@@ -309,9 +309,13 @@ export function HouseholdsManager() {
     // Opening another household bumps this, so a late answer can't reach its form.
     const session = recordsRequestRef.current;
     setRestoring(true);
+    const restored = Object.fromEntries(columns.map((column) => [column, church[column] ?? null])) as Partial<FamilyUnit>;
+    // While a spouse's mobile stands in for the home phone, the database drops
+    // any home phone written alongside it, so the church's number clears that choice.
+    if (field === "phone_home" && church.phone_home != null) restored.phone_profile_id = null;
     const { data, error } = await supabase
       .from("family_units")
-      .update(Object.fromEntries(columns.map((column) => [column, church[column] ?? null])) as Partial<FamilyUnit>)
+      .update(restored)
       .eq("id", family.id)
       .select("id");
     if (recordsRequestRef.current !== session) {

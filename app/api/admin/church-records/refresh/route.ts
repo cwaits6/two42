@@ -51,6 +51,7 @@ export async function POST() {
     }
     return NextResponse.json({
       copied: result.copied,
+      householdsCopied: result.householdsCopied,
       pending: result.pending,
       review: result.review,
       photosSkipped: result.photosSkipped,
