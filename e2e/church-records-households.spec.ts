@@ -84,6 +84,7 @@ test.beforeAll(() => {
       select org_id, connection_id, 'e2e-f-2', ${householdOf("Walter", "Nullington")}, null,
              jsonb_build_array(jsonb_build_object('profile_id', ${profile("Ruth", "Fixtureton")},
                                                   'from_family_id', ${householdOf("Ruth", "Fixtureton")},
+                                                  'from_relationship', 'primary',
                                                   'relationship', 'spouse')),
              false
         from public.records_connections where org_id = ${org}

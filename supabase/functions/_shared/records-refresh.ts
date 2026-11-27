@@ -327,14 +327,15 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
         .eq("connection_id", connectionId),
       "refresh state release",
     );
-  let cursor: string | null;
+  let cursor: string | null | undefined;
   try {
     cursor = await run(db, options, claimed[0].cursor, result);
     await householdStep(db, options, result);
   } catch (err) {
     // A failed run is not a refresh: "Last refreshed" keeps the last one that
     // finished, and the run's own error is the one that reaches the caller.
-    await release({}).catch((releaseError) =>
+    // People copied before households failed keep their mark, so they aren't read again.
+    await release(cursor === undefined ? {} : { cursor }).catch((releaseError) =>
       logError("church records refresh claim not released", releaseError, {
         route: "refresh-church-records",
         ids: { org: orgId },
@@ -899,6 +900,18 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
       "household members",
     )
     : [];
+  // An entry another suggestion was added as is that child, so it can't stand in for a same-named sibling.
+  const claimed = new Set(
+    suggestChildren
+      ? (await rowsByIds(
+        linkedIds,
+        (chunk) =>
+          db.from("records_child_suggestions").select("id, family_member_id").eq("org_id", orgId).in("family_id", chunk)
+            .eq("state", "added").order("id"),
+        "added children",
+      )).map((r) => r.family_member_id).filter((id) => id !== null)
+      : [],
+  );
   const linkedPeople = new Set(personLinks.map((l) => l.external_person_id));
 
   for (const link of linked) {
@@ -940,7 +953,7 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
         _external_family_id: link.external_family_id,
         _children: childSuggestionRows(family.children, {
           linked: linkedPeople,
-          entries: entries.filter((e) => e.family_id === link.family_id),
+          entries: entries.filter((e) => e.family_id === link.family_id && !claimed.has(e.id)),
         }),
       });
       if (error) throw new Error(`suggested children write failed: ${error.message}`);
@@ -1006,12 +1019,15 @@ async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOption
           );
           continue;
         }
-        await options.removeChildPhoto(orgId, memberId).catch((err) =>
+        const removed = await options.removeChildPhoto(orgId, memberId).then(() => true, (err) => {
           logError("church records copy couldn't remove an unused child photo", err, {
             route: "refresh-church-records",
             ids: { org: orgId, householdMember: memberId },
-          })
-        );
+          });
+          return false;
+        });
+        // The token is kept so the next run removes it again.
+        if (!removed) continue;
       }
     }
     await must(

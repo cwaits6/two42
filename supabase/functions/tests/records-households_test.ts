@@ -68,8 +68,8 @@ Deno.test("two linked people of one family in different households are one sugge
     target_family_id: H1,
     family_name: null,
     people: [
-      { profile_id: "kid", from_family_id: H1, relationship: "child" },
-      { profile_id: "cindy", from_family_id: H2, relationship: "spouse" },
+      { profile_id: "kid", from_family_id: H1, from_relationship: "other", relationship: "child" },
+      { profile_id: "cindy", from_family_id: H2, from_relationship: "primary", relationship: "spouse" },
     ],
     basis: [
       { profile_id: "cindy", external_person_id: "r-cindy", family_id: H2 },
@@ -144,7 +144,7 @@ Deno.test("a couple isn't made spouses when the household keeps another primary"
   }));
   assertEquals(s.target_family_id, H1);
   // b was primary in H2; H1 keeps its own primary, so b comes in as other.
-  assertEquals(s.people, [{ profile_id: "b", from_family_id: H2, relationship: "other" }]);
+  assertEquals(s.people, [{ profile_id: "b", from_family_id: H2, from_relationship: "primary", relationship: "other" }]);
 });
 
 Deno.test("one household isn't the target of two families in one pass", () => {

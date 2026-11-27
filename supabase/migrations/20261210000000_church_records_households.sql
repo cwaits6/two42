@@ -72,7 +72,8 @@ create index records_household_values_family_id_idx on public.records_household_
 
 -- The refresh's household suggestions, replaced in full on each refresh that
 -- reads every family. people holds each person whose household or
--- relationship changes: [{profile_id, from_family_id, relationship}]. basis
+-- relationship changes: [{profile_id, from_family_id, from_relationship,
+-- relationship}]. basis
 -- holds every linked person it was worked out from, as linked and housed
 -- then: [{profile_id, external_person_id, family_id}].
 create table public.records_household_suggestions (
@@ -375,7 +376,8 @@ grant execute on function public.records_replace_household_suggestions(uuid, uui
 -- the household they stay in, is left as it is.
 --
 -- Answers 'stale', changing nothing, when anyone it names or was worked out
--- from has moved, been unlinked or relinked, or is no longer approved, or its
+-- from has moved, been unlinked or relinked, or is no longer approved, when
+-- anyone it names has a different relationship than when it was planned, or its
 -- household is now linked to
 -- another family or holds a primary or spouse it didn't; 'gone' for a
 -- suggestion not in this church; and 'busy' while a refresh holds its claim,
@@ -447,6 +449,7 @@ begin
           and pr.org_id = _org_id
           and pr.role in ('member', 'admin')
           and pr.family_id is not distinct from (p ->> 'from_family_id')::uuid
+          and pr.relationship is not distinct from p ->> 'from_relationship'
      )
   ) then
     return 'stale';
@@ -701,13 +704,18 @@ begin
 
   -- Someone in the household already under the same name, entered since the
   -- refresh, is this child: the suggestion is settled by them, not a second
-  -- entry. The name key folds case, Latin accents, spaces and punctuation.
+  -- entry. An entry another suggestion was added as is that other child.
+  -- The name key folds case, Latin accents, spaces and punctuation.
   select m.id into _id from public.family_members m
    where m.org_id = _me.org_id and m.family_id = _me.family_id
-     and lower(regexp_replace(normalize(coalesce(m.first_name, ''), NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
-       = lower(regexp_replace(normalize(_s.first_name, NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
-     and lower(regexp_replace(normalize(coalesce(m.last_name, ''), NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
-       = lower(regexp_replace(normalize(_s.last_name, NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
+     and lower(regexp_replace(regexp_replace(normalize(coalesce(m.first_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(regexp_replace(normalize(_s.first_name, NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+     and lower(regexp_replace(regexp_replace(normalize(coalesce(m.last_name, ''), NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(regexp_replace(normalize(_s.last_name, NFKD), '([A-Za-z])[\u0300-\u036f]+', '\1', 'g'), '[[:space:][:punct:]]', '', 'g'))
+     and not exists (
+       select 1 from public.records_child_suggestions o
+        where o.org_id = _me.org_id and o.family_member_id = m.id and o.id <> _s.id
+     )
    order by m.id
    limit 1;
   if _id is null then

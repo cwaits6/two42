@@ -62,7 +62,7 @@ const keysRead = (body: string, name: string) =>
   [...body.matchAll(/(\w+) ->>? '([a-z_0-9]+)'/g)].filter((m) => m[1] === name).map((m) => m[2]);
 
 // Typed literals: each lists exactly its type's keys, or the type check fails.
-const SUGGESTED_PERSON: SuggestedPerson = { profile_id: "p", from_family_id: null, relationship: "primary" };
+const SUGGESTED_PERSON: SuggestedPerson = { profile_id: "p", from_family_id: null, from_relationship: null, relationship: "primary" };
 const SUGGESTION_BASIS: SuggestionBasis = { profile_id: "p", external_person_id: "e", family_id: null };
 const SUGGESTION: HouseholdSuggestion = {
   external_family_id: "f",

@@ -373,7 +373,7 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
     const named = people.flatMap((p): HouseholdSuggestionPerson[] => {
       const profile = profiles.get(p.profile_id);
       if (!profile) return [];
-      if (profile.family_id !== p.from_family_id) moved = true;
+      if (profile.family_id !== p.from_family_id || profile.relationship !== (p.from_relationship ?? null)) moved = true;
       const from = profile.family_id;
       return [
         {
@@ -389,7 +389,7 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
     named.sort((a, b) => a.name.localeCompare(b.name));
     suggestions.push({
       id: row.id,
-      // Someone named who no longer exists, or who has changed household, makes the stored plan out of date.
+      // Someone named who no longer exists, or who has changed household or relationship, makes the stored plan out of date.
       ready: row.ready && !moved && named.length === people.length,
       target: row.target_family_id
         ? { familyId: row.target_family_id, name: families.get(row.target_family_id)! }

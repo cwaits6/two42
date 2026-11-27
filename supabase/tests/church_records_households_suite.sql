@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(91);
+select plan(96);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -290,12 +290,25 @@ select is(
   'adding a child the household entered meanwhile under the same name settles on that entry');
 select is((select count(*)::int from public.family_members where family_id = pg_temp.fx('home') and first_name ilike 'ros%'), 1,
   'rather than adding them twice');
+select is(
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
+    '[{"external_person_id": "203", "first_name": "June", "last_name": "Mockingham"},
+      {"external_person_id": "204", "first_name": "Rosé", "last_name": "Mockingham"},
+      {"external_person_id": "205", "first_name": "Rose", "last_name": "Mockingham"}]'),
+  1, 'another child of the same name is suggested');
+select isnt(
+  pg_temp.call('henry.mockingham@example.test', format('select public.records_add_suggested_child(%L)::text',
+    (select id from public.records_child_suggestions where external_person_id = '205'))),
+  (select id::text from public.family_members where family_id = pg_temp.fx('home') and first_name = 'rose'),
+  'adding them doesn''t settle on the entry the first was added as');
+select is((select count(*)::int from public.family_members where family_id = pg_temp.fx('home') and first_name ilike 'ros%'), 2,
+  'they get their own entry');
 select is(public.records_save_children_setting(pg_temp.fx('org'), false, pg_temp.fx('admin')), 'saved',
   'the church admin turns the switch off');
 select is(
   (select array_agg(state || ':' || coalesce(photo, '-') order by external_person_id)
      from public.records_child_suggestions where family_id = pg_temp.fx('home')),
-  array['added:-', 'dismissed:-', 'added:-'],
+  array['added:-', 'dismissed:-', 'added:-', 'added:-'],
   'turning it off removes the open suggestion and the waiting photo token, keeping the decisions');
 
 -- ── What members can't do ───────────────────────────────────────────────────
@@ -327,7 +340,7 @@ create temp table before_households on commit drop as
 select is(
   public.records_replace_household_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), jsonb_build_array(
     jsonb_build_object('external_family_id', 'F2', 'target_family_id', pg_temp.fx('seedly'), 'family_name', null, 'ready', false,
-      'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('leo'), 'from_family_id', pg_temp.fx('loremsworth'), 'relationship', 'spouse'))),
+      'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('leo'), 'from_family_id', pg_temp.fx('loremsworth'), 'from_relationship', 'primary', 'relationship', 'spouse'))),
     jsonb_build_object('external_family_id', 'F3', 'target_family_id', gen_random_uuid(), 'family_name', null, 'ready', true, 'people', '[]'::jsonb))),
   1, 'the refresh''s suggestions are stored, leaving out one into a household that no longer exists');
 select is(
@@ -373,6 +386,11 @@ select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_su
   'so does someone leaving the household the suggestion chose because of them');
 select is((select family_id from public.profiles where id = pg_temp.fx('leo')), pg_temp.fx('loremsworth'), 'and nobody moves');
 update public.profiles set family_id = pg_temp.fx('seedly') where id = pg_temp.fx('isaac');
+update public.profiles set relationship = 'other' where id = pg_temp.fx('leo');
+select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'stale',
+  'someone named whose relationship changed since the refresh makes it stale, so the change isn''t undone');
+select is((select relationship from public.profiles where id = pg_temp.fx('leo')), 'other', 'and their relationship stays');
+update public.profiles set relationship = 'primary' where id = pg_temp.fx('leo');
 
 select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'confirmed',
   'the church admin confirms it');
@@ -394,11 +412,11 @@ insert into public.records_person_links (org_id, connection_id, profile_id, exte
          (pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.uid('ruth.fixtureton@example.test'), '104');
 select public.records_replace_household_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), jsonb_build_array(
   jsonb_build_object('external_family_id', 'F2', 'target_family_id', pg_temp.fx('seedly'), 'family_name', null, 'ready', false,
-    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'relationship', 'primary'))),
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'from_relationship', 'spouse', 'relationship', 'primary'))),
   jsonb_build_object('external_family_id', 'F5', 'target_family_id', pg_temp.fx('home'), 'family_name', null, 'ready', false,
-    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'relationship', 'other'))),
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.fx('hannah'), 'from_family_id', pg_temp.fx('loremsworth'), 'from_relationship', 'spouse', 'relationship', 'other'))),
   jsonb_build_object('external_family_id', 'F4', 'target_family_id', null, 'family_name', 'Fixtureton', 'ready', true,
-    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.uid('ruth.fixtureton@example.test'), 'from_family_id', null, 'relationship', 'primary')))));
+    'people', jsonb_build_array(jsonb_build_object('profile_id', pg_temp.uid('ruth.fixtureton@example.test'), 'from_family_id', null, 'from_relationship', 'primary', 'relationship', 'primary')))));
 create temp table before_guards on commit drop as select id, family_id, relationship from public.profiles;
 create temp table before_units on commit drop as select id from public.family_units;
 

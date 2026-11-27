@@ -147,6 +147,8 @@ export interface SuggestedPerson {
   profile_id: string;
   /** The household they were in when the suggestion was worked out, null for none. */
   from_family_id: string | null;
+  /** Their relationship then, so confirming refuses a plan that would undo a change made since. */
+  from_relationship: string | null;
   relationship: Relationship;
 }
 
@@ -287,7 +289,12 @@ export function planHouseholdSuggestions(input: SuggestionInput): HouseholdSugge
       .map(({ profile }) => profile)
       .sort(byName)
       .filter((p) => target === null || p.family_id !== target || roles.get(p.id) !== p.relationship)
-      .map((p) => ({ profile_id: p.id, from_family_id: p.family_id, relationship: roles.get(p.id)! }));
+      .map((p) => ({
+        profile_id: p.id,
+        from_family_id: p.family_id,
+        from_relationship: p.relationship,
+        relationship: roles.get(p.id)!,
+      }));
     if (people.length === 0 && target !== null && linkedTo.get(family.id) === target) continue;
 
     let familyName: string | null = null;

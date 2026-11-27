@@ -401,6 +401,20 @@ Deno.test("a failed run keeps the last refresh time and releases its claim", asy
   assertEquals(release.values, { running_since: null });
 });
 
+Deno.test("a household step that fails keeps the people's mark but not the refresh time", async () => {
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    apply: (args) =>
+      args.fn === "records_replace_household_suggestions"
+        ? { data: null, error: { message: "households refused" } }
+        : HOUSEHOLD_FIXTURE.apply(args),
+  });
+  await assertRejects(() => refreshOrg(db, options(householdSource().source)), Error, "households refused");
+  const release = calls.at(-1)!;
+  assertEquals(release.table, "records_refresh_state");
+  assertEquals(release.values, { cursor: "2026-11-25T00:00:00", running_since: null });
+});
+
 Deno.test("a release that also fails doesn't hide why the run failed", async () => {
   const { db } = fakeDb({ ...FIXTURE, releaseFails: true });
   const { source } = fakeSource();
@@ -685,7 +699,7 @@ Deno.test("no refresh changes a household's people: groupings are only stored as
     external_family_id: "500",
     target_family_id: H1,
     family_name: null,
-    people: [{ profile_id: P4, from_family_id: H2, relationship: "spouse" }],
+    people: [{ profile_id: P4, from_family_id: H2, from_relationship: "primary", relationship: "spouse" }],
     basis: [
       { profile_id: P1, external_person_id: "100", family_id: H1 },
       { profile_id: P4, external_person_id: "103", family_id: H2 },
@@ -813,6 +827,24 @@ Deno.test("with the switch on, a linked household's children are suggested witho
   }]);
 });
 
+Deno.test("a household entry another child was added as doesn't hide a same-named child", async () => {
+  const lily = { id: MEMBER, family_id: H1, first_name: "Lily", last_name: "Quux" };
+  const sync = async (childSuggestions: Record<string, unknown>[]) => {
+    const { db, fns, rpcs } = fakeDb({
+      ...HOUSEHOLD_FIXTURE,
+      orgSettings: [{ suggest_children: true }],
+      householdLinks: [{ family_id: H1, external_family_id: "500" }],
+      familyMembers: [lily],
+      childSuggestions,
+    });
+    await refreshOrg(db, options(householdSource().source));
+    return (rpcs[fns.indexOf("records_sync_child_suggestions")]._children as { external_person_id: string }[])
+      .map((c) => c.external_person_id);
+  };
+  assertEquals(await sync([]), []);
+  assertEquals(await sync([{ id: "c1", family_member_id: MEMBER, external_person_id: "901", photo: null }]), ["900"]);
+});
+
 Deno.test("a key that can't read families still copies people, releases its claim and says so", async () => {
   const { db, calls, fns } = fakeDb(HOUSEHOLD_FIXTURE);
   const { source } = householdSource({ familyOf: () => Promise.reject(new RecordsError("unauthorized", 401)) });
@@ -831,7 +863,7 @@ Deno.test("a key that can't read families still copies people, releases its clai
   for (const fromRecords of ["Zebulon", "Quux", "500", "Oak", "5125550122"]) assert(!text.includes(fromRecords), fromRecords);
 });
 
-Deno.test("an added child's photo fills an empty photo only, and the token is let go either way", async () => {
+Deno.test("an added child's photo fills an empty photo only, and the token is let go once the photo is placed or removed", async () => {
   const stored: string[] = [];
   const removed: string[] = [];
   const { db, calls } = fakeDb({
@@ -852,6 +884,24 @@ Deno.test("an added child's photo fills an empty photo only, and the token is le
   assert(write.filters.some(([op, column]) => op === "is" && column === "avatar_url"));
   const cleared = calls.filter((c) => c.table === "records_child_suggestions" && c.op === "update");
   assertEquals(cleared.map((c) => c.filters.find(([, column]) => column === "id")?.[2]), ["c1"]);
+});
+
+Deno.test("an unused child photo that couldn't be removed keeps its token for the next run", async () => {
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }],
+    familyMembers: [{ id: MEMBER, avatar_url: "https://storage/own.jpg" }],
+    updated: { family_members: [] },
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+  await logged(() =>
+    refreshOrg(db, options(source, {
+      storeChildPhoto: () => Promise.resolve("https://storage/child.jpg"),
+      removeChildPhoto: () => Promise.reject(new Error("storage down")),
+    }))
+  );
+  assertFalse(calls.some((c) => c.table === "records_child_suggestions" && c.op === "update"));
 });
 
 Deno.test("a retried child photo already in place is kept", async () => {

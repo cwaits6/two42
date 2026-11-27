@@ -109,7 +109,7 @@ export const MAX_SUFFIX_LENGTH = 20;
 export function normalizeName(value: string | null | undefined): string {
   return (value ?? "")
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/([A-Za-z])[\u0300-\u036f]+/g, "$1")
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}]/gu, "");
 }

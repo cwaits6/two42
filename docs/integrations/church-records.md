@@ -173,8 +173,9 @@ How it works:
   without an account; it is never deleted. A suggestion where anyone leaves a
   household they're in is **Check first**, confirmed one at a time; the rest
   are **Ready to confirm**, in bulk. Confirming refuses a suggestion that
-  changed since the refresh (anyone moved, unlinked or no longer approved, the
-  household linked elsewhere or holding a primary or spouse it didn't), and
+  changed since the refresh (anyone moved, unlinked or no longer approved,
+  anyone it names given another relationship, the household linked elsewhere
+  or holding a primary or spouse it didn't), and
   is refused while a refresh runs.
 - **Relationships.** When the family's two adults are married in the records
   and both are linked, one is `primary` (whoever already is, in the household)
@@ -192,7 +193,9 @@ How it works:
 - **Children.** While the switch is on, each confirmed household's family's
   children are stored as open suggestions (`records_child_suggestions`), with
   only the fields above and never a birth year. A child already linked to an
-  account, or already in the household under the same name, isn't suggested.
+  account, or already in the household under the same name, isn't suggested;
+  an entry another child was added as doesn't count, so two children of one
+  name are both suggested. Accents fold only on Latin letters.
   RLS shows open suggestions only to that household's primary and spouse, and
   only while the switch is on. They add (`records_add_suggested_child()`,
   which writes a child without an account, no birth year) or dismiss
