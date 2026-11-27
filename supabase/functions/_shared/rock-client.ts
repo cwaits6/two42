@@ -130,13 +130,25 @@ export type RockRestPath = (typeof ROCK_REST_PATHS)[number];
 /**
  * Proves the address is a Rock and the key can read every controller a
  * refresh reads, so a missing permission fails on save rather than nightly.
- * Rock answers a key without a permission with 401, the same as a wrong key.
+ * Rock answers a key without a permission with 401, the same as a wrong key,
+ * so every controller is tried: a key refused by only some is missing those
+ * controllers, and one refused by all is the wrong key.
  */
 export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<void> {
+  const refused: string[] = [];
+  let status: number | undefined;
   for (const path of ROCK_REST_PATHS) {
-    const body = await getJson(creds, path, { $top: "1", $select: "Id" }, fetcher);
-    if (!Array.isArray(body)) throw new RecordsError("not_provider");
+    try {
+      const body = await getJson(creds, path, { $top: "1", $select: "Id" }, fetcher);
+      if (!Array.isArray(body)) throw new RecordsError("not_provider");
+    } catch (err) {
+      if (!(err instanceof RecordsError) || err.kind !== "unauthorized") throw err;
+      refused.push(path.slice("/api/".length));
+      status = err.status;
+    }
   }
+  if (refused.length === ROCK_REST_PATHS.length) throw new RecordsError("unauthorized", status);
+  if (refused.length > 0) throw new RecordsError("unauthorized", status, refused);
 }
 
 export interface PersonFilterIds {

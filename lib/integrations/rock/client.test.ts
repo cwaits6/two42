@@ -45,12 +45,33 @@ describe("Rock client", () => {
     ]);
   });
 
-  it("refuses a key that can read people but not phone numbers", async () => {
+  it("names the controllers a key is refused when it can read the rest", async () => {
+    const refused = new Set(["/api/PhoneNumbers", "/api/Groups"]);
+    const fetcher = vi.fn().mockImplementation(async (url: URL) =>
+      refused.has(url.pathname) ? reply({ Message: "Authorization has been denied" }, { status: 401 }) : reply([{ Id: 1 }]),
+    );
+    await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({
+      kind: "unauthorized",
+      status: 401,
+      missing: ["PhoneNumbers", "Groups"],
+    });
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
+
+  it("names no controller for a key refused by every one", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => reply({ Message: "Authorization has been denied" }, { status: 401 }));
+    const error = await checkConnection(creds, fetcher).catch((err: unknown) => err);
+    expect(error).toMatchObject({ kind: "unauthorized", status: 401 });
+    expect((error as RecordsError).missing).toBeUndefined();
+  });
+
+  it("stops at a failure other than a refusal", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(reply([{ Id: 1 }]))
-      .mockResolvedValueOnce(reply({ Message: "Authorization has been denied" }, { status: 401 }));
-    await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({ kind: "unauthorized" });
+      .mockResolvedValueOnce(reply({ Message: "Authorization has been denied" }, { status: 401 }))
+      .mockResolvedValueOnce(reply("<html>", { type: "text/html" }));
+    await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({ kind: "not_provider" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("reports an unreachable host", async () => {
