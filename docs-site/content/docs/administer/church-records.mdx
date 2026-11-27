@@ -1,0 +1,199 @@
+---
+title: Church records
+description: How a church admin connects the church's records, links people to them, chooses what two42 copies or shows from them, and sends new people to them.
+sources:
+  - "app/admin/settings/church-records/**"
+  - "app/api/admin/church-records/**"
+  - "app/api/church-records/**"
+  - "lib/integrations/records/enabled.ts"
+  - "lib/integrations/records/crypto.ts"
+  - "lib/integrations/records/http.ts"
+  - "lib/integrations/records/intake.ts"
+  - "lib/integrations/records/labels.ts"
+  - "lib/integrations/records/live.ts"
+  - "lib/integrations/records/livePlan.ts"
+  - "lib/integrations/records/match.ts"
+  - "lib/integrations/records/refresh.ts"
+  - "lib/integrations/records/settings.ts"
+  - "lib/integrations/records/store.ts"
+  - "lib/integrations/rock/**"
+  - "supabase/functions/_shared/records-copy.ts"
+  - "supabase/functions/_shared/records-households.ts"
+  - "supabase/functions/_shared/records-refresh.ts"
+  - "supabase/functions/_shared/rock-client.ts"
+  - "supabase/functions/_shared/rock-copy.ts"
+  - "supabase/functions/_shared/rock-households.ts"
+---
+
+**Church settings → Church records** connects two42 to the software your church keeps its records in, links people in two42 to their records, and fills in their details from there, so nobody types them twice. Rock RMS is the church software two42 connects to. Only church admins open it.
+
+Details move one way: two42 reads your church's records and never changes them. The one exception is [sending new people](#send-new-people), which is off until you turn it on and uses a separate key.
+
+The steps that are the same for any church software are on this page. What to set up in Rock RMS itself is under [Rock RMS](#rock-rms).
+
+## Turn it on
+
+Church records is off until the operator sets `RECORDS_KEY_SECRET`; see [Environment variables](/docs/run/environment#church-records). Until then **Church settings** has no **Church records** section. The nightly refresh is the operator's to schedule too; see [refresh-church-records](/docs/run/edge-functions#refresh-church-records).
+
+## Connect
+
+1. Make a key in your church software that can only read. For Rock RMS, follow [The read key](#the-read-key).
+2. On **Church settings**, under **Church records**, choose **Church records**.
+3. Enter the address and the key: for Rock RMS, the **Rock RMS address**, such as `https://rock.yourchurch.org`, and the **REST key**.
+4. Select **Connect Rock RMS**.
+
+Before it saves anything, two42 tries the key on everything a refresh reads, so a missing permission shows now, not at the first refresh. If it can't connect, it says why, such as **Rock RMS didn't accept the key. Check it is active and its user can view everything the key instructions list.** or **Couldn't reach Rock RMS at that address. Check the address and try again.**
+
+Once connected, the card says **Rock RMS connected** with the address and **Ends in** the key's last four characters. The key is never shown again. Below the card, the **People** tab links people and chooses what two42 copies; the **Households** tab suggests households from the families in your records.
+
+## Link people
+
+two42 suggests a person from your records for each approved person in two42 who isn't linked yet. A suggestion shows the person's name in your records and what agreed, such as **Name and email match**, never their details there. Every list is searched with **Search by name** and shown 25 at a time.
+
+- **Ready to link**: the name and an email or birthday agree, and there's only one possible match on each side. **Review list** shows each one with a box to untick anyone you don't want linked. **Link all**, with the number, links them, or **Link** with the number **selected** once you've unticked some. It asks first, then links 100 at a time and shows its progress. If the server refuses a batch it stops there and says how many it linked.
+- **Check first**: only the name agrees, or there's more than one possible match. Use **Open in Rock RMS** to check the record, then **Link**, one person at a time. Someone with several possible matches says how many; **Choose…** shows each match with its own **Link**.
+- **No match found**: usually not in your records yet, or spelled differently. **Show** lists them.
+- **Linked**: everyone linked, each with **Open in Rock RMS** and **Unlink**.
+
+A match needs the last name to agree, and the first name to agree with the first name or nick name in your records. Case, accents and punctuation don't count. An email alone is never a match, because people in one household often share one. A birthday that disagrees rules a person out; a birthday missing on either side says nothing. Only people your church software counts as current are suggested: for Rock RMS, living people who aren't inactive, never a business.
+
+When you link, two42 reads those people again and refuses any that no longer match, with **One of these no longer matches its Rock RMS record. Reload and check the suggestions.**
+
+## How two42 uses your church's records
+
+**How two42 uses your church's records**, at the top of the **People** tab, chooses one of two:
+
+- **Copy into two42**: details are copied from your records into two42 and kept up to date every night. This is the default.
+- **Live from your church's records**: the address, birthday and anniversary you turn on under **What two42 copies**, and a suggested child's birthday and grade, are read from your records each time someone opens the directory, only for people they can already see, and are never stored in two42. Under **What two42 copies**, each of them you turn on says **Shown live from Rock RMS, never stored in two42.** A child's birthday and grade are read only for a child added from a suggestion whose household hasn't set them, while **Suggest children** is on.
+
+Either way, two42 keeps each linked person's name, sign-in email, phones, gender and photo. If your church needs even names kept out of two42, church records aren't a fit.
+
+Choosing **Live from your church's records** asks first: **This removes 1,240 details copied from your church's records. Details members changed in two42 stay.**, with the number for your church. **Remove and switch** removes every address, birthday, anniversary and grade two42 still holds from your records, and the birthday and grade of children suggested and not yet added. A detail a member changed in two42 stays theirs. A child already added to a household keeps the birthday and grade they were added with: they're the household's to change, not copied details, so the count leaves them out. Choosing **Copy into two42** again starts a refresh, which fills those details in under what two42 copies. A child added to a household while the church was live keeps no birthday or grade after the switch: two42 never stored them, and from then on they're the household's to enter. While a refresh is running neither is saved; choose again once it finishes.
+
+While your records can't be reached, the directory still opens and shows **Not available right now** where a live detail would be. What members see is in [Directory](/docs/use/directory#details-from-your-churchs-records).
+
+## What two42 copies
+
+For each of **Name**, **Suffix**, **Title**, **Gender**, **Mobile phone**, **Work phone**, **Birthday**, **Anniversary**, **Photo**, **A child's grade**, **Address** and **Home phone**, choose:
+
+- **Not from your church's records**: two42 doesn't touch it.
+- **From them, locked**: members see **Managed by your church** and can't change it. Only name, suffix, title, gender and a child's grade can be locked; address and home phone are always the household's to change.
+- **From them, member can change**: filled in, and a member who changes or clears it keeps their own from then on. They can go back with **Use your church's value**.
+
+Select **Save what two42 copies**. The next refresh fills in what you turned on. While a refresh is running the save is refused, because that refresh works from the settings it started with; save again once it finishes. A detail a member can change that two42 already holds a different value for is left as the member's, with your church's value offered to them. A locked detail always takes your church's value. The preferred name comes from the nick name, only while a member hasn't set one. The sign-in email, unlisted phone numbers, the texting flag, connection status and your church's own fields are never copied. The family's address and home phone go to its household, not to each person, and only once you confirm the household on the **Households** tab. Either adult in the household can change or clear them, and a clear sticks.
+
+Each member who gets a detail filled in sees a one-time notice on **My profile**. What they see is in [Profile](/docs/use/profile#details-from-your-churchs-records).
+
+## Refresh
+
+two42 refreshes every night, reading people changed in your records since the last refresh and anyone not copied yet. **Refresh** shows when the last refresh finished and how many linked people are still to copy on the next refresh: people not yet copied, and everyone after you save a change to what two42 copies. A refresh that fails or runs out of time doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh. If it runs out of time before households, it says **Households weren't all refreshed; the next refresh tries them again.** Households are read again from the start each time, and until a refresh finishes them, the last suggestions stay.
+
+## Households
+
+Your records group people into families. The **Households** tab suggests putting each family's linked people in one household here. Nothing changes in any household until you confirm.
+
+- **Suggest children**: off by default. When it's on, the children in a confirmed household's family are suggested to its primary and spouse, who add or dismiss each one on their **Household** tab. Only a child's first and last name, birthday without the year, grade and photo come over, and in live mode only the name and photo; a child's photo arrives at the refresh after they're added. Turning it off removes every suggestion not yet added. In live mode it also stops showing the birthday and grade of children already added, unless their household has set them. A dismissed child isn't suggested again while the connection stays; disconnecting forgets every child decision. While a refresh is running the switch isn't saved; switch it again once the refresh finishes.
+- **Ready to confirm**: suggestions where nobody leaves a household they're in, including a household whose people are already together and only needs linking to its family. **Review list** shows each one, with **Include** to leave one out; **Confirm all** confirms them 100 at a time.
+- **Check first**: someone leaves a household they're in. Check with them, then **Confirm household**, one at a time; it shows who moves and asks first.
+
+Each suggestion names people and households from two42. Confirming moves exactly the people it names into the household, with the relationship it shows; a couple married in your records become **Primary** and **Spouse**. Whoever stays behind keeps their household, its address, phone, photo and the people in it without an account. **Confirm household** refuses a suggestion that changed since the last refresh with **This changed since the last refresh. Choose Refresh now on the People tab, then try again.** **Confirm all** leaves any that changed as they are and says how many. While a refresh is running, confirming stops with **A refresh is running.** Any households already confirmed stay confirmed; try again once it finishes. A confirmed household gets the family's address and home phone at the next refresh, under what two42 copies.
+
+Suggestions are worked out by each refresh, nightly or **Refresh now**; the tab shows the last refresh's.
+
+A Rock RMS key saved before households came keeps copying people; until its role can view Groups, GroupMembers and Locations, the **Households** tab says families couldn't be read, and **Refresh now** says households weren't refreshed. [The read key](#the-read-key) lists what its role needs.
+
+## Needs review
+
+**Needs review** lists linked people who became inactive in your records or can't be found there any more, with **Open in Rock RMS** for an inactive person and **Unlink**. Nothing happens to them automatically.
+
+## Send new people
+
+**Send new people to Rock RMS**, at the bottom of the **People** tab, is off until you turn it on. When it's on, someone who joins two42 and ticks **Share my details with your church's office**, with your church's name, is sent to your records once, for your staff to review. The box is unticked to start, and shows only while sending is on.
+
+Only their first and last name, sign-in email and one phone (mobile, or home if there's no mobile) are sent. Nothing about their household is sent. two42 never changes anyone already in your records, and never sends someone who is linked or was already sent.
+
+1. Make a second key, used only for sending new people, and choose where new people go. For Rock RMS, follow [The write key](#the-write-key).
+2. Select **Turn on**.
+3. Paste the **Write REST key**. two42 refuses the key it reads with: **Use a separate key for sending new people, not the key two42 reads with.**
+4. Under **Where new people go**, select **Find workflow types** and choose one, or type its number under **Or enter its id**.
+5. Select **Save**. two42 checks where new people go and the key's permissions without sending anyone.
+
+If your records refuse, two42 says what's wrong instead of saving:
+
+- **Rock RMS didn't accept the write key, or its role is missing a permission. Check the key is active and its role has every permission the write key instructions list, including View on the workflow type.**
+- **Rock RMS has no active workflow type with that id. Choose another, or check it is active in Rock RMS.**
+- **Couldn't reach Rock RMS. Check that Rock RMS is up and answers at the connected address.**
+
+Once it's on, the card shows where new people go, the write key's last four characters, how many were **Sent** and how many two42 **Couldn't send**, and why the newest send failed, if it did. A send that fails isn't tried again, and never stops the person's sign-up; while any couldn't be sent, the card says **two42 doesn't send these people again. Add them in Rock RMS yourself.** If two42 started a send but couldn't record whether your records took it, the card adds **Not sure if sent** with a count and asks you to check your records for them; two42 doesn't send them again either. When the newest failure says the write key wasn't accepted but the key and its role are right, choose **Change** and enter the key again: two42 couldn't open the saved one.
+
+**Change** changes where new people go or the key; leave the key empty to keep the saved one. **Turn off** asks first, then removes the write key and every consent not yet sent; people already sent stay in your records.
+
+What members see is in [Signing in](/docs/use/sign-in) and [Joining](/docs/use/joining).
+
+## Unlink, change the key or disconnect
+
+None of these changes anyone's details in two42. What was copied stays in each profile and household as ordinary two42 details members can change, without the **From your church's records** or **Managed by your church** labels.
+
+- **Unlink**, on **Linked** or **Needs review**, ends one person's link. Their details stop updating, and nothing else changes.
+- **Change key** opens the connect form with the address filled in. A new key for the same address replaces the saved one and keeps everything else: links, households, the refresh, and sending new people. Use it as well when the page says **The saved key can't be opened. Choose Change key and enter it again; your links stay.** A different address is other records: connecting it removes everything **Disconnect** removes, because a person in one set of records means nothing in another.
+- **Disconnect Rock RMS** asks first: **This removes the key and every link to a record. Everyone's details in two42 stay as they are, including what was copied, and members can change them.** It removes the key, every person link, which households are linked to which family, the household and child suggestions, and every decision about a suggested child. It also turns off sending new people: the write key goes, and every consent not yet sent. Your choices under **How two42 uses your church's records**, **What two42 copies** and **Suggest children** stay for when you connect again, and so does the record of who was already sent, so nobody is sent twice.
+
+## What two42 reads and stores
+
+| | Read from your records | Stored in two42 |
+|---|---|---|
+| Connect | The id of one row of each kind it reads, to prove the key can read them | Which church software, its address, the key sealed with the operator's secret, its last four characters, who connected and when |
+| Suggest and link | People with the last names of people in two42: their id, names, email, birthday with the year, and whether they can be linked | For each link: the person's id in your records, who linked them and when |
+| Refresh | Names, nick name, title, suffix, gender, birthday with the year, anniversary, grade, photo and listed mobile and work phones of linked people; whether each is still active | The copied details you turned on, where each came from and your church's last value; who needs review |
+| Households | Each linked person's family, who is in it, the family's home address and the adults' listed home phone | The suggestions, which household is linked to which family, and the household's copied address and home phone |
+| Suggest children | Each child's first and last name, birthday without the year, grade and photo | Open suggestions with those details; for a child added or dismissed, only the decision |
+| Live mode | For the people someone opens in the directory: birthday without the year, anniversary, grade and the household's address | Nothing |
+| Send new people | Workflow types, and the chosen one, to check it | The write key, sealed, its last four characters, where new people go, and for each person whether and when they were sent, never their details |
+
+What is read to suggest or link is kept only while answering that request. Unlisted phone numbers are dropped as they are read. A person's email in your records is used only to match them, never copied. A birth year is read only to suggest, link and refresh. When the church copies into two42 and **Birthday** is taken from your records, the refresh stores the year with the birthday. Live details and suggested children never read it. two42 never logs anything it read from your records.
+
+## Rock RMS
+
+Rock RMS is the first church software two42 connects to. Each key goes on a user made for two42 alone, in a security role of its own that grants only what that key needs.
+
+### The read key
+
+The key two42 reads with needs **View** on six REST controllers, and no edit or write permission anywhere:
+
+| REST controller | Read for |
+|---|---|
+| **People** | Connecting, suggesting, linking, copying, review and live details |
+| **DefinedValues** | Record type and status, phone types, the names of titles and suffixes, and the home location type |
+| **PhoneNumbers** | Copying phones, families' home phones, and finding people whose phones changed |
+| **Groups** | Each family's home address |
+| **GroupMembers** | Who is in each family |
+| **Locations** | The address itself |
+
+Photos don't use the REST key. Rock RMS gives each photo under its own photo security, and the role needs nothing for them.
+
+1. Under Admin Tools › Settings › Security Roles, add a role, such as "two42 read-only", with no members but the user below.
+2. Under Admin Tools › Settings › REST Controllers, open **People**, **DefinedValues**, **PhoneNumbers**, **Groups**, **GroupMembers** and **Locations** in turn, and on each, under Security, allow **View** for the role. Grant nothing else: no **Edit** and no **Administrate**.
+3. Under Admin Tools › Settings › REST Keys, add a key, active, on a new user for two42 alone, and add that user to the role.
+4. In two42, [connect](#connect) with the Rock RMS address and that key.
+
+Don't use a broad staff role for the key's user: it grants far more than two42 reads.
+
+### The write key
+
+Only for [sending new people](#send-new-people). A church that doesn't turn it on is never asked for any of this, and the read key's role stays as it is.
+
+two42 starts a workflow type you choose for each new person, with their details as the workflow's attribute values. It never creates or changes a person in Rock RMS; your workflow decides how the person is added. Rock RMS records the write key's user as the workflow's initiator.
+
+The write key's role needs exactly these, and nothing else:
+
+- **Edit** on the `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}` action of the **Workflows** REST controller, to start the workflow. This is the WorkflowEntry action.
+- **View** on the **WorkflowTypes** REST controller, for **Find workflow types** and the check when you save.
+- **View** on the workflow type you choose. Rock RMS checks this only when it starts a workflow, so a key missing it saves, and its first send fails and is named on the card.
+
+1. Under Admin Tools › Settings › Security Roles, add a role, such as "two42 send new people", with no members but the user below.
+2. Under Admin Tools › Settings › REST Controllers, open **Workflows**, and under its actions open `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`; under that action's Security, allow **Edit** for the role. Then open **WorkflowTypes** and, under Security, allow **View** for the role. Grant nothing else.
+3. Under Admin Tools › Settings › Workflow Configuration, add a workflow type for new people, such as "New people from two42", active, with four text attributes whose keys are exactly FirstName, LastName, Email and Phone. Give it your own activities for staff to review the person and decide how they are added, and make sure it is persisted, so staff can find it. Under the workflow type's Security, allow **View** for the role.
+4. Under Admin Tools › Settings › REST Keys, add a second key, active, on a new user for this alone, and add that user to the role. Don't reuse the read key's user.
+5. In two42, [turn on sending new people](#send-new-people) with that key and workflow type.
+
+Rock RMS reads the details from the query string of the request's web address, so the person's name and email can appear in the Rock RMS server's web logs, which record the query string by default. Before turning sending on, remove the query string from the Rock RMS site's logging, and from any proxy in front of it, and check with a test person that their name and email no longer appear.

@@ -2,5 +2,5 @@
   "title": "Administer",
   "description": "For church admins and leaders",
   "root": true,
-  "pages": ["index", "roles", "church-admin", "group-settings", "supper-club", "approving-people", "members-and-households", "groups", "invite-links", "teams", "events", "branding", "imports"]
+  "pages": ["index", "roles", "church-admin", "group-settings", "supper-club", "approving-people", "members-and-households", "groups", "invite-links", "teams", "events", "branding", "imports", "church-records"]
 }
