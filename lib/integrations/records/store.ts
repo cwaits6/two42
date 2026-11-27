@@ -12,6 +12,13 @@ import type { FieldSettings } from "./settings";
 import { openKey } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
+import {
+  CONFIRM_HOUSEHOLD_OUTCOMES,
+  type ConfirmHouseholdOutcome,
+  SAVE_SETTING_OUTCOMES,
+  type SaveSettingOutcome,
+  type SuggestedPerson,
+} from "@/supabase/functions/_shared/records-households";
 
 export interface ConnectionSummary {
   provider: string;
@@ -174,7 +181,7 @@ export async function saveFieldSettings(
   orgId: string,
   settings: FieldSettings,
   updatedBy: string,
-): Promise<"saved" | "busy"> {
+): Promise<SaveSettingOutcome> {
   const service = await createServiceClient();
   const { data, error } = await service.rpc("records_save_field_settings", {
     _org_id: orgId,
@@ -182,8 +189,9 @@ export async function saveFieldSettings(
     _updated_by: updatedBy,
   });
   if (error) throw new RecordsStoreError("records field settings write failed", { cause: error });
-  if (data !== "saved" && data !== "busy") throw new RecordsStoreError("records field settings write gave no answer");
-  return data;
+  const answer = SAVE_SETTING_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records field settings write gave no answer");
+  return answer;
 }
 
 export interface ReviewPerson {
@@ -260,4 +268,186 @@ export async function readCopyStatus(orgId: string): Promise<CopyStatus> {
     pending: Math.max(0, (links.count ?? 0) - states.length),
     review,
   };
+}
+
+export interface HouseholdSuggestionPerson {
+  profileId: string;
+  name: string;
+  /** The household they're in now, or null for none. */
+  from: { familyId: string; name: string } | null;
+  /** Whether confirming moves them into the suggested household. */
+  moves: boolean;
+  relationship: string;
+  relationshipChanges: boolean;
+}
+
+export interface HouseholdSuggestion {
+  id: string;
+  /** Confirmable in bulk: nobody it names leaves a household. */
+  ready: boolean;
+  target: { familyId: string; name: string } | { newName: string };
+  people: HouseholdSuggestionPerson[];
+}
+
+export interface HouseholdsStatus {
+  suggestChildren: boolean;
+  lastRefreshedAt: string | null;
+  /** The last refresh couldn't read families: the key's role lacks what it needs. */
+  householdsUnavailable: boolean;
+  suggestions: HouseholdSuggestion[];
+}
+
+const householdName = (name: string | null | undefined) => name?.trim() || "Unnamed household";
+
+/** The suggestions as two42 names them: people's and households' names here, nothing from the records. */
+export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsStatus> {
+  const service = await createServiceClient();
+  const [settings, refresh] = await Promise.all([
+    service.from("records_org_settings").select("suggest_children").eq("org_id", orgId).maybeSingle(),
+    service.from("records_refresh_state").select("last_refreshed_at, last_counts").eq("org_id", orgId).maybeSingle(),
+  ]);
+  if (settings.error || refresh.error) {
+    throw new RecordsStoreError("records households status read failed", { cause: settings.error ?? refresh.error });
+  }
+
+  const rows: { id: string; target_family_id: string | null; family_name: string | null; people: unknown; ready: boolean }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await service
+      .from("records_household_suggestions")
+      .select("id, target_family_id, family_name, people, ready")
+      .eq("org_id", orgId)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) throw new RecordsStoreError("records household suggestions read failed", { cause: error });
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE) break;
+  }
+
+  const parsed = rows.map((row) => ({
+    row,
+    people: (Array.isArray(row.people) ? row.people : []) as SuggestedPerson[],
+  }));
+  const profileIds = [...new Set(parsed.flatMap((s) => s.people.map((p) => p.profile_id)))];
+  const profiles = new Map<string, { name: string; family_id: string | null; relationship: string | null }>();
+  for (let i = 0; i < profileIds.length; i += 100) {
+    const { data, error } = await service
+      .from("profiles")
+      .select("id, first_name, preferred_name, last_name, suffix, family_id, relationship")
+      .eq("org_id", orgId)
+      .in("id", profileIds.slice(i, i + 100));
+    if (error) throw new RecordsStoreError("records household people read failed", { cause: error });
+    for (const p of data ?? []) {
+      profiles.set(p.id, {
+        name: hasName(p) ? displayName(p) : "Unnamed person",
+        family_id: p.family_id,
+        relationship: p.relationship,
+      });
+    }
+  }
+  // Current membership, not the stored plan's, so a move since the refresh shows.
+  const familyIds = [
+    ...new Set(
+      parsed
+        .flatMap((s) => [
+          s.row.target_family_id,
+          ...s.people.flatMap((p) => [p.from_family_id, profiles.get(p.profile_id)?.family_id ?? null]),
+        ])
+        .filter((id): id is string => !!id),
+    ),
+  ];
+  const families = new Map<string, string>();
+  for (let i = 0; i < familyIds.length; i += 100) {
+    const { data, error } = await service
+      .from("family_units")
+      .select("id, family_name")
+      .eq("org_id", orgId)
+      .in("id", familyIds.slice(i, i + 100));
+    if (error) throw new RecordsStoreError("records household names read failed", { cause: error });
+    for (const f of data ?? []) families.set(f.id, householdName(f.family_name));
+  }
+
+  const suggestions: HouseholdSuggestion[] = [];
+  for (const { row, people } of parsed) {
+    if (row.target_family_id && !families.has(row.target_family_id)) continue;
+    let moved = false;
+    const named = people.flatMap((p): HouseholdSuggestionPerson[] => {
+      const profile = profiles.get(p.profile_id);
+      if (!profile) return [];
+      if (profile.family_id !== p.from_family_id || profile.relationship !== (p.from_relationship ?? null)) moved = true;
+      const from = profile.family_id;
+      return [
+        {
+          profileId: p.profile_id,
+          name: profile.name,
+          from: from ? { familyId: from, name: families.get(from) ?? householdName(null) } : null,
+          moves: from !== row.target_family_id || row.target_family_id === null,
+          relationship: p.relationship,
+          relationshipChanges: p.relationship !== profile.relationship,
+        },
+      ];
+    });
+    named.sort((a, b) => a.name.localeCompare(b.name));
+    suggestions.push({
+      id: row.id,
+      // Someone named who no longer exists, or who has changed household or relationship, makes the stored plan out of date.
+      ready: row.ready && !moved && named.length === people.length,
+      target: row.target_family_id
+        ? { familyId: row.target_family_id, name: families.get(row.target_family_id)! }
+        : { newName: householdName(row.family_name) },
+      people: named,
+    });
+  }
+  suggestions.sort((a, b) => (a.people[0]?.name ?? "").localeCompare(b.people[0]?.name ?? ""));
+
+  const counts = (refresh.data?.last_counts ?? {}) as Record<string, unknown>;
+  return {
+    suggestChildren: settings.data?.suggest_children ?? false,
+    lastRefreshedAt: refresh.data?.last_refreshed_at ?? null,
+    householdsUnavailable: counts.householdsUnavailable === 1,
+    suggestions,
+  };
+}
+
+/** Which of these suggestions are stored as confirmable in bulk. */
+export async function readyHouseholdSuggestions(orgId: string, ids: readonly string[]): Promise<Set<string>> {
+  const service = await createServiceClient();
+  const { data, error } = await service
+    .from("records_household_suggestions")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("ready", true)
+    .in("id", [...ids]);
+  if (error) throw new RecordsStoreError("records household suggestions read failed", { cause: error });
+  return new Set((data ?? []).map((row) => row.id));
+}
+
+/**
+ * Turning children off removes every suggested child nobody has decided on.
+ * "busy" when a refresh is running: nothing was saved, because that run would keep the old switch.
+ */
+export async function saveChildrenSetting(orgId: string, on: boolean, updatedBy: string): Promise<SaveSettingOutcome> {
+  const service = await createServiceClient();
+  const { data, error } = await service.rpc("records_save_children_setting", {
+    _org_id: orgId,
+    _on: on,
+    _updated_by: updatedBy,
+  });
+  if (error) throw new RecordsStoreError("records children setting write failed", { cause: error });
+  const answer = SAVE_SETTING_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records children setting write gave no answer");
+  return answer;
+}
+
+
+export async function confirmHousehold(orgId: string, suggestionId: string, confirmedBy: string): Promise<ConfirmHouseholdOutcome> {
+  const service = await createServiceClient();
+  const { data, error } = await service.rpc("records_confirm_household", {
+    _org_id: orgId,
+    _suggestion_id: suggestionId,
+    _confirmed_by: confirmedBy,
+  });
+  if (error) throw new RecordsStoreError("records household confirm failed", { cause: error });
+  const answer = CONFIRM_HOUSEHOLD_OUTCOMES.find((outcome) => outcome === data);
+  if (!answer) throw new RecordsStoreError("records household confirm gave no answer");
+  return answer;
 }

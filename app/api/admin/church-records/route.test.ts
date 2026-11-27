@@ -55,7 +55,7 @@ describe("/api/admin/church-records", () => {
 
   it("shows the connection without the key", async () => {
     const res = await GET();
-    expect(await res.json()).toEqual({ connection: { ...SUMMARY, providerLabel: "Rock RMS", canCopy: true } });
+    expect(await res.json()).toEqual({ connection: { ...SUMMARY, providerLabel: "Rock RMS", canCopy: true, canSuggestHouseholds: true } });
     expect(store.readConnection).toHaveBeenCalledWith("org-1");
   });
 

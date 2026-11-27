@@ -9,6 +9,7 @@ import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
 import type { HouseholdSummary } from "@/lib/household";
 import type { FamilyMember, FamilyUnit, Profile } from "@/lib/types";
 import { NOTICE_FIELDS, type ProfileRecords } from "@/lib/integrations/records/labels";
+import type { SuggestedChild } from "@/lib/integrations/records/profileRecords";
 
 interface ProfileHouseholdTabsProps {
   profile: Profile;
@@ -20,8 +21,10 @@ interface ProfileHouseholdTabsProps {
   records?: ProfileRecords | null;
   /** Each household member's records state, by profile id, for the edit sheet. */
   householdRecords?: Record<string, ProfileRecords>;
-  /** The household anniversary's records state. */
-  anniversaryRecords?: ProfileRecords | null;
+  /** Which of the household's own details came from the church's records. */
+  householdDetailRecords?: ProfileRecords | null;
+  /** Children the church's records suggest to the household's primary and spouse. */
+  suggestedChildren?: SuggestedChild[];
 }
 
 function ProfileHouseholdTabsInner({
@@ -32,7 +35,8 @@ function ProfileHouseholdTabsInner({
   today,
   records = null,
   householdRecords = {},
-  anniversaryRecords = null,
+  householdDetailRecords = null,
+  suggestedChildren = [],
 }: ProfileHouseholdTabsProps) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>(
@@ -89,7 +93,8 @@ function ProfileHouseholdTabsInner({
           householdProfiles={householdProfiles}
           today={today}
           householdRecords={householdRecords}
-          anniversaryRecords={anniversaryRecords}
+          householdDetailRecords={householdDetailRecords}
+          suggestedChildren={suggestedChildren}
           onEditSelf={() => setActiveTab("me")}
         />
       </TabsContent>

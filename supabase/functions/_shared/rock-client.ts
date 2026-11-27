@@ -47,7 +47,7 @@ const TIMEOUT_MS = 10_000;
 
 export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
 
-export async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
+export async function getJson(creds: RecordsCredentials, path: RockRestPath, query: Record<string, string>, fetcher: FetchLike) {
   const url = new URL(path, creds.baseUrl);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   let response: Response;
@@ -101,13 +101,26 @@ export function parsePerson(value: unknown): RockPerson | null {
   };
 }
 
+/** Every REST controller two42 reads, each only viewed. */
+export const ROCK_REST_PATHS = [
+  "/api/People",
+  "/api/PhoneNumbers",
+  "/api/DefinedValues",
+  "/api/Groups",
+  "/api/GroupMembers",
+  "/api/Locations",
+] as const;
+
+/** Every request names one of these, so the connection check covers whatever a refresh reads. */
+export type RockRestPath = (typeof ROCK_REST_PATHS)[number];
+
 /**
  * Proves the address is a Rock and the key can read every controller a
  * refresh reads, so a missing permission fails on save rather than nightly.
  * Rock answers a key without a permission with 401, the same as a wrong key.
  */
 export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<void> {
-  for (const path of ["/api/People", "/api/PhoneNumbers", "/api/DefinedValues"]) {
+  for (const path of ROCK_REST_PATHS) {
     const body = await getJson(creds, path, { $top: "1", $select: "Id" }, fetcher);
     if (!Array.isArray(body)) throw new RecordsError("not_provider");
   }

@@ -51,27 +51,41 @@ The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](http
 
 ## Copy details from your church's records
 
-When the operator has set `RECORDS_KEY_SECRET`, **Church settings → Church records** lets a church admin connect the church's records (Rock RMS) and link people to them. Once connected, the same page chooses what two42 copies into linked people's profiles.
+When the operator has set `RECORDS_KEY_SECRET`, **Church settings → Church records** lets a church admin connect the church's records (Rock RMS) and link people to them. Once connected, the **People** tab chooses what two42 copies into linked people's profiles, and the **Households** tab suggests households from the families in the records.
 
 ### Connect
 
-The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers** and **DefinedValues** REST controllers, with no edit rights. two42 checks the key can view all three before it saves it. two42 never writes to Rock.
+The form asks for the **Rock RMS address** and a **REST key**. Make the key in Rock under Admin Tools, Settings, REST Keys, on a user made for two42 alone, in a security role of its own that can only view the **People**, **PhoneNumbers**, **DefinedValues**, **Groups**, **GroupMembers** and **Locations** REST controllers, with no edit rights. two42 checks the key can view all six before it saves it. two42 never writes to Rock.
+
+A key saved before households came keeps copying people; until its role can view Groups, GroupMembers and Locations, the **Households** tab says families couldn't be read, and **Refresh now** says households weren't refreshed.
 
 ### What two42 copies
 
-For each of **Name**, **Suffix**, **Title**, **Gender**, **Mobile phone**, **Work phone**, **Birthday**, **Anniversary**, **Photo** and **A child's grade**, choose:
+For each of **Name**, **Suffix**, **Title**, **Gender**, **Mobile phone**, **Work phone**, **Birthday**, **Anniversary**, **Photo**, **A child's grade**, **Address** and **Home phone**, choose:
 
 - **Not from your church's records**: two42 doesn't touch it.
-- **From them, locked**: members see **Managed by your church** and can't change it. Only name, suffix, title, gender and a child's grade can be locked.
+- **From them, locked**: members see **Managed by your church** and can't change it. Only name, suffix, title, gender and a child's grade can be locked; address and home phone are always the household's to change.
 - **From them, member can change**: filled in, and a member who changes or clears it keeps their own from then on. They can go back with **Use your church's value**.
 
-Select **Save what two42 copies**. The next refresh fills in what you turned on. While a refresh is running the save is refused, because that refresh works from the settings it started with; save again once it finishes. A detail a member can change that two42 already holds a different value for is left as the member's, with your church's value offered to them. A locked detail always takes your church's value. The preferred name comes from the nick name, only while a member hasn't set one. The sign-in email, unlisted phone numbers, the texting flag, connection status and your church's own fields are never copied. Addresses and home phones come with households, which aren't copied yet.
+Select **Save what two42 copies**. The next refresh fills in what you turned on. While a refresh is running the save is refused, because that refresh works from the settings it started with; save again once it finishes. A detail a member can change that two42 already holds a different value for is left as the member's, with your church's value offered to them. A locked detail always takes your church's value. The preferred name comes from the nick name, only while a member hasn't set one. The sign-in email, unlisted phone numbers, the texting flag, connection status and your church's own fields are never copied. The family's address and home phone go to its household, not to each person, and only once you confirm the household on the **Households** tab. Either adult in the household can change or clear them, and a clear sticks.
 
 Each member who gets a detail filled in sees a one-time notice on **My profile**. What they see is in [Profile](/docs/use/profile#details-from-your-churchs-records).
 
 ### Refresh
 
-two42 refreshes every night, reading people changed in Rock since the last refresh and anyone not copied yet. **Refresh** shows when the last refresh finished and how many linked people are still to copy on the next refresh: people not yet copied, and everyone after you save a change to what two42 copies. A refresh that fails or runs out of time doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh.
+two42 refreshes every night, reading people changed in Rock since the last refresh and anyone not copied yet. **Refresh** shows when the last refresh finished and how many linked people are still to copy on the next refresh: people not yet copied, and everyone after you save a change to what two42 copies. A refresh that fails or runs out of time doesn't change that time. Select **Refresh now** to run it straight away; it says how many people it updated, and how many it couldn't copy or ran out of time for, who are tried again on the next refresh. If it runs out of time before households, it says **Households weren't all refreshed; the next refresh tries them again.** Households are read again from the start each time, and until a refresh finishes them, the last suggestions stay.
+
+### Households
+
+Rock groups people into families. The **Households** tab suggests putting each family's linked people in one household here. Nothing changes in any household until you confirm.
+
+- **Suggest children**: off by default. When it's on, the children in a confirmed household's family are suggested to its primary and spouse, who add or dismiss each one on their **Household** tab. Only a child's first and last name, birthday without the year, grade and photo come over; a child's photo arrives at the refresh after they're added. Turning it off removes every suggestion not yet added. A dismissed child isn't suggested again while the connection stays; disconnecting forgets every child decision. While a refresh is running the switch isn't saved; switch it again once the refresh finishes.
+- **Ready to confirm**: suggestions where nobody leaves a household they're in, including a household whose people are already together and only needs linking to its family. **Review list** shows each one, with **Include** to leave one out; **Confirm all** confirms them 100 at a time.
+- **Check first**: someone leaves a household they're in. Check with them, then **Confirm household**, one at a time; it shows who moves and asks first.
+
+Each suggestion names people and households from two42. Confirming moves exactly the people it names into the household, with the relationship it shows; a couple married in Rock become **Primary** and **Spouse**. Whoever stays behind keeps their household, its address, phone, photo and the people in it without an account. **Confirm household** refuses a suggestion that changed since the last refresh with **This changed since the last refresh. Choose Refresh now on the People tab, then try again.** **Confirm all** leaves any that changed as they are and says how many. While a refresh is running, confirming stops with **A refresh is running.** Any households already confirmed stay confirmed; try again once it finishes. A confirmed household gets the family's address and home phone at the next refresh, under what two42 copies.
+
+Suggestions are worked out by each refresh, nightly or **Refresh now**; the tab shows the last refresh's.
 
 ### Needs review
 

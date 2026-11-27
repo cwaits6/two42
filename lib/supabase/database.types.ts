@@ -1225,6 +1225,44 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"records_child_suggestions": {
+                  Row: {
+                    "birth_day": number | null,"birth_month": number | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"external_person_id": string,"family_id": string,"family_member_id": string | null,"first_name": string | null,"graduation_year": number | null,"id": string,"last_name": string | null,"org_id": string,"photo": string | null,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "birth_day"?: number | null,"birth_month"?: number | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"external_person_id": string,"family_id": string,"family_member_id"?: string | null,"first_name"?: string | null,"graduation_year"?: number | null,"id"?: string,"last_name"?: string | null,"org_id"?: string,"photo"?: string | null,"state"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "birth_day"?: number | null,"birth_month"?: number | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"external_person_id"?: string,"family_id"?: string,"family_member_id"?: string | null,"first_name"?: string | null,"graduation_year"?: number | null,"id"?: string,"last_name"?: string | null,"org_id"?: string,"photo"?: string | null,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_child_suggestions_decided_by_fkey"
+      columns: ["decided_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_child_suggestions_decided_by_fkey"
+      columns: ["decided_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_child_suggestions_link_fkey"
+      columns: ["org_id","family_id"]
+isOneToOne: false
+      referencedRelation: "records_household_links"
+      referencedColumns: ["org_id","family_id"]
+    },{
+      foreignKeyName: "records_child_suggestions_member_fkey"
+      columns: ["family_member_id","org_id"]
+isOneToOne: false
+      referencedRelation: "family_members"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"records_connections": {
                   Row: {
                     "base_url": string,"connected_at": string,"connected_by": string | null,"connection_id": string,"key_ciphertext": string,"key_hint": string,"org_id": string,"provider": string
@@ -1307,6 +1345,146 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "records_person_links"
       referencedColumns: ["org_id","profile_id"]
+    }
+                  ]
+                },"records_household_links": {
+                  Row: {
+                    "confirmed_at": string,"confirmed_by": string | null,"connection_id": string,"external_family_id": string,"family_id": string,"org_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "confirmed_at"?: string,"confirmed_by"?: string | null,"connection_id": string,"external_family_id": string,"family_id": string,"org_id"?: string
+                  }
+                  Update: {
+                    "confirmed_at"?: string,"confirmed_by"?: string | null,"connection_id"?: string,"external_family_id"?: string,"family_id"?: string,"org_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_household_links_confirmed_by_fkey"
+      columns: ["confirmed_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_links_confirmed_by_fkey"
+      columns: ["confirmed_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_links_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_household_links_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_links_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory_full"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_links_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "family_units"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_household_suggestions": {
+                  Row: {
+                    "basis": NonNullable<Json>,"connection_id": string,"created_at": string,"external_family_id": string,"family_name": string | null,"id": string,"org_id": string,"people": NonNullable<Json>,"ready": boolean,"target_family_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "basis"?: NonNullable<Json>,"connection_id": string,"created_at"?: string,"external_family_id": string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people": NonNullable<Json>,"ready": boolean,"target_family_id"?: string | null
+                  }
+                  Update: {
+                    "basis"?: NonNullable<Json>,"connection_id"?: string,"created_at"?: string,"external_family_id"?: string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people"?: NonNullable<Json>,"ready"?: boolean,"target_family_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_household_suggestions_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_household_suggestions_target_fkey"
+      columns: ["target_family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_suggestions_target_fkey"
+      columns: ["target_family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory_full"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_suggestions_target_fkey"
+      columns: ["target_family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "family_units"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"records_household_values": {
+                  Row: {
+                    "church_value": NonNullable<Json>,"family_id": string,"field": string,"org_id": string,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "church_value"?: NonNullable<Json>,"family_id": string,"field": string,"org_id"?: string,"state": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "church_value"?: NonNullable<Json>,"family_id"?: string,"field"?: string,"org_id"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_household_values_link_fkey"
+      columns: ["org_id","family_id"]
+isOneToOne: false
+      referencedRelation: "records_household_links"
+      referencedColumns: ["org_id","family_id"]
+    }
+                  ]
+                },"records_org_settings": {
+                  Row: {
+                    "org_id": string,"suggest_children": boolean,"updated_at": string,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "org_id"?: string,"suggest_children"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_org_settings_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "records_org_settings_updated_by_fkey"
+      columns: ["updated_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_org_settings_updated_by_fkey"
+      columns: ["updated_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
     }
                   ]
                 },"records_person_links": {
@@ -2609,8 +2787,20 @@ isOneToOne: false
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string }; Returns: string
                            },
+"records_add_suggested_child":
+{ Args: { "_suggestion_id": string }; Returns: string
+                           },
 "records_apply_copy":
 { Args: { "_expected": Json,"_filled": (string)[],"_grade": Json,"_household": Json,"_org_id": string,"_profile": Json,"_profile_id": string,"_values": Json }; Returns: string
+                           },
+"records_apply_household_copy":
+{ Args: { "_connection_id": string,"_expected": Json,"_family_id": string,"_household": Json,"_org_id": string,"_values": Json }; Returns: string
+                           },
+"records_confirm_household":
+{ Args: { "_confirmed_by": string,"_org_id": string,"_suggestion_id": string }; Returns: string
+                           },
+"records_dismiss_suggested_child":
+{ Args: { "_suggestion_id": string }; Returns: undefined
                            },
 "records_edit_state":
 { Args: { "_church_value": Json,"_columns": (string)[],"_new": Json }; Returns: string
@@ -2624,11 +2814,20 @@ isOneToOne: false
 "records_pick":
 { Args: { "_columns": (string)[],"_row": Json }; Returns: Json
                            },
+"records_replace_household_suggestions":
+{ Args: { "_connection_id": string,"_org_id": string,"_suggestions": Json }; Returns: number
+                           },
+"records_save_children_setting":
+{ Args: { "_on": boolean,"_org_id": string,"_updated_by": string }; Returns: string
+                           },
 "records_save_connection":
 { Args: { "_base_url": string,"_connected_by": string,"_key_ciphertext": string,"_key_hint": string,"_org_id": string,"_provider": string }; Returns: undefined
                            },
 "records_save_field_settings":
 { Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: string
+                           },
+"records_sync_child_suggestions":
+{ Args: { "_children": Json,"_connection_id": string,"_external_family_id": string,"_family_id": string,"_org_id": string }; Returns: number
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string

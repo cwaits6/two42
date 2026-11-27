@@ -2,7 +2,10 @@
 // suggestion always needs the name to agree: spouses often share an address,
 // so an email match alone is never a suggestion. A birthday that disagrees
 // rules a person out.
+import { normalizeName } from "@/supabase/functions/_shared/name-case";
 import type { RecordsPerson } from "./types";
+
+export { normalizeName };
 
 export interface ProfileForMatch {
   id: string;
@@ -31,15 +34,6 @@ export interface Suggestion {
    * one more fact agree, and neither side has another candidate.
    */
   confirmableInBulk: boolean;
-}
-
-/** Lowercased, accents and punctuation removed, so "José O'Brien" and "jose obrien" agree. */
-export function normalizeName(value: string | null | undefined): string {
-  return (value ?? "")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 const normalizeEmail = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();

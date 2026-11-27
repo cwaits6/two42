@@ -51,10 +51,13 @@ export async function POST() {
     }
     return NextResponse.json({
       copied: result.copied,
+      householdsCopied: result.householdsCopied,
       pending: result.pending,
       review: result.review,
       photosSkipped: result.photosSkipped,
       failed: result.failed,
+      householdsUnavailable: result.householdsUnavailable,
+      stoppedAtBudget: result.stoppedAtBudget,
     } satisfies RefreshCounts);
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, loaded.provider.label);

@@ -20,7 +20,17 @@ const LOADED = {
   creds: { baseUrl: "https://rock.example.org", key: "secret-key" },
   connectionId: "conn-1",
 };
-const DONE = { status: "done", copied: 2, pending: 0, review: 1, photosSkipped: 0, failed: 0, stoppedAtBudget: false };
+const DONE = {
+  status: "done",
+  copied: 2,
+  pending: 0,
+  review: 1,
+  photosSkipped: 0,
+  failed: 0,
+  stoppedAtBudget: false,
+  householdsCopied: 0,
+  householdsUnavailable: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +55,16 @@ describe("POST /api/admin/church-records/refresh", () => {
 
   it("refreshes the admin's own church and answers with counts only", async () => {
     const res = await POST();
-    expect(await res.json()).toEqual({ copied: 2, pending: 0, review: 1, photosSkipped: 0, failed: 0 });
+    expect(await res.json()).toEqual({
+      copied: 2,
+      householdsCopied: 0,
+      pending: 0,
+      review: 1,
+      photosSkipped: 0,
+      failed: 0,
+      householdsUnavailable: false,
+      stoppedAtBudget: false,
+    });
     expect(refresh.refreshNow).toHaveBeenCalledWith("org-1", LOADED);
   });
 

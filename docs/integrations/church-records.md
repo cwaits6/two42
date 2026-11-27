@@ -30,7 +30,7 @@ ticket.
 | Area | Decision |
 |---|---|
 | People and their directory details | Now |
-| Households, and children without accounts | Later, as suggestions (T42-273) |
+| Households, and children without accounts | Now, as suggestions |
 | Group rosters | Later: a read-only comparison for a leader, never an automatic change |
 | Calendar | Later, shown in two42 only, never copied in |
 | Attendance | Never for now: it would mean writing to the records |
@@ -137,7 +137,7 @@ Never copied from the records: phone numbers marked unlisted, the "can receive
 texts" flag, connection status (member, attendee, visitor), and church-defined
 custom fields.
 
-### Households (T42-273)
+### Households
 
 - Families in the records become **suggestions** to a church admin, never
   applied automatically. In two42, household membership is chosen by its
@@ -147,6 +147,68 @@ custom fields.
   them: first and last name, birthday without the year, grade and photo.
 - The family's **address and home phone** go to the household. Mobile and
   work phones go to the person.
+
+How it works:
+
+- **The refresh works the suggestions out and stores them.** Each refresh,
+  nightly or Refresh now, reads the family of every linked person once
+  (`RecordsCopySource.households`, a capability a provider may offer; shared
+  code asks for it and never names a provider). From that read it replaces
+  the household suggestions, copies confirmed households' address and home
+  phone, and updates the suggested children. The church admin's
+  **Households** tab reads only two42's database, and the browser sends only
+  suggestion ids. A refresh cut short keeps the last refresh's suggestions.
+  A key refused a family read ends only the household step: people are still
+  copied, and the tab says families couldn't be read. Any other records error
+  reading families fails the refresh, like any other.
+- **Which household.** A family's household is the one already linked to it;
+  else, of its linked people's households not linked to another family, the
+  one holding most of them, then the oldest; else a new household named from
+  the most common two42 last name among them. Only approved people count, and
+  a person counts only in their own primary family.
+- **Confirming** (`records_confirm_household()`, all or nothing) moves exactly
+  the people the suggestion names, by their household and relationship, and
+  links the household to the family. Whoever stays behind keeps their
+  household with its address, phone, photo, anniversary and the people in it
+  without an account; it is never deleted. A suggestion where anyone leaves a
+  household they're in is **Check first**, confirmed one at a time; the rest
+  are **Ready to confirm**, in bulk. Confirming refuses a suggestion that
+  changed since the refresh (anyone moved, unlinked or no longer approved,
+  anyone it names given another relationship, the household linked elsewhere
+  or holding a primary or spouse it didn't), and
+  is refused while a refresh runs.
+- **Relationships.** When the family's two adults are married in the records
+  and both are linked, one is `primary` (whoever already is, in the household)
+  and the other `spouse`. A child in the records becomes `child`. Anyone whose
+  `primary` or `spouse` would clash with one the household already has
+  becomes `other`.
+- **Address and home phone** follow the field settings, always
+  member-changeable. Their source is kept per **linked household**
+  (`records_household_values`), not per person, so a clear by either adult
+  sticks whichever adult the copy reads next. The states are the same as a
+  person's: `records` follows the church, `changed` and `cleared` are the
+  household's. An address outside the US, or one the household form wouldn't
+  accept, counts as empty. While a spouse's own mobile is the household's
+  phone, the copy leaves it alone. The anniversary keeps its per-person source.
+- **Children.** While the switch is on, each confirmed household's family's
+  children are stored as open suggestions (`records_child_suggestions`), with
+  only the fields above and never a birth year. A child already linked to an
+  account, or already in the household under the same name, isn't suggested;
+  an entry another child was added as doesn't count, so two children of one
+  name are both suggested. Accents fold only on Latin letters.
+  RLS shows open suggestions only to that household's primary and spouse, and
+  only while the switch is on. They add (`records_add_suggested_child()`,
+  which writes a child without an account, no birth year) or dismiss
+  (`records_dismiss_suggested_child()`); either keeps only the record of the
+  decision, so the child isn't suggested again. Disconnecting cascades
+  through the household links and deletes those decisions. An added child's photo is
+  fetched by the next refresh, stored under the child's own storage key, and
+  never replaces a photo the household uploaded. Turning the switch off
+  removes every open suggestion and every photo still waiting. Saving the
+  switch is refused while a refresh holds its claim, because that refresh
+  works from the switch it read when it started.
+- Not built: dismissing a household suggestion, unlinking a household, and a
+  review list for families missing from the records.
 
 ### Links ending, and review
 
@@ -210,6 +272,10 @@ unreadable, and each church admin has to connect again; the links stay.
    removes the key and every link; profiles are unchanged. Connecting a
    different address or provider removes the old links, because a person id
    means nothing in other records.
+4. **Households.** When the provider reads families, the page has a
+   **Households** tab: the **Suggest children** switch, and the refresh's
+   household suggestions under **Ready to confirm** and **Check first**,
+   searched by name and shown 25 at a time. See [Households](#households).
 
 ### How a match is suggested
 
@@ -268,6 +334,14 @@ address, family, group or giving data; copying reads listed phones.
   re-export; `supabase/functions/refresh-church-records/`; and
   `lib/integrations/records/` `refresh.ts`, `photo.ts`, `settings.ts`,
   `labels.ts` and `profileRecords.ts`.
+- For households: `supabase/migrations/20261210000000_church_records_households.sql`
+  (the children switch, household links, household sources, household and
+  child suggestions, their functions and the household member-edit trigger),
+  with `supabase/tests/church_records_households_suite.sql`;
+  `_shared/records-households.ts` (the pure planners), `_shared/rock-households.ts`,
+  `_shared/address-case.ts`; `app/api/admin/church-records/households/`,
+  `RecordsHouseholds.tsx` and `householdLists.ts`; and
+  `components/household/SuggestedChildren.tsx`.
 
 Outside these paths, three kinds of code import it: the link on Church
 settings; the pages and forms that show a detail's records state
@@ -413,11 +487,13 @@ and kept up to date.
 | Refresh, changed people | Ids and modified times of people and phone numbers changed since the mark | The mark |
 | Copy | Names, nick name, title, suffix, gender, birthday, anniversary, graduation year, photo id; listed mobile and work phones; the names of title and suffix values | The copied values, where each came from, the church's last value |
 | Photo | The photo, resized by the records to 400 pixels | The photo, in two42's storage |
+| Refresh, households | Each linked person's family id; each family's active members, whether each is an adult and married; the family's home address; adults' listed home phones | The household suggestions, which households are linked to which family, the household's copied address and home phone and their source |
+| Refresh, children (switch on) | Each child's first and last name, birth month and day, graduation year and photo id; never the birth year | Open suggestions with those fields; for a decided child only the decision |
 
 Never copied: email (used only for matching), the texting flag, connection
 status and the church's own fields. Unlisted phones can arrive with a person's
 phone numbers and are dropped as they are read, never stored or copied.
-Address and home phone come with households (T42-273).
+Address and home phone go to the household, never to the person.
 
 ### For the operator
 
@@ -462,8 +538,16 @@ with a 500 if it doesn't.
   `2CC66D5A-F61C-4B74-9AF9-590A9847C13C`. `PhoneNumber.IsUnlisted` marks a
   private number, which is dropped when read; `IsMessagingEnabled` (the texting
   flag) is never requested. `Gender` is 0 unknown, 1 male, 2 female.
-- For later work: group member status is 0 inactive, 1 active, 2 pending; a
-  leader is a member whose `GroupTypeRole.IsLeader` is true.
+- Group member status is 0 inactive, 1 active, 2 pending; only active
+  family members count. For later work: a leader is a member whose
+  `GroupTypeRole.IsLeader` is true.
+- Families: a person's family is `Person.PrimaryFamilyId`. Adults and children
+  are told apart by `Person.AgeClassification` (1 adult, 2 child), which Rock
+  works out from family roles and age, so no role ids are needed. Married is
+  marital status `5FE5A540-7D9F-433E-B47E-4229D1472248`; the home address is
+  the family's location of type `8C52E53C-2A66-435A-AE6E-5EE307D9A0DC`,
+  preferring the mailing one; the home phone is type
+  `AA8732FB-2CEA-4C76-8D6D-6AAA2C6A4303`.
 
 ### The REST key's user and role
 
@@ -475,14 +559,23 @@ Recommended setup, following [Permissions](#permissions):
   two42 needs no edit or write permission at all.
 
 The controllers, from the requests the code makes
-(`supabase/functions/_shared/rock-client.ts` and `rock-copy.ts`, every one a
-`GET`):
+(`supabase/functions/_shared/rock-client.ts`, `rock-copy.ts` and
+`rock-households.ts`, every one a `GET`):
 
 | REST controller | Read for | Requests |
 |---|---|---|
 | **People** | Connecting, suggesting, linking, copying, review | `GET /api/People` with `$select` of the fields in the tables above |
 | **DefinedValues** | Connecting, record type and status, phone types, and the names of titles and suffixes | `GET /api/DefinedValues` by Guid or id, `$select=Id,Guid` or `Id,Value` |
-| **PhoneNumbers** | Connecting, copying phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId`; or by `ModifiedDateTime` then `Id`, `$select=PersonId,Id,ModifiedDateTime` |
+| **PhoneNumbers** | Connecting, copying phones, families' home phones, and finding people whose phones changed | `GET /api/PhoneNumbers` by `PersonId`, `$select=PersonId,Number,CountryCode,IsUnlisted,NumberTypeValueId`; or by `ModifiedDateTime` then `Id`, `$select=PersonId,Id,ModifiedDateTime` |
+| **Groups** | Connecting, and each family's home address | `GET /api/Groups` by `Id`, `$expand=GroupLocations&$select=Id,GroupLocations/LocationId,GroupLocations/GroupLocationTypeValueId,GroupLocations/IsMailingLocation` |
+| **GroupMembers** | Connecting, and who is in each family | `GET /api/GroupMembers?$filter=(GroupId eq …) and IsArchived eq false&$select=GroupId,PersonId,GroupMemberStatus&$orderby=Id`, paged |
+| **Locations** | Connecting, and the address itself | `GET /api/Locations` by `Id`, `$select=Id,Street1,Street2,City,State,PostalCode,Country` |
+
+For families, People is also read by `Id` with
+`$select=Id,PrimaryFamilyId`, and for the family's members
+`Id,AgeClassification,MaritalStatusValueId,RecordTypeValueId,RecordStatusValueId,IsDeceased`,
+adding `FirstName,LastName,BirthMonth,BirthDay,GraduationYear,PhotoId` only
+while the church suggests children. `BirthYear` is never requested.
 
 Photos aren't read through the REST API: Rock has no endpoint for them. They
 come from `GetImage.ashx?id=<PhotoId>&maxwidth=400&maxheight=400&format=jpg`,
@@ -494,8 +587,9 @@ To set it up in Rock:
 1. Under Admin Tools › Settings › Security Roles, add a role, such as
    "two42 read-only", with no members but the user below.
 2. Under Admin Tools › Settings › REST Controllers, open **People**,
-   **DefinedValues** and **PhoneNumbers** in turn, and on each, under
-   Security, allow **View** for the role. Grant nothing else, and no **Edit**
+   **DefinedValues**, **PhoneNumbers**, **Groups**, **GroupMembers** and
+   **Locations** in turn, and on each, under Security, allow **View** for the
+   role. Grant nothing else, and no **Edit**
    or **Administrate**.
 3. Under Admin Tools › Settings › REST Keys, add a key, active, on a new user
    for two42 alone, and add that user to the role.
@@ -530,13 +624,21 @@ connect it to that church's Rock and check a suggestion end to end.
 
 ### Still open
 
-- **Family roles:** Rock's Adult and Child roles are configurable per install.
-  This matters when households come over (T42-273).
+- **Family roles:** Rock's Adult and Child roles are configurable per install;
+  two42 reads `AgeClassification`, which Rock works out from them, rather than
+  role ids. Check its values on a real family.
+- **Families on a real Rock:** that v1 honours `$select` on the expanded
+  `GroupLocations`, and that the expand needs no grant on the GroupLocations
+  controller. A key whose role lacks Groups, GroupMembers or Locations copies
+  people and reports households unavailable.
 - **Partial dates:** Rock stores birth month, day and year separately, so a
   birthday without a year works. Anniversaries need checking on a real install.
 - **Large churches:** suggestions read people by last name, 15 names per
   request and up to 2,000 people per group of names. A church of about 2,000
   needs some 65 requests the first time; sending a few at once would cut that.
+  Families are read in full on every refresh, since a change to a family's
+  address or members leaves nothing changed on its people: about four
+  requests per 50 families, plus the members' pages.
 
 ### Sources
 

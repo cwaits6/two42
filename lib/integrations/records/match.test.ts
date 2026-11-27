@@ -35,6 +35,15 @@ describe("normalizeName", () => {
   it("ignores case, accents and punctuation", () => {
     expect(normalizeName("José O'Brien-Smith")).toBe(normalizeName("jose obriensmith"));
   });
+
+  it("keeps the vowel signs that tell names in other scripts apart", () => {
+    expect(normalizeName("अमित शर्मा")).not.toBe(normalizeName("अमीत शर्मा"));
+  });
+
+  it("keeps the marks on letters outside Latin", () => {
+    expect(normalizeName("Майя")).not.toBe(normalizeName("Маия"));
+    expect(normalizeName("Nguyễn")).toBe(normalizeName("nguyen"));
+  });
 });
 
 describe("compare", () => {

@@ -39,6 +39,9 @@ import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { RecordsNote } from "@/components/profile/RecordsNote";
+import { SuggestedChildren } from "@/components/household/SuggestedChildren";
+import type { SuggestedChild } from "@/lib/integrations/records/profileRecords";
+import { HOUSEHOLD_FIELD_COLUMNS, type HouseholdField } from "@/supabase/functions/_shared/records-households";
 import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
 import { FIELD_COLUMNS } from "@/supabase/functions/_shared/records-copy";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
@@ -102,9 +105,13 @@ interface HouseholdClientProps {
   onEditSelf: () => void;
   /** Each household member's records state, by profile id. */
   householdRecords?: Record<string, ProfileRecords>;
-  /** The household anniversary's records state. */
-  anniversaryRecords?: ProfileRecords | null;
+  /** Which of the household's own details came from the church's records: address, home phone, anniversary. */
+  householdDetailRecords?: ProfileRecords | null;
+  /** Children the church's records suggest, shown to the household's primary and spouse. */
+  suggestedChildren?: SuggestedChild[];
 }
+
+type HouseholdDetailField = "anniversary" | HouseholdField;
 
 function fromFamily(f: FamilyUnit): HouseholdInfo {
   return {
@@ -162,7 +169,8 @@ export function HouseholdClient({
   today,
   onEditSelf,
   householdRecords = {},
-  anniversaryRecords = null,
+  householdDetailRecords = null,
+  suggestedChildren = [],
 }: HouseholdClientProps) {
   const router = useRouter();
   const todayDate = calendarDate(today);
@@ -235,6 +243,7 @@ export function HouseholdClient({
   // ---- Household info ----
   async function handleSaveInfo(e: React.FormEvent) {
     e.preventDefault();
+    if (restoring) return;
 
     const choice = info.phone_choice === SHARED_PHONE ? null : info.phone_choice;
     const body = {
@@ -282,29 +291,27 @@ export function HouseholdClient({
   }
 
   // Writing the church's value back is enough: the database marks the
-  // anniversary as from the church's records again.
-  const [restoringAnniversary, setRestoringAnniversary] = useState(false);
-  async function restoreChurchAnniversary() {
-    const label = recordsLabel(anniversaryRecords, "anniversary");
+  // detail as from the church's records again.
+  const [restoring, setRestoring] = useState(false);
+  async function restoreChurchValue(field: HouseholdDetailField) {
+    const label = recordsLabel(householdDetailRecords, field);
     if (label?.kind !== "changed" || !label.churchValue) return;
+    const columns = field === "anniversary" ? FIELD_COLUMNS.anniversary : HOUSEHOLD_FIELD_COLUMNS[field];
     const church = Object.fromEntries(
-      FIELD_COLUMNS.anniversary.map((column) => [
-        column,
-        label.churchValue?.[column] == null ? "" : String(label.churchValue[column]),
-      ]),
-    ) as Pick<HouseholdInfo, "anniversary_month" | "anniversary_day" | "anniversary_year">;
-    setRestoringAnniversary(true);
+      columns.map((column) => [column, label.churchValue?.[column] == null ? "" : String(label.churchValue[column])]),
+    ) as Partial<HouseholdInfo>;
+    setRestoring(true);
     const res = await fetch("/api/household", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(church),
     }).catch(() => null);
-    setRestoringAnniversary(false);
+    setRestoring(false);
     if (!res?.ok) {
       toast.error(failureMessage("use your church's value", res?.status ?? "network"));
       return;
     }
-    edit(church);
+    edit(field === "phone_home" ? { phone_home: formatPhone(church.phone_home) ?? "" } : church);
     toast.success("Your church's value is back.");
     router.refresh();
   }
@@ -505,6 +512,13 @@ export function HouseholdClient({
               </div>
             </div>
 
+            <RecordsNote
+              records={householdDetailRecords}
+              field="address"
+              onUseChurchValue={() => restoreChurchValue("address")}
+              busy={restoring || savingInfo}
+            />
+
             <Separator />
 
             {phoneChoices.length > 1 && (
@@ -548,6 +562,12 @@ export function HouseholdClient({
                   {...invalidFieldProps("phone_home", errors.phone_home)}
                 />
                 <FieldError fieldId="phone_home" message={errors.phone_home} />
+                <RecordsNote
+                  records={householdDetailRecords}
+                  field="phone_home"
+                  onUseChurchValue={() => restoreChurchValue("phone_home")}
+                  busy={restoring || savingInfo}
+                />
               </div>
             )}
 
@@ -564,15 +584,15 @@ export function HouseholdClient({
                 errors={errors}
               />
               <RecordsNote
-                records={anniversaryRecords}
+                records={householdDetailRecords}
                 field="anniversary"
-                onUseChurchValue={restoreChurchAnniversary}
-                busy={restoringAnniversary}
+                onUseChurchValue={() => restoreChurchValue("anniversary")}
+                busy={restoring || savingInfo}
               />
             </div>
 
             <div className="border-t pt-5">
-              <Button type="submit" size="lg" disabled={savingInfo}>
+              <Button type="submit" size="lg" disabled={savingInfo || restoring}>
                 {savingInfo ? "Saving…" : "Save household"}
               </Button>
             </div>
@@ -637,6 +657,8 @@ export function HouseholdClient({
           )}
         </CardContent>
       </Card>
+
+      {canEditSpouseProfiles && <SuggestedChildren suggestions={suggestedChildren} today={todayDate} />}
 
       <Card>
         <CardHeader>

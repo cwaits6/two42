@@ -69,4 +69,61 @@ export interface RecordsCopySource {
    * Throws when the records can't be reached or fail, so the person is tried again rather than left without it.
    */
   photo(creds: RecordsCredentials, token: string, maxEdge: number): Promise<Uint8Array | null>;
+  /** Families, their address and home phone, and their children, for a provider that groups people into families. */
+  households?: RecordsHouseholdSource;
+}
+
+/** An address as the records hold it, before two42 normalizes it. */
+export interface RecordsAddress {
+  street1: string;
+  street2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  /** The country code as the records hold it, empty when they hold none. */
+  country: string;
+}
+
+export interface RecordsFamilyMember {
+  /** The provider's own id for the person. */
+  id: string;
+  /** False only for someone the records count as a child. */
+  adult: boolean;
+  married: boolean;
+}
+
+/** Only what two42 may copy for a child: never a birth year. */
+export interface RecordsChild {
+  id: string;
+  firstName: string;
+  lastName: string;
+  birthday: { month: number | null; day: number | null };
+  graduationYear: number | null;
+  /** The provider's token for the child's photo, or null when there is none. */
+  photo: string | null;
+}
+
+export interface RecordsFamily {
+  /** The provider's own id for the family. */
+  id: string;
+  /** The family's active, living members, adults and children. */
+  members: RecordsFamilyMember[];
+  /** The family's children with their details; empty unless asked for. */
+  children: RecordsChild[];
+  /** The family's home address, or null when it has none. */
+  address: RecordsAddress | null;
+  /** The family's listed home phone, or null when it has none. */
+  homePhone: RecordsPhone | null;
+}
+
+/** What a provider offers for families. Every call only reads. */
+export interface RecordsHouseholdSource {
+  /** Each person's family id in the records; a person with none, or one the records don't have, is left out. */
+  familyOf(creds: RecordsCredentials, personIds: readonly string[]): Promise<Map<string, string>>;
+  /** These families; one the records don't have is left out. Children's details only when `children` is true. */
+  families(
+    creds: RecordsCredentials,
+    familyIds: readonly string[],
+    options: { children: boolean },
+  ): Promise<RecordsFamily[]>;
 }

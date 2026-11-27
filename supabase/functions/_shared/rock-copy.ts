@@ -15,7 +15,7 @@ import type {
   RecordsPhone,
   RecordsPresence,
 } from "./records-types.ts";
-import { type FetchLike, getJson, ROCK_GUIDS } from "./rock-client.ts";
+import { type FetchLike, getJson, ROCK_GUIDS, type RockRestPath } from "./rock-client.ts";
 
 /** Rock's stock phone types, looked up by Guid because their ids differ between installs. */
 export const ROCK_PHONE_TYPE_GUIDS = {
@@ -46,7 +46,7 @@ export const PRESENCE_FIELDS = ["Id", "RecordTypeValueId", "RecordStatusValueId"
 
 export const PHONE_FIELDS = ["PersonId", "Number", "CountryCode", "IsUnlisted", "NumberTypeValueId"] as const;
 
-const IDS_PER_REQUEST = 50;
+export const IDS_PER_REQUEST = 50;
 const PAGE = 500;
 // Changes read per run, per kind; a church with more waits for the next run.
 const MAX_CHANGE_PAGES = 20;
@@ -59,14 +59,14 @@ const ROCK_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,7})?$/;
 const CURSOR = /^([^;]+)(?:;p=(\d{1,12}))?(?:;n=(\d{1,12}))?$/;
 const ROCK_ID = /^[1-9][0-9]{0,9}$/;
 
-const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
-const int = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null);
-const rows = (body: unknown): Record<string, unknown>[] => {
+export const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+export const int = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null);
+export const rows = (body: unknown): Record<string, unknown>[] => {
   if (!Array.isArray(body)) throw new RecordsError("not_provider");
   return body.filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null);
 };
 
-interface CopyIds {
+export interface CopyIds {
   recordTypePerson: number;
   recordStatusInactive: number | null;
   mobile: number | null;
@@ -96,32 +96,37 @@ async function copyIds(creds: RecordsCredentials, fetcher: FetchLike): Promise<C
   };
 }
 
-function presenceOf(row: Record<string, unknown>, ids: Pick<CopyIds, "recordTypePerson" | "recordStatusInactive">): RecordsPresence {
+export function presenceOf(row: Record<string, unknown>, ids: Pick<CopyIds, "recordTypePerson" | "recordStatusInactive">): RecordsPresence {
   if (row.IsDeceased === true) return "inactive";
   if (int(row.RecordTypeValueId) !== ids.recordTypePerson) return "inactive";
   if (ids.recordStatusInactive !== null && int(row.RecordStatusValueId) === ids.recordStatusInactive) return "inactive";
   return "active";
 }
 
-function rockIds(ids: readonly string[]): number[] {
+export function rockIds(ids: readonly string[]): number[] {
   return [...new Set(ids.filter((id) => ROCK_ID.test(id)))].map(Number);
 }
 
-async function byIdChunks(
+export async function byIdChunks(
   creds: RecordsCredentials,
-  path: string,
+  path: RockRestPath,
   column: string,
   ids: readonly number[],
   select: readonly string[],
   fetcher: FetchLike,
+  extra: Record<string, string> = {},
 ): Promise<Record<string, unknown>[]> {
   const found: Record<string, unknown>[] = [];
   for (let i = 0; i < ids.length; i += IDS_PER_REQUEST) {
     const chunk = ids.slice(i, i + IDS_PER_REQUEST);
     const filter = chunk.map((id) => `${column} eq ${id}`).join(" or ");
     // A person has a handful of phones at most, so one page of phones is bounded by the chunk.
-    const top = path === "/api/People" ? chunk.length : chunk.length * 10;
-    found.push(...rows(await getJson(creds, path, { $filter: filter, $select: select.join(","), $top: String(top) }, fetcher)));
+    const top = path === "/api/PhoneNumbers" ? chunk.length * 10 : chunk.length;
+    found.push(
+      ...rows(
+        await getJson(creds, path, { ...extra, $filter: filter, $select: select.join(","), $top: String(top) }, fetcher),
+      ),
+    );
   }
   return found;
 }
@@ -231,7 +236,7 @@ async function presence(
  */
 async function changedRows(
   creds: RecordsCredentials,
-  path: string,
+  path: RockRestPath,
   idColumn: string,
   since: string,
   afterId: number | null,
@@ -270,7 +275,7 @@ async function changedRows(
   return { ids, latest, cut: true, lastId: after?.time === latest ? after.id : null };
 }
 
-async function latestChange(creds: RecordsCredentials, path: string, fetcher: FetchLike): Promise<string | null> {
+async function latestChange(creds: RecordsCredentials, path: RockRestPath, fetcher: FetchLike): Promise<string | null> {
   const [row] = rows(
     await getJson(
       creds,

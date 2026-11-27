@@ -9,11 +9,15 @@ import {
   type ValueField,
   type ValueState,
 } from "@/supabase/functions/_shared/records-copy";
+import type { HouseholdField } from "@/supabase/functions/_shared/records-households";
 import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
 
+/** A detail that can come from the records: a person's own, or their household's address and home phone. */
+export type LabelField = ValueField | HouseholdField;
+
 export interface ProfileRecords {
-  settings: Partial<Record<RecordsField, FieldMode>>;
-  values: Partial<Record<ValueField, { state: ValueState; churchValue: Columns }>>;
+  settings: Partial<Record<RecordsField | HouseholdField, FieldMode>>;
+  values: Partial<Record<LabelField, { state: ValueState; churchValue: Columns }>>;
   /** The church filled something in and the person hasn't said they've seen it. */
   noticeDue: boolean;
 }
@@ -26,7 +30,7 @@ export type RecordsLabel =
 const blank = (value: unknown) => value === null || value === undefined || value === "";
 
 /** The label for a field, or null when the value isn't from the church's records. */
-export function recordsLabel(records: ProfileRecords | null | undefined, field: ValueField): RecordsLabel | null {
+export function recordsLabel(records: ProfileRecords | null | undefined, field: LabelField): RecordsLabel | null {
   const value = records?.values[field];
   if (!value) return null;
   if (field !== "preferred_name" && records?.settings[field] === "locked") return { kind: "locked" };
@@ -40,7 +44,7 @@ export function isLocked(records: ProfileRecords | null | undefined, field: Valu
 }
 
 /** What the church admin's settings and the member's notice call each detail. */
-export const FIELD_LABELS: Record<ValueField, string> = {
+export const FIELD_LABELS: Record<LabelField, string> = {
   name: "Name",
   preferred_name: "Preferred name",
   title: "Title",
@@ -52,6 +56,8 @@ export const FIELD_LABELS: Record<ValueField, string> = {
   photo: "Photo",
   anniversary: "Anniversary",
   grade: "A child's grade",
+  address: "Address",
+  phone_home: "Home phone",
 };
 
 /**

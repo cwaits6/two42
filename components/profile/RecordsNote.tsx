@@ -1,18 +1,17 @@
 "use client";
 
-import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
-import type { ValueField } from "@/supabase/functions/_shared/records-copy";
+import { type LabelField, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
 
 /** Under a detail from the church's records: where it came from, and the way back to the church's value. */
-export function RecordsNote({
+export function RecordsNote<F extends LabelField>({
   records,
   field,
   onUseChurchValue,
   busy,
 }: {
   records: ProfileRecords | null;
-  field: ValueField;
-  onUseChurchValue: (field: ValueField) => void;
+  field: F;
+  onUseChurchValue: (field: F) => void;
   busy: boolean;
 }) {
   const label = recordsLabel(records, field);

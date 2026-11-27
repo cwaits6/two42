@@ -224,6 +224,16 @@ begin
     values (_org, _owner, now(), now());
   insert into public.records_refresh_state (org_id, connection_id, cursor)
     values (_org, (select connection_id from public.records_connections where org_id = _org), '2026-11-20T10:00:00');
+  insert into public.records_org_settings (org_id, suggest_children, updated_by)
+    values (_org, true, _owner);
+  insert into public.records_household_links (org_id, family_id, connection_id, external_family_id, confirmed_by)
+    values (_org, _family, (select connection_id from public.records_connections where org_id = _org), '1', _owner);
+  insert into public.records_household_values (org_id, family_id, field, state, church_value)
+    values (_org, _family, 'address', 'records', '{"address_line1": "1 Leak St"}');
+  insert into public.records_household_suggestions (org_id, connection_id, external_family_id, target_family_id, people, ready)
+    values (_org, (select connection_id from public.records_connections where org_id = _org), '2', _family, '[]', true);
+  insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name)
+    values (_org, _family, '3', _tag || ' child', 'Leak');
 end;
 $$;
 
@@ -417,13 +427,15 @@ begin
                          'serving_reminder_passes', 'serving_reminder_sends',
                          'event_reminder_passes', 'event_reminder_sends', 'prayer_comments',
                          'records_connections', 'records_person_links', 'records_refresh_state',
+                         'records_household_links', 'records_household_suggestions',
                          'supper_reminder_passes', 'supper_reminder_sends') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
       -- org_domain_worker_events / serving_reminder_passes /
       -- serving_reminder_sends / event_reminder_passes /
       -- event_reminder_sends / prayer_comments / records_connections /
-      -- records_person_links / records_refresh_state / supper_reminder_passes /
+      -- records_person_links / records_refresh_state / records_household_links /
+      -- records_household_suggestions / supper_reminder_passes /
       -- supper_reminder_sends): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing

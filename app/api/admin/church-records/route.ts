@@ -30,7 +30,12 @@ const KEY_SHAPE = /^[\x21-\x7e]{8,200}$/;
 function summary(connection: Awaited<ReturnType<typeof readConnection>>) {
   if (!connection) return null;
   const provider = providerFor(connection.provider);
-  return { ...connection, providerLabel: provider?.label ?? connection.provider, canCopy: !!provider?.copy };
+  return {
+    ...connection,
+    providerLabel: provider?.label ?? connection.provider,
+    canCopy: !!provider?.copy,
+    canSuggestHouseholds: !!provider?.copy?.households,
+  };
 }
 
 export async function GET() {
