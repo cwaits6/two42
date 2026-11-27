@@ -9,8 +9,7 @@
 // "use client" module.
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetchAll";
-import { logError, logWarn } from "@/lib/log";
-import { resolveRequestOrg } from "@/lib/org";
+import { logError, logWarn, stepOf } from "@/lib/log";
 import { RecordsError } from "./errors";
 import { loadRecordsSecret } from "./crypto";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
@@ -19,6 +18,23 @@ import { loadCredentials, readConnection, readLiveSources, readMode } from "./st
 import type { RecordsLiveDetails } from "./types";
 
 const OFF: LiveDirectory = { mode: "off" };
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The request's org, as resolveRequestOrgId() resolves it, but telling an
+ * errored lookup (`failed`) from a request with no org: one asks and is
+ * answered unavailable, the other is off. `orgId` is null in both.
+ */
+async function requestOrg(supabase: Supabase): Promise<{ orgId: string | null; failed: boolean }> {
+  // org-anchor: app_request_org_id() IS the org resolver; everything after this is scoped on the value it returns
+  const { data, error } = await supabase.rpc("app_request_org_id");
+  if (error) {
+    logError("Org resolution failed", error, { step: stepOf("directory live") });
+    return { orgId: null, failed: true };
+  }
+  return { orgId: typeof data === "string" ? data : null, failed: false };
+}
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
 async function liveConnection(orgId: string) {
@@ -58,7 +74,7 @@ function warnUnavailable(err: unknown, orgId: string) {
 export async function liveDirectoryOn(): Promise<boolean> {
   if (!loadRecordsSecret()) return false;
   const supabase = await createClient();
-  const { orgId, failed } = await resolveRequestOrg(supabase, { label: "directory live" });
+  const { orgId, failed } = await requestOrg(supabase);
   // A lookup that errored can't tell a live church from any other, so it asks and is answered unavailable.
   if (!orgId) return failed;
   try {
@@ -82,7 +98,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   const secret = loadRecordsSecret();
   if (!secret) return OFF;
   const supabase = await createClient();
-  const { orgId, failed } = await resolveRequestOrg(supabase, { label: "directory live" });
+  const { orgId, failed } = await requestOrg(supabase);
   if (!orgId) return failed ? LIVE_UNAVAILABLE : OFF;
 
   let connection: Awaited<ReturnType<typeof liveConnection>>;
