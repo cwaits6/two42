@@ -50,11 +50,18 @@ function workflowType(value: unknown): (RecordsIntakeDestination & { active: boo
   return { id: String(Id), name: name.slice(0, 200), active: IsActive !== false };
 }
 
-async function workflowTypes(creds: RecordsCredentials, query: Record<string, string>, fetcher: FetchLike) {
+async function workflowTypePage(creds: RecordsCredentials, query: Record<string, string>, fetcher: FetchLike) {
   const body = await writeRequest(creds, "GET", "/api/WorkflowTypes", { $select: "Id,Name,IsActive", ...query }, fetcher);
   if (!Array.isArray(body)) throw new RecordsError("not_provider");
-  return body.map(workflowType).filter((type) => type !== null);
+  return { size: body.length, types: body.map(workflowType).filter((type) => type !== null) };
 }
+
+const workflowTypes = async (creds: RecordsCredentials, query: Record<string, string>, fetcher: FetchLike) =>
+  (await workflowTypePage(creds, query, fetcher)).types;
+
+const PAGE_SIZE = 500;
+// A bound on the requests one picker load makes against a Rock that keeps answering full pages.
+const MAX_PAGES = 20;
 
 const entryPath = (id: string): WritePath => `/api/Workflows/WorkflowEntry/${Number(id)}`;
 
@@ -66,8 +73,14 @@ export function rockIntake(fetcher: FetchLike = safeFetch): Omit<RecordsIntake, 
     },
 
     async destinations(creds) {
-      const types = await workflowTypes(creds, { $orderby: "Name", $top: "500" }, fetcher);
-      return types.filter((type) => type.active).map(({ id, name }) => ({ id, name }));
+      const found: RecordsIntakeDestination[] = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const query = { $orderby: "Name,Id", $top: String(PAGE_SIZE), $skip: String(page * PAGE_SIZE) };
+        const { size, types } = await workflowTypePage(creds, query, fetcher);
+        for (const { id, name, active } of types) if (active) found.push({ id, name });
+        if (size < PAGE_SIZE) break;
+      }
+      return found;
     },
 
     async checkDestination(creds, id) {

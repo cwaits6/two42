@@ -110,6 +110,16 @@ describe("rockIntake().destinations", () => {
     ]);
   });
 
+  it("reads every page, so an active type past the first page still appears", async () => {
+    const inactive = Array.from({ length: 500 }, (_, i) => ({ Id: i + 1, Name: `Old ${i}`, IsActive: false }));
+    const { intake, calls } = stub({ body: inactive }, { body: [{ Id: 900, Name: "New from two42" }] });
+    expect(await intake.destinations(creds)).toEqual([{ id: "900", name: "New from two42" }]);
+    expect(calls.map(({ url }) => [url.searchParams.get("$orderby"), url.searchParams.get("$skip")])).toEqual([
+      ["Name,Id", "0"],
+      ["Name,Id", "500"],
+    ]);
+  });
+
   it("refuses an answer that isn't a list", async () => {
     expect(await kind(stub({ body: { Message: "hi" } }).intake.destinations(creds))).toBe("not_provider");
   });

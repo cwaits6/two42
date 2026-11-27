@@ -87,6 +87,7 @@ const person = { firstName: "Nora", lastName: "Setupwell", email: "nora@example.
 
 beforeEach(() => {
   vi.clearAllMocks();
+  submitNewPerson.mockReset().mockResolvedValue(undefined);
   updates.length = 0;
   rpcs.length = 0;
   claim = "claimed";
