@@ -16,6 +16,10 @@ import { RecordsError, type RecordsFailure } from "./errors";
 import { intakeOf, providerFor } from "./providers";
 import { RecordsStoreError } from "./store";
 import type { RecordsCredentials, RecordsIntake, RecordsNewPerson, RecordsProvider } from "./types";
+import type { Database } from "@/lib/supabase/database.types";
+
+type IntakeState = Database["public"]["Enums"]["records_intake_state"];
+type IntakeRequestUpdate = Database["public"]["Tables"]["records_intake_requests"]["Update"];
 
 /**
  * The write key's sealing label: one of its own, so a write key copied into
@@ -139,7 +143,7 @@ export interface IntakeStatus {
 
 export async function readIntakeStatus(orgId: string, since: string): Promise<IntakeStatus> {
   const service = await createServiceClient();
-  const count = (state: string) =>
+  const count = (state: IntakeState) =>
     service
       .from("records_intake_requests")
       .select("profile_id", { count: "exact", head: true })
@@ -163,7 +167,7 @@ export async function readIntakeStatus(orgId: string, since: string): Promise<In
   return {
     sent: sent.count ?? 0,
     failed: failed.count ?? 0,
-    lastFailure: last.data?.state === "failed" ? (last.data.failure as RecordsFailure) : null,
+    lastFailure: last.data?.state === "failed" ? last.data.failure : null,
   };
 }
 
@@ -239,17 +243,15 @@ export async function withdrawConsent(orgId: string, profileId: string): Promise
   if (error) throw new RecordsStoreError("records intake consent delete failed", { cause: error });
 }
 
-
 /**
  * Sends one person, once. Claims the send first, so a second save or a retry
- * sends nobody; a failed send is recorded and never retried. Never throws, and
+ * sends nobody, and anything that stops the send after the claim, the write
+ * key included, is recorded as failed and never retried. Never throws, and
  * never logs the person's details or an error's text.
  */
 export async function sendNewPerson(orgId: string, profileId: string, person: RecordsNewPerson, secret: Buffer): Promise<void> {
   const ids = { org: orgId, user: profileId };
   try {
-    const loaded = await loadIntakeCredentials(orgId, secret);
-    if (!loaded) return;
     const service = await createServiceClient();
     const { data: claim, error: claimError } = await service.rpc("records_intake_claim", {
       _org_id: orgId,
@@ -258,21 +260,44 @@ export async function sendNewPerson(orgId: string, profileId: string, person: Re
     if (claimError) throw new RecordsStoreError("records intake claim failed", { cause: claimError });
     if (claim !== "claimed") return;
 
-    let failure: RecordsFailure | null = null;
-    try {
-      await loaded.intake.submitNewPerson(loaded.creds, loaded.destinationId, person);
-    } catch (err) {
-      failure = err instanceof RecordsError ? err.kind : "rejected";
-      logWarn("Church records new person not sent", undefined, { route: "/api/church-records/intake", step: failure, ids });
-    }
+    const failure = await submitClaimed(orgId, person, secret, ids);
+    // Typed here because update() doesn't check its values against the enums.
+    const result: IntakeRequestUpdate = { state: failure ? "failed" : "sent", failure, finished_at: new Date().toISOString() };
     const { error } = await service
       .from("records_intake_requests")
-      .update({ state: failure ? "failed" : "sent", failure, finished_at: new Date().toISOString() })
+      .update(result)
       .eq("org_id", orgId)
       .eq("profile_id", profileId)
       .eq("state", "sending");
     if (error) throw new RecordsStoreError("records intake result write failed", { cause: error });
   } catch (err) {
     logError("Church records new person send failed", err, { route: "/api/church-records/intake", ids });
+  }
+}
+
+/** Why a claimed send failed, or null once the provider took it. A write key that can't be used is "unauthorized". */
+async function submitClaimed(
+  orgId: string,
+  person: RecordsNewPerson,
+  secret: Buffer,
+  ids: { org: string; user: string },
+): Promise<RecordsFailure | null> {
+  let loaded: IntakeCredentials | null;
+  try {
+    loaded = await loadIntakeCredentials(orgId, secret);
+  } catch {
+    loaded = null;
+  }
+  if (!loaded) {
+    logWarn("Church records new person not sent", undefined, { route: "/api/church-records/intake", step: "key", ids });
+    return "unauthorized";
+  }
+  try {
+    await loaded.intake.submitNewPerson(loaded.creds, loaded.destinationId, person);
+    return null;
+  } catch (err) {
+    const failure = err instanceof RecordsError ? err.kind : "rejected";
+    logWarn("Church records new person not sent", undefined, { route: "/api/church-records/intake", step: failure, ids });
+    return failure;
   }
 }

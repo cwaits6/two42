@@ -1457,14 +1457,14 @@ isOneToOne: false
                   ]
                 },"records_intake_requests": {
                   Row: {
-                    "consented_at": string,"failure": string | null,"finished_at": string | null,"org_id": string,"profile_id": string,"state": string
+                    "consented_at": string,"failure": Database["public"]['Enums']["records_failure"] | null,"finished_at": string | null,"org_id": string,"profile_id": string,"state": Database["public"]['Enums']["records_intake_state"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "consented_at"?: string,"failure"?: string | null,"finished_at"?: string | null,"org_id"?: string,"profile_id": string,"state": string
+                    "consented_at"?: string,"failure"?: Database["public"]['Enums']["records_failure"] | null,"finished_at"?: string | null,"org_id"?: string,"profile_id": string,"state": Database["public"]['Enums']["records_intake_state"]
                   }
                   Update: {
-                    "consented_at"?: string,"failure"?: string | null,"finished_at"?: string | null,"org_id"?: string,"profile_id"?: string,"state"?: string
+                    "consented_at"?: string,"failure"?: Database["public"]['Enums']["records_failure"] | null,"finished_at"?: string | null,"org_id"?: string,"profile_id"?: string,"state"?: Database["public"]['Enums']["records_intake_state"]
                   }
                   Relationships: [
                     {
@@ -3013,7 +3013,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "org_domain_status": "pending"|"verified"|"failed"|"removing","org_status": "active"|"suspended"
+            "org_domain_status": "pending"|"verified"|"failed"|"removing","org_status": "active"|"suspended","records_failure": "unauthorized"|"not_found"|"unreachable"|"not_provider"|"rejected","records_intake_state": "consented"|"sending"|"sent"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -3129,7 +3129,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "org_domain_status": ["pending", "verified", "failed", "removing"],"org_status": ["active", "suspended"]
+            "org_domain_status": ["pending", "verified", "failed", "removing"],"org_status": ["active", "suspended"],"records_failure": ["unauthorized", "not_found", "unreachable", "not_provider", "rejected"],"records_intake_state": ["consented", "sending", "sent", "failed"]
           }
         }
 } as const

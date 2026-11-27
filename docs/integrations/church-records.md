@@ -239,7 +239,9 @@ base64. Without it every church records route answers 404 and the settings
 page is gone; details already copied keep their labels, and a locked one stays
 locked, because the database keeps enforcing the settings it holds. Generate one with `openssl rand -base64 32` and set it in
 Production only, like the prayer keys. Changing it makes every saved key
-unreadable, and each church admin has to connect again; the links stay.
+unreadable, and each church admin has to connect again; the links stay. A
+church that sends new people also enters its write key again with **Change** on the
+**Send new people** card; until then each send is recorded as couldn't send.
 
 ### For a church admin
 

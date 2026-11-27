@@ -29,6 +29,12 @@ create table public.records_intake_settings (
 create index records_intake_settings_connection_idx on public.records_intake_settings (org_id, connection_id);
 create index records_intake_settings_enabled_by_idx on public.records_intake_settings (enabled_by) where enabled_by is not null;
 
+-- Enums rather than text checks, so the generated types carry these lists to
+-- the code that writes them. records_failure is RecordsFailure in
+-- supabase/functions/_shared/records-errors.ts.
+create type public.records_intake_state as enum ('consented', 'sending', 'sent', 'failed');
+create type public.records_failure as enum ('unauthorized', 'not_found', 'unreachable', 'not_provider', 'rejected');
+
 -- Each person's consent and send, at most one row per person, so nobody is sent
 -- twice. Kept per church rather than per connection: a person sent once is
 -- never sent again after the key or the records change. A failed send is never
@@ -36,8 +42,8 @@ create index records_intake_settings_enabled_by_idx on public.records_intake_set
 create table public.records_intake_requests (
   org_id uuid not null default public.app_current_org_id(),
   profile_id uuid not null,
-  state text not null check (state in ('consented', 'sending', 'sent', 'failed')),
-  failure text check (failure in ('unauthorized', 'not_found', 'unreachable', 'not_provider', 'rejected')),
+  state public.records_intake_state not null,
+  failure public.records_failure,
   consented_at timestamptz not null default now(),
   finished_at timestamptz,
   primary key (org_id, profile_id),

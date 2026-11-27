@@ -9,17 +9,38 @@ const updates: { table: string; values: Row; filters: Row }[] = [];
 const rpcs: { name: string; args: Row }[] = [];
 
 function query(table: string) {
+  const tests: ((row: Row) => boolean)[] = [];
   const filters: Row = {};
   let values: Row | null = null;
-  const rows = () => (tables[table] ?? []).filter((row) => Object.entries(filters).every(([k, v]) => row[k] === v));
+  let deleting = false;
+  let counting = false;
+  let order: { column: string; ascending: boolean } | null = null;
+  let limit = Infinity;
+  const rows = () => {
+    const found = (tables[table] ?? []).filter((row) => tests.every((test) => test(row)));
+    if (order) {
+      const { column, ascending } = order;
+      found.sort((a, b) => String(a[column]).localeCompare(String(b[column])) * (ascending ? 1 : -1));
+    }
+    return found.slice(0, limit);
+  };
   const chain = {
-    select: () => chain,
+    select: (_columns?: string, options?: { count?: string }) => ((counting = options?.count === "exact"), chain),
     update: (v: Row) => ((values = v), chain),
-    eq: (column: string, value: unknown) => ((filters[column] = value), chain),
+    delete: () => ((deleting = true), chain),
+    eq: (column: string, value: unknown) => ((filters[column] = value), tests.push((row) => row[column] === value), chain),
+    in: (column: string, list: unknown[]) => (tests.push((row) => list.includes(row[column])), chain),
+    gte: (column: string, value: string) => (tests.push((row) => String(row[column]) >= value), chain),
+    order: (column: string, options: { ascending: boolean }) => ((order = { column, ...options }), chain),
+    limit: (n: number) => ((limit = n), chain),
     maybeSingle: () => Promise.resolve({ data: rows()[0] ?? null, error: null }),
     then: (resolve: (value: unknown) => void) => {
       if (values) updates.push({ table, values, filters: { ...filters } });
-      resolve({ data: rows(), error: values ? updateError : null });
+      if (deleting) {
+        const gone = new Set(rows());
+        tables[table] = (tables[table] ?? []).filter((row) => !gone.has(row));
+      }
+      resolve({ data: rows(), count: counting ? rows().length : null, error: values ? updateError : null });
     },
   };
   return chain;
@@ -40,7 +61,10 @@ const log = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock("@/lib/log", () => log);
 
 vi.mock("./crypto", () => ({
-  openKey: (_secret: Buffer, org: string, label: string, sealed: string) => `${org}|${label}|${sealed}`,
+  openKey: (_secret: Buffer, org: string, label: string, sealed: string) => {
+    if (sealed === "sealed-under-old-secret") throw new Error("unsupported state or unable to authenticate data");
+    return `${org}|${label}|${sealed}`;
+  },
 }));
 
 const submitNewPerson = vi.fn();
@@ -56,7 +80,7 @@ vi.mock("./providers", () => ({
   intakeOf: (provider: { intake?: unknown } | null) => provider?.intake ?? null,
 }));
 
-const { intakeOffer, sendNewPerson } = await import("./intake");
+const { intakeOffer, readIntakeStatus, sendNewPerson, withdrawConsent } = await import("./intake");
 
 const ORG = "org-1";
 const SECRET = Buffer.alloc(32);
@@ -113,20 +137,32 @@ describe("sendNewPerson", () => {
     },
   );
 
-  it.each(["already", "linked", "off"])("sends nothing when the claim answers %s", async (answer) => {
+  it.each(["already", "linked", "off"])("sends nothing and records nothing when the claim answers %s", async (answer) => {
     claim = answer;
     await sendNewPerson(ORG, "p1", person, SECRET);
     expect(submitNewPerson).not.toHaveBeenCalled();
     expect(updates).toEqual([]);
+    expect(log.logWarn).not.toHaveBeenCalled();
   });
 
-  it("sends nothing, and claims nothing, while sending is off or set for a replaced connection", async () => {
-    tables.records_intake_settings = [];
+  it("records a claimed send failed when the write key won't open or can't be found, logging no details", async () => {
+    tables.records_intake_settings = [
+      { org_id: ORG, connection_id: "c1", key_ciphertext: "sealed-under-old-secret", destination_id: "42" },
+    ];
     await sendNewPerson(ORG, "p1", person, SECRET);
     tables.records_intake_settings = [{ org_id: ORG, connection_id: "old", key_ciphertext: "sealed", destination_id: "42" }];
-    await sendNewPerson(ORG, "p1", person, SECRET);
-    expect(rpcs).toEqual([]);
+    await sendNewPerson(ORG, "p2", person, SECRET);
     expect(submitNewPerson).not.toHaveBeenCalled();
+    expect(updates.map((u) => [u.filters.profile_id, u.values.state, u.values.failure])).toEqual([
+      ["p1", "failed", "unauthorized"],
+      ["p2", "failed", "unauthorized"],
+    ]);
+    expect(log.logWarn).toHaveBeenCalledWith("Church records new person not sent", undefined, {
+      route: "/api/church-records/intake",
+      step: "key",
+      ids: { org: ORG, user: "p1" },
+    });
+    expect(log.logError).not.toHaveBeenCalled();
   });
 
   it("never reads another church's setting", async () => {
@@ -156,5 +192,50 @@ describe("intakeOffer", () => {
     expect(await intakeOffer(ORG, "p1")).toBe("done");
     tables.records_intake_settings = [];
     expect(await intakeOffer(ORG, "p1")).toBe("off");
+  });
+});
+
+describe("withdrawConsent", () => {
+  it("removes only a consent not yet sent, so a person already sent is never offered again", async () => {
+    tables.records_intake_requests = [
+      { org_id: ORG, profile_id: "sent", state: "sent" },
+      { org_id: ORG, profile_id: "failed", state: "failed" },
+      { org_id: ORG, profile_id: "waiting", state: "consented" },
+      { org_id: "org-2", profile_id: "waiting", state: "consented" },
+    ];
+    for (const id of ["sent", "failed", "waiting"]) await withdrawConsent(ORG, id);
+    expect(await intakeOffer(ORG, "sent")).toBe("done");
+    expect(await intakeOffer(ORG, "failed")).toBe("done");
+    expect(await intakeOffer(ORG, "waiting")).toBe("ask");
+    expect(tables.records_intake_requests).toContainEqual({ org_id: "org-2", profile_id: "waiting", state: "consented" });
+  });
+});
+
+describe("readIntakeStatus", () => {
+  const SINCE = "2026-11-20T00:00:00.000Z";
+  const row = (profile_id: string, state: string, finished_at: string | null, failure: string | null = null) => ({
+    org_id: ORG,
+    profile_id,
+    state,
+    failure,
+    finished_at,
+  });
+
+  it("counts every send, and names the newest failure only when it is newer than the setting", async () => {
+    tables.records_intake_requests = [
+      row("a", "failed", "2026-11-10T00:00:00.000Z", "unreachable"),
+      row("b", "failed", "2026-11-21T00:00:00.000Z", "not_found"),
+      row("c", "failed", "2026-11-22T00:00:00.000Z", "unauthorized"),
+      row("d", "sent", "2026-11-21T12:00:00.000Z"),
+      row("e", "consented", null),
+      { ...row("f", "failed", "2026-11-23T00:00:00.000Z", "rejected"), org_id: "org-2" },
+    ];
+    expect(await readIntakeStatus(ORG, SINCE)).toEqual({ sent: 1, failed: 3, lastFailure: "unauthorized" });
+
+    tables.records_intake_requests.push(row("g", "sent", "2026-11-24T00:00:00.000Z"));
+    expect((await readIntakeStatus(ORG, SINCE)).lastFailure).toBeNull();
+
+    tables.records_intake_requests = [row("a", "failed", "2026-11-10T00:00:00.000Z", "unreachable")];
+    expect(await readIntakeStatus(ORG, SINCE)).toEqual({ sent: 0, failed: 1, lastFailure: null });
   });
 });
