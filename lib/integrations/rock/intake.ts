@@ -9,7 +9,7 @@ import type { RecordsIntake, RecordsIntakeDestination, RecordsNewPerson } from "
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { safeFetch } from "@/lib/integrations/records/safeFetch";
 import type { RecordsCredentials } from "@/supabase/functions/_shared/records-types";
-import type { FetchLike } from "@/supabase/functions/_shared/rock-client";
+import { type FetchLike, rockRequest } from "@/supabase/functions/_shared/rock-client";
 
 /** The keys of the workflow type's attributes, which the setup docs tell the church to give it. */
 export const ROCK_INTAKE_ATTRIBUTES = {
@@ -21,10 +21,9 @@ export const ROCK_INTAKE_ATTRIBUTES = {
 
 type WritePath = "/api/WorkflowTypes" | `/api/Workflows/WorkflowEntry/${number}`;
 
-const TIMEOUT_MS = 10_000;
 const ROCK_ID = /^[1-9][0-9]{0,9}$/;
 
-/** The parsed JSON, or null for an empty or non-JSON answer. Never puts the address or the answer in an error. */
+/** The parsed JSON, or null for an empty or non-JSON answer. */
 async function writeRequest(
   creds: RecordsCredentials,
   method: "GET" | "POST",
@@ -32,22 +31,7 @@ async function writeRequest(
   query: Record<string, string>,
   fetcher: FetchLike,
 ): Promise<unknown> {
-  const url = new URL(path, creds.baseUrl);
-  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
-  let response: Response;
-  try {
-    response = await fetcher(url, {
-      method,
-      headers: { "Authorization-Token": creds.key, Accept: "application/json" },
-      redirect: "error",
-      cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
-    throw new RecordsError("unreachable");
-  }
-  if (response.status === 401 || response.status === 403) throw new RecordsError("unauthorized", response.status);
-  if (!response.ok) throw new RecordsError("rejected", response.status);
+  const response = await rockRequest(creds, method, path, query, fetcher);
   try {
     const text = await response.text();
     return text ? (JSON.parse(text) as unknown) : null;

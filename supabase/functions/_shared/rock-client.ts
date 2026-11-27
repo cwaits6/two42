@@ -3,7 +3,8 @@
 // than v2 because v2 needs Rock 17 or later and per-controller grants, and its
 // ad-hoc search needs "Unrestricted Read", which skips Rock's own security.
 //
-// Every call is a GET: two42 never writes to Rock.
+// The read paths here are GETs only. `rockRequest` also carries the write
+// key's POST for sending new people, which the edge functions never make.
 import { RecordsError } from "./records-errors.ts";
 import { safeFetch } from "./records-fetch.ts";
 import type { RecordsCredentials } from "./records-types.ts";
@@ -47,13 +48,20 @@ const TIMEOUT_MS = 10_000;
 
 export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
 
-export async function getJson(creds: RecordsCredentials, path: RockRestPath, query: Record<string, string>, fetcher: FetchLike) {
+/** Sends one request with the key, refusing redirects; a refusal or failure becomes a RecordsError, never the address or the answer. */
+export async function rockRequest(
+  creds: RecordsCredentials,
+  method: "GET" | "POST",
+  path: string,
+  query: Record<string, string>,
+  fetcher: FetchLike,
+): Promise<Response> {
   const url = new URL(path, creds.baseUrl);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   let response: Response;
   try {
     response = await fetcher(url, {
-      method: "GET",
+      method,
       headers: { "Authorization-Token": creds.key, Accept: "application/json" },
       // A redirect could carry the key's request to an address the address check never saw.
       redirect: "error",
@@ -65,6 +73,11 @@ export async function getJson(creds: RecordsCredentials, path: RockRestPath, que
   }
   if (response.status === 401 || response.status === 403) throw new RecordsError("unauthorized", response.status);
   if (!response.ok) throw new RecordsError("rejected", response.status);
+  return response;
+}
+
+export async function getJson(creds: RecordsCredentials, path: RockRestPath, query: Record<string, string>, fetcher: FetchLike) {
+  const response = await rockRequest(creds, "GET", path, query, fetcher);
   if (!(response.headers.get("content-type") ?? "").includes("json")) throw new RecordsError("not_provider", response.status);
   try {
     return (await response.json()) as unknown;
