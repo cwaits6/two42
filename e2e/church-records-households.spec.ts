@@ -38,14 +38,15 @@ const profile = (first: string, last: string) =>
   `(select id from public.profiles where first_name = '${first}' and last_name = '${last}' and org_id = ${org})`;
 
 // The stack is shared, so only this spec's own rows are ever removed. The
-// child Henry adds is the one entry the connection's cascade doesn't take.
+// child Henry adds is the one entry the connection's cascade doesn't take; a
+// child entered before the fixture connection, which adding can reuse, stays.
 function removeFixtures() {
-  sql(`delete from public.family_members where org_id = ${org} and id in (
-         select family_member_id from public.records_child_suggestions
-          where org_id = ${org} and family_member_id is not null
-            and family_id in (select family_id from public.records_household_links l
-                                join public.records_connections c using (org_id, connection_id)
-                               where c.org_id = ${org} and c.base_url = '${FIXTURE_URL}'));
+  sql(`delete from public.family_members m where m.org_id = ${org} and m.id in (
+         select s.family_member_id from public.records_child_suggestions s
+           join public.records_household_links l on l.org_id = s.org_id and l.family_id = s.family_id
+           join public.records_connections c on c.org_id = l.org_id and c.connection_id = l.connection_id
+          where s.org_id = ${org} and s.family_member_id is not null
+            and c.base_url = '${FIXTURE_URL}' and m.created_at >= c.connected_at);
        delete from public.records_connections where org_id = ${org} and base_url = '${FIXTURE_URL}';
        delete from public.records_org_settings where org_id = ${org}
           and not exists (select 1 from public.records_connections where org_id = ${org});`);
@@ -75,9 +76,13 @@ test.beforeAll(() => {
   // Adding a suggested child reuses a same-named child already in the household,
   // and removeFixtures would then delete that child too. Checked after the
   // cleanup, so a child left by an earlier run of this spec doesn't count.
+  // The same name key records_add_suggested_child matches on.
+  const nameKey = (column: string) =>
+    `lower(regexp_replace(regexp_replace(normalize(coalesce(${column}, ''), NFKD), '([A-Za-z])[\\u0300-\\u036f]+', '\\1', 'g'), '[[:space:][:punct:]]', '', 'g'))`;
   const sameNamed = sql(`select count(*) from public.family_members
                           where org_id = ${org} and family_id = ${henrysHousehold}
-                            and lower(last_name) = 'mockingham' and lower(first_name) in ('lily', 'max', 'rosa');`);
+                            and ${nameKey("last_name")} = 'mockingham'
+                            and ${nameKey("first_name")} in ('lily', 'max', 'rosa');`);
   if (sameNamed !== "0") {
     throw new Error("Henry's household already has a child named like this spec's suggestions; this spec won't remove them.");
   }

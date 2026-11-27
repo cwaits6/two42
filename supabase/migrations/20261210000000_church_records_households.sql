@@ -338,6 +338,9 @@ grant execute on function public.records_save_children_setting(uuid, boolean, uu
 -- no household. A suggestion into a household deleted since the refresh read
 -- it is left out: the target is locked as it is checked, so a delete that
 -- lands meanwhile drops that one suggestion rather than failing the batch.
+-- Every old and new target is locked first, in id order, as a household
+-- delete locks its household before the suggestions its cascade removes, so
+-- the two can't wait on each other.
 --
 -- SECURITY INVOKER and executable by the service role only, like
 -- records_save_children_setting().
@@ -350,6 +353,18 @@ as $$
 declare
   _count integer;
 begin
+  perform 1 from public.family_units f
+   where f.org_id = _org_id
+     and f.id in (
+       select t.target_family_id from public.records_household_suggestions t
+        where t.org_id = _org_id and t.connection_id = _connection_id and t.target_family_id is not null
+       union
+       select (e ->> 'target_family_id')::uuid
+         from jsonb_array_elements(coalesce(_suggestions, '[]'::jsonb)) as e
+        where e ->> 'target_family_id' is not null
+     )
+   order by f.id
+     for key share;
   delete from public.records_household_suggestions
    where org_id = _org_id and connection_id = _connection_id;
   insert into public.records_household_suggestions
