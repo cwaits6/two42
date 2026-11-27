@@ -518,16 +518,9 @@ export function SetupWizard({
         setSavedPeople(new Set([...savedPeople, ...unsavedPeople.map((m) => m.tempId)]));
       }
 
-      // Marked complete only after every dependent write succeeds.
-      const { error: setupError } = await supabase
-        .from("profiles")
-        .update({ setup_completed: true })
-        .eq("id", profile.id);
-      if (setupError) throw setupError;
-
       // Sent by the server after the response; setup finishes whatever happens
-      // to a send, but stays put until a withdrawn consent is confirmed, since
-      // a finished setup can't be reopened to withdraw it.
+      // to a send, but a withdrawal must be confirmed before setup is marked
+      // complete, since a finished setup can't be reopened to withdraw it.
       if (share && (shareDetails || share.consented)) {
         let saved = false;
         try {
@@ -543,6 +536,13 @@ export function SetupWizard({
         }
         if (!saved && !shareDetails) throw new Error("church records consent withdraw failed");
       }
+
+      // Marked complete only after every dependent write succeeds.
+      const { error: setupError } = await supabase
+        .from("profiles")
+        .update({ setup_completed: true })
+        .eq("id", profile.id);
+      if (setupError) throw setupError;
 
       if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");

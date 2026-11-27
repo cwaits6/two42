@@ -314,7 +314,7 @@ describe("sharing details with the church office in the setup wizard", () => {
     await click("Finish setup");
   }
 
-  it("shows the box unticked on the Contact step, and sends the choice once setup is saved", async () => {
+  it("shows the box unticked on the Contact step, and sends the choice once the profile is saved", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
     await mountShared({ churchName: "Sample Church", consented: false });
@@ -354,6 +354,7 @@ describe("sharing details with the church office in the setup wizard", () => {
     await mountShared({ churchName: "Sample Church", consented: true });
     await act(async () => field("share_details").click());
     await finish();
+    expect(writes.some((w) => "setup_completed" in w.values)).toBe(false);
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalled();
     expect(document.body.textContent).toContain("Finish setup");
