@@ -564,9 +564,11 @@ T42-274. A church admin chooses **Live from your church's records** under
   `supabase/tests/church_records_live_suite.sql` checks no such value is
   stored after the switch.
 - **Reading them.** The directory layouts ask `liveDirectoryOn()` (no provider
-  call; a church with no live-capable connection answers off before the mode
-  is read, and a connected church whose mode can't be read answers on, so its
-  request below shows the details as unavailable); only when it is on does the directory's client make one request to
+  call; a church whose connection reads as none, or as a provider that can't
+  show details live, answers off before the mode is read, and a church whose
+  connection or mode can't be read answers on, so its request below shows the
+  details as unavailable; two42 can't tell a never-connected church apart
+  without the read that failed); only when it is on does the directory's client make one request to
   `GET /api/directory/live` per directory open, shared by all five tabs.
   `readLiveDirectory()` reads the people and households the viewer may see
   through the viewer's own RLS-scoped `profiles_directory` and
@@ -595,9 +597,8 @@ T42-274. A church admin chooses **Live from your church's records** under
   every detail that would have come from it shows "Not available right now";
   the rest of the directory is unaffected. The people and the families are
   read apart, so when only one half fails (a key whose role can't view
-  Groups, say) only that half's details are unavailable. When two42's own reads fail for
-  a church connected to a provider that shows details live (the mode, the
-  directory, the sources), or
+  Groups, say) only that half's details are unavailable. When two42's own reads
+  fail (the connection, the mode, the directory, the sources), or
   the request itself fails, the answer is `LIVE_UNAVAILABLE`: each entry and
   both lists say their details from the records aren't available, rather than
   showing none. The log line carries the error's kind only.

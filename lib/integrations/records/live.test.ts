@@ -286,6 +286,16 @@ describe("readLiveDirectory", () => {
     expect(details).not.toHaveBeenCalled();
   });
 
+  it("when the connection can't be read, asks for live details and answers them unavailable without asking the records", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    store.readConnection.mockRejectedValue(new Error("connection"));
+    expect(await liveDirectoryOn()).toBe(true);
+    expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
+    spy.mockRestore();
+    expect(store.readMode).not.toHaveBeenCalled();
+    expect(details).not.toHaveBeenCalled();
+  });
+
   it("with a key that can't be opened, answers unavailable details without asking the records", async () => {
     store.loadCredentials.mockRejectedValue(new Error("key unreadable"));
     vi.spyOn(console, "log").mockImplementation(() => {});

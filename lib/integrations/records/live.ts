@@ -55,8 +55,8 @@ export async function liveDirectoryOn(): Promise<boolean> {
   try {
     return (await liveConnection(orgId)) !== null;
   } catch (err) {
-    logError("Church records live mode read failed", err, { route: "/directory", ids: { org: orgId } });
-    // A church with no live-capable connection answered off above; one whose mode can't be read is asked, and its request answers unavailable.
+    logError("Church records live connection or mode read failed", err, { route: "/directory", ids: { org: orgId } });
+    // A church whose connection reads as none, or not live-capable, answered off above; one whose connection or mode can't be read is asked, and its request answers unavailable.
     return true;
   }
 }
@@ -66,8 +66,8 @@ export async function liveDirectoryOn(): Promise<boolean> {
  * batch to the provider. "off" for a church that doesn't show details live,
  * without touching the provider. When the records can't be reached every
  * detail that would have come from them is unavailable, and when two42's own
- * reads fail for a church connected to a provider that shows details live,
- * the whole answer is; the rest of the directory is unaffected either way.
+ * reads fail (the connection, the mode, the directory, the sources), the
+ * whole answer is; the rest of the directory is unaffected either way.
  */
 export async function readLiveDirectory(viewerId: string, today = new Date()): Promise<LiveDirectory> {
   const secret = loadRecordsSecret();
@@ -80,7 +80,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
   try {
     connection = await liveConnection(orgId);
   } catch (err) {
-    logError("Church records live mode read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
+    logError("Church records live connection or mode read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
     return LIVE_UNAVAILABLE;
   }
   if (!connection) return OFF;
