@@ -1063,7 +1063,7 @@ export function SetupWizard({
 
       <div className="flex flex-wrap-reverse items-center justify-between gap-3">
         {step > 1 ? (
-          <Button type="button" variant="outline" onClick={() => goTo(step - 1)}>
+          <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={saving}>
             Back
           </Button>
         ) : (

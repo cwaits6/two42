@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-const intake = vi.hoisted(() => ({ sendNewPerson: vi.fn(), withdrawConsent: vi.fn() }));
+const intake = vi.hoisted(() => ({ acceptConsent: vi.fn(), sendNewPerson: vi.fn(), withdrawConsent: vi.fn() }));
 vi.mock("@/lib/integrations/records/intake", () => intake);
 
 const { POST } = await import("./route");
@@ -48,6 +48,7 @@ beforeEach(() => {
   process.env.RECORDS_KEY_SECRET = randomBytes(32).toString("base64");
   user = { id: "p1", email: "nora@example.test" };
   profile = { ...MEMBER };
+  intake.acceptConsent.mockResolvedValue("acc-1");
 });
 
 describe("POST /api/church-records/intake", () => {
@@ -70,11 +71,13 @@ describe("POST /api/church-records/intake", () => {
     const res = await post({ share: true, firstName: "Mallory", email: "mallory@example.test", org_id: "org-2" });
     expect(res.status).toBe(202);
     expect(selected).toEqual(["org_id, role, first_name, last_name, phone_mobile, phone_home"]);
+    expect(intake.acceptConsent).toHaveBeenCalledWith("org-1", "p1");
     expect(intake.sendNewPerson).not.toHaveBeenCalled();
     await after.mock.calls[0][0]();
     expect(intake.sendNewPerson).toHaveBeenCalledWith(
       "org-1",
       "p1",
+      "acc-1",
       { firstName: "Nora", lastName: "Setupwell", email: "nora@example.test", phone: "5559876543" },
       expect.any(Buffer),
     );
@@ -83,6 +86,14 @@ describe("POST /api/church-records/intake", () => {
   it("withdraws a consent when unticked, and sends nothing", async () => {
     expect((await post({ share: false })).status).toBe(200);
     expect(intake.withdrawConsent).toHaveBeenCalledWith("org-1", "p1");
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("queues nothing when there is nothing to accept, and answers 500 when the acceptance can't be saved", async () => {
+    intake.acceptConsent.mockResolvedValue(null);
+    expect((await post({ share: true })).status).toBe(200);
+    intake.acceptConsent.mockRejectedValue(new Error("down"));
+    expect((await post({ share: true })).status).toBe(500);
     expect(after).not.toHaveBeenCalled();
   });
 

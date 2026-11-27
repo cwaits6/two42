@@ -1,8 +1,10 @@
 -- Church records sending new people: the church's setting with its write key,
 -- and each person's consent and once-only send. Proves the church boundary on
 -- both tables, that no client role reads or writes them, that nothing is
--- stored while sending is off, that a linked person is never claimed, and
--- that a person is claimed at most once.
+-- stored while sending is off, that a linked person is never claimed, that a
+-- person is claimed at most once, and only for the acceptance and setting the
+-- claim names, and that a withdrawal beats a later consent write or a deferred
+-- send from before it.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -13,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(28);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -53,6 +55,12 @@ create temp table fx (key text primary key, id uuid) on commit drop;
 grant select on fx to anon, authenticated, service_role;
 create function pg_temp.fx(_key text) returns uuid language sql stable as $$
   select id from fx where key = _key;
+$$;
+
+-- Acceptances returned by records_intake_accept(), for the claims that follow.
+create temp table acc (key text primary key, id uuid) on commit drop;
+create function pg_temp.acc(_key text) returns uuid language sql stable as $$
+  select id from acc where key = _key;
 $$;
 
 create function pg_temp.requests(_org uuid) returns text[] language sql stable as $$
@@ -96,10 +104,11 @@ insert into public.records_person_links (org_id, connection_id, profile_id, exte
 select is(
   array[
     public.records_intake_consent(pg_temp.fx('org'), pg_temp.fx('member')),
-    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'))
+    coalesce(public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member'))::text, 'null'),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), gen_random_uuid())
   ],
-  array['off', 'off'],
-  'with sending off, consent and claim both answer off');
+  array['off', 'null', 'off'],
+  'with sending off, consent and claim answer off and nothing is accepted');
 
 select is(
   (select count(*)::int from public.records_intake_requests),
@@ -152,21 +161,23 @@ select is(
      from (values ('admin@local.dev'), ('leo.loremsworth@example.test')) w(who)
      cross join (values
        (format('select public.records_intake_consent(%L, %L)', pg_temp.fx('org'), pg_temp.fx('member'))),
-       (format('select public.records_intake_claim(%L, %L)', pg_temp.fx('org'), pg_temp.fx('member')))
+       (format('select public.records_intake_accept(%L, %L)', pg_temp.fx('org'), pg_temp.fx('member'))),
+       (format('select public.records_intake_withdraw(%L, %L)', pg_temp.fx('org'), pg_temp.fx('member'))),
+       (format('select public.records_intake_claim(%L, %L, %L)', pg_temp.fx('org'), pg_temp.fx('member'), gen_random_uuid()))
      ) q(q)),
   array['42501'],
-  'neither function is executable by a signed-in person');
+  'no function is executable by a signed-in person');
 
 select is(
-  array[
-    has_function_privilege('anon', 'public.records_intake_consent(uuid, uuid)', 'execute'),
-    has_function_privilege('anon', 'public.records_intake_claim(uuid, uuid)', 'execute'),
-    has_function_privilege('authenticated', 'public.records_intake_consent(uuid, uuid)', 'execute'),
-    has_function_privilege('authenticated', 'public.records_intake_claim(uuid, uuid)', 'execute'),
-    has_function_privilege('service_role', 'public.records_intake_consent(uuid, uuid)', 'execute'),
-    has_function_privilege('service_role', 'public.records_intake_claim(uuid, uuid)', 'execute')
-  ],
-  array[false, false, false, false, true, true],
+  (select array_agg(has_function_privilege(r, f, 'execute') order by r, f)
+     from unnest(array['anon', 'authenticated', 'service_role']) r
+     cross join unnest(array[
+       'public.records_intake_consent(uuid, uuid)',
+       'public.records_intake_accept(uuid, uuid)',
+       'public.records_intake_withdraw(uuid, uuid)',
+       'public.records_intake_claim(uuid, uuid, uuid)'
+     ]) f),
+  array[false, false, false, false, false, false, false, false, true, true, true, true],
   'only the service role executes the functions');
 
 select throws_ok(
@@ -203,14 +214,17 @@ select is(
   array['leo.loremsworth@example.test:consented'],
   'only the unlinked person''s consent is stored');
 
+insert into acc values ('member', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));
+
 select is(
   array[
-    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member')),
-    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member')),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), gen_random_uuid()),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('member')),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('member')),
     public.records_intake_consent(pg_temp.fx('org'), pg_temp.fx('member'))
   ],
-  array['claimed', 'already', 'saved'],
-  'the first claim takes the send, a second gets already, and a later consent changes nothing');
+  array['stale', 'claimed', 'stale', 'saved'],
+  'a claim needs the acceptance, takes the send once, and a later consent changes nothing');
 
 select is(
   pg_temp.requests(pg_temp.fx('org')),
@@ -218,19 +232,69 @@ select is(
   'the claimed send stays claimed');
 
 select is(
-  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member2')),
-  'linked', 'a linked person is never claimed');
+  array[
+    coalesce(public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member2'))::text, 'null'),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member2'), gen_random_uuid())
+  ],
+  array['null', 'linked'], 'a linked person is never accepted or claimed');
+
+insert into acc values ('admin', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('admin')));
 
 select is(
-  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('admin')),
-  'claimed', 'a person who didn''t tick the box at sign-up can be claimed from profile setup');
+  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('admin'), pg_temp.acc('admin')),
+  'claimed', 'a person who didn''t tick the box at sign-up can be accepted and claimed from profile setup');
 
 update public.records_intake_requests set state = 'failed', failure = 'unauthorized', finished_at = now()
  where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('admin');
 
 select is(
-  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('admin')),
-  'already', 'a failed send is never claimed again');
+  array[
+    coalesce(public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('admin'))::text, 'null'),
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('admin'), pg_temp.acc('admin'))
+  ],
+  array['null', 'stale'], 'a failed send is never accepted or claimed again');
+
+-- ── Withdrawing, and turning sending off and on ─────────────────────────────
+delete from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member');
+insert into acc values ('before_withdraw', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));
+select public.records_intake_withdraw(pg_temp.fx('org'), pg_temp.fx('member'));
+
+select is(
+  array[
+    public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('before_withdraw')),
+    public.records_intake_consent(pg_temp.fx('org'), pg_temp.fx('member'))
+  ],
+  array['stale', 'saved'],
+  'after a withdrawal, a send accepted before it claims nothing and a late sign-up consent write is ignored');
+
+select is(
+  pg_temp.requests(pg_temp.fx('org')),
+  array['admin@local.dev:failed', 'leo.loremsworth@example.test:withdrawn'],
+  'the withdrawal is kept');
+
+delete from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member');
+select public.records_intake_withdraw(pg_temp.fx('org'), pg_temp.fx('member'));
+select public.records_intake_consent(pg_temp.fx('org'), pg_temp.fx('member'));
+insert into acc values ('retick', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));
+
+select is(
+  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('retick')),
+  'claimed', 'a withdrawal with no consent before it still beats the sign-up write, and ticking the box again at profile setup sends');
+
+delete from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member');
+insert into acc values ('old_setting', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));
+create temp table saved_setting on commit drop as
+  select * from public.records_intake_settings where org_id = pg_temp.fx('org');
+delete from public.records_intake_settings where org_id = pg_temp.fx('org');
+insert into public.records_intake_settings (org_id, connection_id, key_ciphertext, key_hint, destination_id, destination_name, enabled_by)
+  select org_id, connection_id, key_ciphertext, key_hint, destination_id, destination_name, enabled_by from saved_setting;
+-- The consent the trigger dropped, put back as if its delete had raced the off-and-on.
+insert into public.records_intake_requests (org_id, profile_id, state, setting_id, accept_id)
+  select pg_temp.fx('org'), pg_temp.fx('member'), 'consented', setting_id, pg_temp.acc('old_setting') from saved_setting;
+
+select is(
+  public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('old_setting')),
+  'stale', 'a send accepted before sending was turned off and on again claims nothing');
 
 -- ── Turning sending off ─────────────────────────────────────────────────────
 update public.records_intake_requests set state = 'consented'

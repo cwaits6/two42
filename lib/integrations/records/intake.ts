@@ -136,9 +136,18 @@ export async function deleteIntakeSettings(orgId: string): Promise<void> {
   if (error) throw new RecordsStoreError("records intake settings delete failed", { cause: error });
 }
 
+/**
+ * A claimed send still unfinished after this long is shown as an unknown
+ * outcome: the provider may have taken it before the result write failed, so
+ * it is never retried.
+ */
+export const INTAKE_UNKNOWN_AFTER_MS = 10 * 60 * 1000;
+
 export interface IntakeStatus {
   sent: number;
   failed: number;
+  /** Claimed sends whose outcome was never recorded. */
+  unknown: number;
   /** Why the newest send since sending was turned on or last saved failed, when it did. */
   lastFailure: RecordsFailure | null;
 }
@@ -151,9 +160,11 @@ export async function readIntakeStatus(orgId: string, since: string): Promise<In
       .select("profile_id", { count: "exact", head: true })
       .eq("org_id", orgId)
       .eq("state", state);
-  const [sent, failed, last] = await Promise.all([
+  const stuckBefore = new Date(Date.now() - INTAKE_UNKNOWN_AFTER_MS).toISOString();
+  const [sent, failed, unknown, last] = await Promise.all([
     count("sent"),
     count("failed"),
+    count("sending").lt("claimed_at", stuckBefore),
     service
       .from("records_intake_requests")
       .select("state, failure")
@@ -164,11 +175,12 @@ export async function readIntakeStatus(orgId: string, since: string): Promise<In
       .limit(1)
       .maybeSingle(),
   ]);
-  const error = sent.error ?? failed.error ?? last.error;
+  const error = sent.error ?? failed.error ?? unknown.error ?? last.error;
   if (error) throw new RecordsStoreError("records intake status read failed", { cause: error });
   return {
     sent: sent.count ?? 0,
     failed: failed.count ?? 0,
+    unknown: unknown.count ?? 0,
     lastFailure: last.data?.state === "failed" ? last.data.failure : null,
   };
 }
@@ -202,7 +214,7 @@ export async function intakeOffer(orgId: string, profileId: string): Promise<"of
   if (error) throw new RecordsStoreError("records intake offer read failed", { cause: error });
   if (!settings.data) return "off";
   if (link.data) return "done";
-  if (!request.data) return "ask";
+  if (!request.data || request.data.state === "withdrawn") return "ask";
   return request.data.state === "consented" ? "consented" : "done";
 }
 
@@ -233,31 +245,45 @@ export async function recordConsent(orgId: string, profileId: string): Promise<v
   if (error) throw new RecordsStoreError("records intake consent write failed", { cause: error });
 }
 
-/** Withdraws a consent not yet sent. */
+/**
+ * Accepts a consent given at profile setup. The id it returns is what a
+ * deferred send presents to claim it; null means there is nothing to send.
+ */
+export async function acceptConsent(orgId: string, profileId: string): Promise<string | null> {
+  const service = await createServiceClient();
+  const { data, error } = await service.rpc("records_intake_accept", { _org_id: orgId, _profile_id: profileId });
+  if (error) throw new RecordsStoreError("records intake consent accept failed", { cause: error });
+  return data ?? null;
+}
+
+/** Withdraws a consent not yet claimed, and keeps the withdrawal so nothing earlier can send. */
 export async function withdrawConsent(orgId: string, profileId: string): Promise<void> {
   const service = await createServiceClient();
-  const { error } = await service
-    .from("records_intake_requests")
-    .delete()
-    .eq("org_id", orgId)
-    .eq("profile_id", profileId)
-    .eq("state", "consented");
-  if (error) throw new RecordsStoreError("records intake consent delete failed", { cause: error });
+  const { error } = await service.rpc("records_intake_withdraw", { _org_id: orgId, _profile_id: profileId });
+  if (error) throw new RecordsStoreError("records intake consent withdraw failed", { cause: error });
 }
 
 /**
- * Sends one person, once. Claims the send first, so a second save or a retry
- * sends nobody, and anything that stops the send after the claim, the write
- * key included, is recorded as failed and never retried. Never throws, and
- * never logs the person's details or an error's text.
+ * Sends one person, once, for the acceptance acceptConsent() returned. Claims
+ * the send first, so a second save, a retry, a withdrawal or a newer setting
+ * since the acceptance sends nobody, and anything that stops the send after
+ * the claim, the write key included, is recorded as failed and never retried.
+ * Never throws, and never logs the person's details or an error's text.
  */
-export async function sendNewPerson(orgId: string, profileId: string, person: RecordsNewPerson, secret: Buffer): Promise<void> {
+export async function sendNewPerson(
+  orgId: string,
+  profileId: string,
+  acceptId: string,
+  person: RecordsNewPerson,
+  secret: Buffer,
+): Promise<void> {
   const ids = { org: orgId, user: profileId };
   try {
     const service = await createServiceClient();
     const { data: claim, error: claimError } = await service.rpc("records_intake_claim", {
       _org_id: orgId,
       _profile_id: profileId,
+      _accept_id: acceptId,
     });
     if (claimError) throw new RecordsStoreError("records intake claim failed", { cause: claimError });
     if (claim !== "claimed") return;

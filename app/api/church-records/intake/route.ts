@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/log";
 import { isMemberRole } from "@/lib/roles";
 import { recordsSecretOrNull } from "@/lib/integrations/records/http";
-import { sendNewPerson, withdrawConsent } from "@/lib/integrations/records/intake";
+import { acceptConsent, sendNewPerson, withdrawConsent } from "@/lib/integrations/records/intake";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +63,15 @@ export async function POST(request: Request) {
     email: user.email,
     phone: profile.phone_mobile || profile.phone_home || null,
   };
-  after(() => sendNewPerson(orgId, user.id, person, secret));
+  let acceptId: string | null;
+  try {
+    acceptId = await acceptConsent(orgId, user.id);
+  } catch (err) {
+    logError("Church records consent accept failed", err, { route: "/api/church-records/intake", ids: { org: orgId, user: user.id } });
+    return NextResponse.json({ error: "Couldn't save your choice." }, { status: 500 });
+  }
+  if (!acceptId) return NextResponse.json({ ok: true });
+  const accepted = acceptId;
+  after(() => sendNewPerson(orgId, user.id, accepted, person, secret));
   return NextResponse.json({ ok: true }, { status: 202 });
 }

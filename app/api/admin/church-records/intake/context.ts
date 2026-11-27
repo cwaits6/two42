@@ -66,7 +66,10 @@ export function badRequest(message: string) {
 
 /**
  * The write key to use: the one in the body, or with none the saved one.
- * Refuses the read key, which never writes.
+ * Refuses the read key, which never writes. A typed key comes with the
+ * connection the admin's form was opened against, and is refused before any
+ * request when the church has connected elsewhere since, so it only ever goes
+ * to the address the admin saw.
  */
 export async function writeKey(ctx: IntakeContext, body: Record<string, unknown> | null): Promise<RecordsCredentials | Response> {
   const typed = typeof body?.key === "string" ? body.key.trim() : "";
@@ -77,6 +80,8 @@ export async function writeKey(ctx: IntakeContext, body: Record<string, unknown>
     // The saved key belongs to the connection it was loaded with; never send it to another one's address.
     if (saved.connectionId !== ctx.connectionId) return connectionChanged();
     key = saved.creds.key;
+  } else if (body?.connectionId !== ctx.connectionId) {
+    return connectionChanged();
   } else if (!RECORDS_KEY_SHAPE.test(typed)) {
     return badRequest(`Paste the ${ctx.intake.setup.keyLabel.toLowerCase()} from ${ctx.provider.label}, with no spaces.`);
   }

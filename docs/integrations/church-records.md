@@ -668,7 +668,9 @@ anyone else, through the suggestions and an admin's confirmation.
   using the church's name, unticked. It shows only while the church has
   sending on, and at profile setup only to someone who isn't linked and wasn't
   already sent. A box ticked at sign-up shows ticked at profile setup, and can
-  be unticked there. Unticked sends nothing.
+  be unticked there. Unticked sends nothing. Unticking is kept, so a sign-up
+  consent written after it, or a send queued before it, does nothing; ticking
+  the box again at profile setup sends.
 - **What is sent: name, email and phone, nothing else.** The first and last
   name as saved at profile setup, the sign-in email, and one phone: the
   mobile, or the home phone if there is no mobile. Never a preferred name,
@@ -681,9 +683,13 @@ anyone else, through the suggestions and an admin's confirmation.
   (`records_intake_requests`, one row per person): a second save or a retry
   sends nobody. A linked person is never sent. A failed send is recorded and
   **never retried**, because a timeout can follow a send the records already
-  took.
-- **What the admin sees.** How many were sent and how many couldn't be, and
-  why the newest send since the setting was saved failed. A failure is logged
+  took. A send is queued with the acceptance profile setup saved, and goes only
+  if that acceptance is still current and sending hasn't been turned off and on
+  since.
+- **What the admin sees.** How many were sent and how many couldn't be, how
+  many two42 couldn't record an outcome for (a send started over ten minutes
+  ago with no result, never retried), and why the newest send since the
+  setting was saved failed. A failure is logged
   with a fixed message and ids only, never the person's details or the
   records' answer.
 
@@ -692,12 +698,14 @@ anyone else, through the suggestions and an admin's confirmation.
 | Table | Holds |
 |---|---|
 | `records_intake_settings` | One row per church while sending is on: the write key sealed with `RECORDS_KEY_SECRET` under its own label (so it can't open as the read key, nor the read key as it), its last four characters, the destination's id and name, who turned it on and when. Goes with the connection |
-| `records_intake_requests` | One row per person: consented, sending, sent, or failed and why, with its times. No details |
+| `records_intake_requests` | One row per person: consented, withdrawn, sending, sent, or failed and why, with its times and the setting and acceptance a send must match. No details |
 
 No client role can read or write either table; server code writes them with
 the service key after a church admin check, or for the person's own row from
-their own session. `records_intake_consent()` and `records_intake_claim()`
-store nothing while sending is off and never claim a linked person
+their own session. `records_intake_consent()`, `records_intake_accept()`,
+`records_intake_withdraw()` and `records_intake_claim()` store nothing while
+sending is off (a withdrawal is kept either way) and never accept or claim a
+linked person
 (`supabase/migrations/20261212000000_church_records_intake.sql`).
 
 ### Each provider's own way

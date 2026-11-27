@@ -4,7 +4,7 @@ import type { RecordsIntakeDestination } from "@/lib/integrations/records/types"
 import { intakeContext, providerRefusal, serverError, writeKey } from "../context";
 
 /**
- * POST /api/admin/church-records/intake/destinations — `{ key? }`: where in
+ * POST /api/admin/church-records/intake/destinations — `{ key?, connectionId }`: where in
  * the church's records new people can go, read through the write key in the
  * body, or with none the saved one, for the church admin to pick from. A POST
  * so the key never sits in an address.

@@ -20,6 +20,7 @@ const INTAKE = "/api/admin/church-records/intake";
 
 export function RecordsIntake({ label, setup }: { label: string; setup: RecordsIntakeSetup }) {
   const [intake, setIntake] = useState<IntakeAnswer | null | undefined>(undefined);
+  const [connectionId, setConnectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -32,7 +33,9 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
         setError(errorText("load sending new people", res.status, res.data));
         return;
       }
-      setIntake((res.data as IntakeReadAnswer | null)?.intake ?? null);
+      const data = res.data as IntakeReadAnswer | null;
+      setIntake(data?.intake ?? null);
+      setConnectionId(data?.connectionId ?? "");
     } catch (err) {
       logError("Church records new people load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
@@ -91,6 +94,7 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
             label={label}
             setup={setup}
             current={intake}
+            connectionId={connectionId}
             onCancel={() => setEditing(false)}
             onSaved={(saved) => {
               setEditing(false);
@@ -119,7 +123,19 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
                 <dt className="text-muted-foreground">Couldn&apos;t send</dt>
                 <dd>{intake.failed.toLocaleString("en-US")}</dd>
               </div>
+              {intake.unknown > 0 && (
+                <div>
+                  <dt className="text-muted-foreground">Not sure if sent</dt>
+                  <dd>{intake.unknown.toLocaleString("en-US")}</dd>
+                </div>
+              )}
             </dl>
+            {intake.unknown > 0 && (
+              <p className="text-lg">
+                two42 couldn&apos;t record whether {label} took these people, and doesn&apos;t send them again. Check{" "}
+                {label} for them.
+              </p>
+            )}
             {intake.failed > 0 && (
               <p className="text-lg">
                 two42 doesn&apos;t send these people again. Add them in {label} yourself.
@@ -165,12 +181,14 @@ function IntakeForm({
   label,
   setup,
   current,
+  connectionId,
   onCancel,
   onSaved,
 }: {
   label: string;
   setup: RecordsIntakeSetup;
   current: IntakeAnswer | null;
+  connectionId: string;
   onCancel: () => void;
   /** null when it saved but the answer didn't include the setting, so the card reloads it. */
   onSaved: (saved: IntakeAnswer | null) => void;
@@ -188,7 +206,7 @@ function IntakeForm({
       const res = await call(`${INTAKE}/destinations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ key, connectionId }),
       });
       if (!res.ok) {
         toast.error(errorText(`find ${setup.destinationLabel}s`, res.status, res.data));
@@ -210,7 +228,7 @@ function IntakeForm({
       const res = await call(INTAKE, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, destinationId }),
+        body: JSON.stringify({ key, connectionId, destinationId }),
       });
       const saved = res.ok ? (res.data as IntakeSaveAnswer | null) : null;
       if (!saved || !("saved" in saved || saved.intake)) {

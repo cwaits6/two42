@@ -41,11 +41,14 @@ const WRITE_KEY = "write-key-001234";
 const READ_KEY = "read-key-009012";
 let secret: string;
 
-function put(body: unknown) {
-  return PUT(new Request("http://test/api/admin/church-records/intake", { method: "PUT", body: JSON.stringify(body) }));
+// Requests come from a form opened against connection c1 unless a test says otherwise.
+function put(body: Record<string, unknown>) {
+  return PUT(
+    new Request("http://test/api/admin/church-records/intake", { method: "PUT", body: JSON.stringify({ connectionId: "c1", ...body }) }),
+  );
 }
-function destinations(body: unknown) {
-  return DESTINATIONS(new Request("http://test/x", { method: "POST", body: JSON.stringify(body) }));
+function destinations(body: Record<string, unknown>) {
+  return DESTINATIONS(new Request("http://test/x", { method: "POST", body: JSON.stringify({ connectionId: "c1", ...body }) }));
 }
 
 beforeEach(() => {
@@ -57,7 +60,7 @@ beforeEach(() => {
   store.readConnection.mockResolvedValue(CONNECTION);
   store.loadCredentials.mockResolvedValue({ creds: { baseUrl: CONNECTION.baseUrl, key: READ_KEY } });
   intakeStore.readIntakeSettings.mockResolvedValue(null);
-  intakeStore.readIntakeStatus.mockResolvedValue({ sent: 0, failed: 0, lastFailure: null });
+  intakeStore.readIntakeStatus.mockResolvedValue({ sent: 0, failed: 0, unknown: 0, lastFailure: null });
   intakeStore.saveIntakeSettings.mockResolvedValue("saved");
   intakeStore.loadIntakeCredentials.mockResolvedValue(null);
   stubIntake.checkDestination.mockResolvedValue({ id: "42", name: "New people" });
@@ -86,7 +89,7 @@ describe("/api/admin/church-records/intake", () => {
   });
 
   it("is off until a church admin turns it on, and asks for no key while off", async () => {
-    expect(await (await GET()).json()).toEqual({ intake: null });
+    expect(await (await GET()).json()).toEqual({ intake: null, connectionId: "c1" });
     expect(intakeStore.loadIntakeCredentials).not.toHaveBeenCalled();
   });
 
@@ -164,6 +167,16 @@ describe("/api/admin/church-records/intake", () => {
     expect(await res.json()).toEqual({ saved: true });
   });
 
+  it("never sends a typed key when the form was opened against another connection, or names none", async () => {
+    for (const connectionId of ["c0", undefined]) {
+      expect((await put({ key: WRITE_KEY, destinationId: "42", connectionId })).status).toBe(409);
+      expect((await destinations({ key: WRITE_KEY, connectionId })).status).toBe(409);
+    }
+    expect(stubIntake.checkDestination).not.toHaveBeenCalled();
+    expect(stubIntake.destinations).not.toHaveBeenCalled();
+    expect(intakeStore.saveIntakeSettings).not.toHaveBeenCalled();
+  });
+
   it("says so when the connection changed since it was read", async () => {
     intakeStore.saveIntakeSettings.mockResolvedValue("connection_changed");
     expect((await put({ key: WRITE_KEY, destinationId: "42" })).status).toBe(409);
@@ -171,7 +184,7 @@ describe("/api/admin/church-records/intake", () => {
 
   it("shows the counts and why the newest send failed, never the key", async () => {
     intakeStore.readIntakeSettings.mockResolvedValue(SETTINGS);
-    intakeStore.readIntakeStatus.mockResolvedValue({ sent: 3, failed: 1, lastFailure: "unauthorized" });
+    intakeStore.readIntakeStatus.mockResolvedValue({ sent: 3, failed: 1, unknown: 2, lastFailure: "unauthorized" });
     const body = await (await GET()).json();
     expect(intakeStore.readIntakeStatus).toHaveBeenCalledWith("org-1", SETTINGS.enabledAt);
     expect(body.intake).toEqual({
@@ -180,13 +193,14 @@ describe("/api/admin/church-records/intake", () => {
       enabledAt: SETTINGS.enabledAt,
       sent: 3,
       failed: 1,
+      unknown: 2,
       lastFailure: expect.stringMatching(/didn't accept the write key.*If both are right, choose Change and enter the write key again\.$/),
     });
     expect(JSON.stringify(body)).not.toContain(WRITE_KEY);
   });
 
   it("turns off for the admin's own church", async () => {
-    expect(await (await DELETE()).json()).toEqual({ intake: null });
+    expect(await (await DELETE()).json()).toEqual({ intake: null, connectionId: "c1" });
     expect(intakeStore.deleteIntakeSettings).toHaveBeenCalledWith("org-1");
   });
 });

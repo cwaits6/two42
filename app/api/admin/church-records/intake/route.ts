@@ -19,7 +19,7 @@ import { badRequest, connectionChanged, type IntakeContext, intakeContext, provi
  *   GET     `{ intake: null }` while off, or the setting as an admin may see
  *           it: the write key's last characters, where new people go, and how
  *           many were sent or couldn't be. Never the key.
- *   PUT     `{ key?, destinationId }` turns it on, or changes the key or the
+ *   PUT     `{ key?, connectionId, destinationId }` turns it on, or changes the key or the
  *           destination. The key may be left out to keep the saved one; the
  *           read key is refused. The destination and the key's permission are
  *           checked with the provider before anything is saved. Answers
@@ -37,12 +37,17 @@ export interface IntakeAnswer {
   enabledAt: string;
   sent: number;
   failed: number;
+  /** Sends whose outcome two42 couldn't record; never retried. */
+  unknown: number;
   /** Why the newest send failed, for the church admin, when it did. */
   lastFailure: string | null;
 }
 
-/** What GET and DELETE answer: the setting, or null while off. */
-export type IntakeReadAnswer = { intake: IntakeAnswer | null };
+/**
+ * What GET and DELETE answer: the setting, or null while off, and the
+ * connection it belongs to, which Find and Save send back with a typed key.
+ */
+export type IntakeReadAnswer = { intake: IntakeAnswer | null; connectionId: string };
 
 /** What PUT answers on a save: the setting, or `saved` alone when it couldn't be read back. */
 export type IntakeSaveAnswer = IntakeReadAnswer | { saved: true };
@@ -57,6 +62,7 @@ async function answer(ctx: IntakeContext): Promise<IntakeAnswer | null> {
     enabledAt: settings.enabledAt,
     sent: status.sent,
     failed: status.failed,
+    unknown: status.unknown,
     lastFailure: status.lastFailure
       ? intakeLastFailureMessage(status.lastFailure, ctx.provider.label, ctx.intake.setup)
       : null,
@@ -68,7 +74,7 @@ export async function GET() {
   if (!context.ok) return context.response;
   const { ctx } = context;
   try {
-    return NextResponse.json<IntakeReadAnswer>({ intake: await answer(ctx) });
+    return NextResponse.json<IntakeReadAnswer>({ intake: await answer(ctx), connectionId: ctx.connectionId });
   } catch (err) {
     logError("Church records new people read failed", err, { route: "/api/admin/church-records/intake", ids: { org: ctx.orgId } });
     return serverError("Couldn't load sending new people.");
@@ -119,7 +125,7 @@ export async function PUT(request: Request) {
   if (saved === "connection_changed") return connectionChanged();
 
   try {
-    return NextResponse.json<IntakeSaveAnswer>({ intake: await answer(ctx) });
+    return NextResponse.json<IntakeSaveAnswer>({ intake: await answer(ctx), connectionId: ctx.connectionId });
   } catch (err) {
     logError("Church records new people read failed", err, { route: "/api/admin/church-records/intake", step: "status", ids: { org: ctx.orgId } });
     return NextResponse.json<IntakeSaveAnswer>({ saved: true });
@@ -132,7 +138,7 @@ export async function DELETE() {
   const { ctx } = context;
   try {
     await deleteIntakeSettings(ctx.orgId);
-    return NextResponse.json<IntakeReadAnswer>({ intake: null });
+    return NextResponse.json<IntakeReadAnswer>({ intake: null, connectionId: ctx.connectionId });
   } catch (err) {
     logError("Church records new people turn off failed", err, { route: "/api/admin/church-records/intake", ids: { org: ctx.orgId } });
     return serverError("Couldn't turn off sending new people.");

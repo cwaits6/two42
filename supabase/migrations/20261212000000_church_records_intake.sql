@@ -13,6 +13,10 @@
 -- cascade, since a destination id means nothing in other records.
 create table public.records_intake_settings (
   org_id uuid primary key default public.app_current_org_id(),
+  -- New each time sending is turned on, and kept when the key or destination
+  -- changes, so a consent accepted while it was on can't send after it was
+  -- turned off and on again.
+  setting_id uuid not null default gen_random_uuid(),
   connection_id uuid not null,
   key_ciphertext text not null,
   key_hint text not null check (char_length(key_hint) between 1 and 4),
@@ -32,19 +36,26 @@ create index records_intake_settings_enabled_by_idx on public.records_intake_set
 -- Enums rather than text checks, so the generated types carry these lists to
 -- the code that writes them. records_failure is RecordsFailure in
 -- supabase/functions/_shared/records-errors.ts.
-create type public.records_intake_state as enum ('consented', 'sending', 'sent', 'failed');
+create type public.records_intake_state as enum ('consented', 'withdrawn', 'sending', 'sent', 'failed');
 create type public.records_failure as enum ('unauthorized', 'not_found', 'unreachable', 'not_provider', 'rejected');
 
 -- Each person's consent and send, at most one row per person, so nobody is sent
 -- twice. Kept per church rather than per connection: a person sent once is
 -- never sent again after the key or the records change. A failed send is never
--- retried, because a timeout can follow a send the records already took.
+-- retried, because a timeout can follow a send the records already took. A
+-- withdrawal is kept as a row, so a consent write that lands after it records
+-- nothing.
 create table public.records_intake_requests (
   org_id uuid not null default public.app_current_org_id(),
   profile_id uuid not null,
   state public.records_intake_state not null,
   failure public.records_failure,
+  -- The setting the consent was given under, and the acceptance a deferred
+  -- send must present to claim it.
+  setting_id uuid,
+  accept_id uuid,
   consented_at timestamptz not null default now(),
+  claimed_at timestamptz,
   finished_at timestamptz,
   primary key (org_id, profile_id),
   constraint records_intake_requests_failed_has_failure check ((state = 'failed') = (failure is not null)),
@@ -73,9 +84,9 @@ create policy "org isolation" on public.records_intake_requests
 revoke all on public.records_intake_settings from anon, authenticated;
 revoke all on public.records_intake_requests from anon, authenticated;
 
--- Records a person's consent while sending is on and they aren't linked.
--- 'off' and 'linked' store nothing; a consent already recorded, or a send
--- already made, is left as it is.
+-- Records a sign-up consent while sending is on and the person isn't linked.
+-- 'off' and 'linked' store nothing. Any row already there is left as it is,
+-- a withdrawal included, so a withdrawal that beat this write wins.
 --
 -- SECURITY INVOKER and executable by the service role only: the caller is
 -- server code that took the org from the person's setup link or own profile.
@@ -85,55 +96,114 @@ create function public.records_intake_consent(_org_id uuid, _profile_id uuid)
   security invoker
   set search_path = ''
 as $$
+declare
+  _setting uuid;
 begin
-  perform 1 from public.records_intake_settings where org_id = _org_id for share;
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
   if not found then
     return 'off';
   end if;
   if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
     return 'linked';
   end if;
-  insert into public.records_intake_requests (org_id, profile_id, state)
-  values (_org_id, _profile_id, 'consented')
+  insert into public.records_intake_requests (org_id, profile_id, state, setting_id)
+  values (_org_id, _profile_id, 'consented', _setting)
   on conflict (org_id, profile_id) do nothing;
   return 'saved';
 end;
 $$;
 
--- Claims the one send a person gets. Only the move to 'sending' from nothing
--- or from 'consented' is 'claimed'; a second call, or one racing it, gets
--- 'already'. The settings row is held for share, so turning sending off
--- waits for the claim, and a claim after it finds 'off'.
-create function public.records_intake_claim(_org_id uuid, _profile_id uuid)
+-- Accepts a consent the person gave at profile setup, under the current
+-- setting: from nothing, a sign-up consent or a withdrawal. Returns the id a
+-- deferred send presents to records_intake_claim(), or null when nothing is
+-- to be sent (sending off, linked, or already sent).
+create function public.records_intake_accept(_org_id uuid, _profile_id uuid)
+  returns uuid
+  language plpgsql
+  security invoker
+  set search_path = ''
+as $$
+declare
+  _setting uuid;
+  _accept uuid := gen_random_uuid();
+begin
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
+  if not found then
+    return null;
+  end if;
+  if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
+    return null;
+  end if;
+  insert into public.records_intake_requests (org_id, profile_id, state, setting_id, accept_id)
+  values (_org_id, _profile_id, 'consented', _setting, _accept)
+  on conflict (org_id, profile_id) do update
+    set state = 'consented', setting_id = _setting, accept_id = _accept, consented_at = now()
+    where public.records_intake_requests.state in ('consented', 'withdrawn');
+  if not found then
+    return null;
+  end if;
+  return _accept;
+end;
+$$;
+
+-- Withdraws a consent not yet claimed, and keeps the withdrawal, so a later
+-- sign-up consent write or a deferred send from before it does nothing. A
+-- send already claimed, sent or failed is left as it is.
+create function public.records_intake_withdraw(_org_id uuid, _profile_id uuid)
+  returns void
+  language plpgsql
+  security invoker
+  set search_path = ''
+as $$
+begin
+  insert into public.records_intake_requests (org_id, profile_id, state)
+  values (_org_id, _profile_id, 'withdrawn')
+  on conflict (org_id, profile_id) do update
+    set state = 'withdrawn', setting_id = null, accept_id = null, consented_at = now()
+    where public.records_intake_requests.state = 'consented';
+end;
+$$;
+
+-- Claims the one send a person gets, for the acceptance records_intake_accept()
+-- returned. Only a 'consented' row still holding that acceptance, under the
+-- setting that is current now, moves to 'sending' and is 'claimed'; after a
+-- withdrawal, a newer acceptance, a send already claimed, or sending turned
+-- off and on again, the answer is 'stale'. The settings row is held for share,
+-- so turning sending off waits for the claim, and a claim after it finds 'off'.
+create function public.records_intake_claim(_org_id uuid, _profile_id uuid, _accept_id uuid)
   returns text
   language plpgsql
   security invoker
   set search_path = ''
 as $$
 declare
+  _setting uuid;
   _claimed integer;
 begin
-  perform 1 from public.records_intake_settings where org_id = _org_id for share;
+  select setting_id into _setting from public.records_intake_settings where org_id = _org_id for share;
   if not found then
     return 'off';
   end if;
   if exists (select 1 from public.records_person_links where org_id = _org_id and profile_id = _profile_id) then
     return 'linked';
   end if;
-  insert into public.records_intake_requests (org_id, profile_id, state)
-  values (_org_id, _profile_id, 'sending')
-  on conflict (org_id, profile_id) do update
-    set state = 'sending'
-    where public.records_intake_requests.state = 'consented';
+  update public.records_intake_requests
+    set state = 'sending', claimed_at = now()
+    where org_id = _org_id and profile_id = _profile_id
+      and state = 'consented' and accept_id = _accept_id and setting_id = _setting;
   get diagnostics _claimed = row_count;
-  return case when _claimed = 1 then 'claimed' else 'already' end;
+  return case when _claimed = 1 then 'claimed' else 'stale' end;
 end;
 $$;
 
 revoke execute on function public.records_intake_consent(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.records_intake_consent(uuid, uuid) to service_role;
-revoke execute on function public.records_intake_claim(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.records_intake_claim(uuid, uuid) to service_role;
+revoke execute on function public.records_intake_accept(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.records_intake_accept(uuid, uuid) to service_role;
+revoke execute on function public.records_intake_withdraw(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.records_intake_withdraw(uuid, uuid) to service_role;
+revoke execute on function public.records_intake_claim(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.records_intake_claim(uuid, uuid, uuid) to service_role;
 
 -- Turning sending off, disconnecting, or moving to other records drops every
 -- consent not yet sent, so turning it on again later sends nobody who agreed
