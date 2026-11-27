@@ -50,9 +50,13 @@ export function isLiveOnly(field: string): field is LiveOnlyField {
   return (LIVE_ONLY_FIELDS as readonly string[]).includes(field);
 }
 
-/** The fields a refresh stores in this mode: in live mode, none of the live-only ones. */
+/** Whether a refresh stores this field in this mode: in live mode, none of the live-only ones. */
+export function storedIn(mode: RecordsMode, field: string): boolean {
+  return mode === "copy" || !isLiveOnly(field);
+}
+
 export function storedFields<F extends string, M>(settings: ReadonlyMap<F, M>, mode: RecordsMode): Map<F, M> {
-  return new Map([...settings].filter(([field]) => mode === "copy" || !isLiveOnly(field)));
+  return new Map([...settings].filter(([field]) => storedIn(mode, field)));
 }
 
 /** The preferred name follows the name's setting, is filled from the nick name and is never locked. */

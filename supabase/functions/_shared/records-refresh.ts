@@ -20,9 +20,9 @@ import {
   RECORDS_FIELDS,
   type RecordsField,
   type RecordsMode,
-  isLiveOnly,
   type StoredValue,
   storedFields,
+  storedIn,
   storedRecordsMode,
   type ValueField,
   type ValueRow,
@@ -801,7 +801,7 @@ async function householdStep(
   const fields = new Set(
     (await allRows(() => db.from("records_field_settings").select("field, mode").eq("org_id", orgId).order("field"), "settings"))
       .filter((row) => (HOUSEHOLD_FIELDS as readonly string[]).includes(row.field) && row.mode === "member")
-      .filter((row) => church.mode === "copy" || !isLiveOnly(row.field))
+      .filter((row) => storedIn(church.mode, row.field))
       .map((row) => row.field as HouseholdField),
   );
   const personLinks = await allRows(
