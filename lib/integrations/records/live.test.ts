@@ -278,6 +278,14 @@ describe("readLiveDirectory", () => {
     expect(await liveDirectoryOn()).toBe(false);
   });
 
+  it("for a church that never connected, stays off when the mode can't be read", async () => {
+    store.readConnection.mockResolvedValue(null);
+    store.readMode.mockRejectedValue(new Error("mode"));
+    expect(await liveDirectoryOn()).toBe(false);
+    expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+    expect(details).not.toHaveBeenCalled();
+  });
+
   it("with a key that can't be opened, answers unavailable details without asking the records", async () => {
     store.loadCredentials.mockRejectedValue(new Error("key unreadable"));
     vi.spyOn(console, "log").mockImplementation(() => {});

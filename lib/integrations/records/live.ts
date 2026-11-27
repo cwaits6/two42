@@ -21,10 +21,10 @@ const OFF: LiveDirectory = { mode: "off" };
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
 async function liveConnection(orgId: string) {
-  const church = await readMode(orgId);
-  if (church.mode !== "live") return null;
   const source = liveSourceOf(providerFor((await readConnection(orgId))?.provider));
-  return source ? { ...church, source } : null;
+  if (!source) return null;
+  const church = await readMode(orgId);
+  return church.mode === "live" ? { ...church, source } : null;
 }
 
 /** The key, or null when it can't be opened, such as after RECORDS_KEY_SECRET changed; the records then can't be reached. */
@@ -56,7 +56,7 @@ export async function liveDirectoryOn(): Promise<boolean> {
     return (await liveConnection(orgId)) !== null;
   } catch (err) {
     logError("Church records live mode read failed", err, { route: "/directory", ids: { org: orgId } });
-    // The live request answers "off" for a copy church and "unavailable" for a live one, so it decides.
+    // A church with no live-capable connection answered off above; one whose mode can't be read is asked, and its request answers unavailable.
     return true;
   }
 }
@@ -66,8 +66,8 @@ export async function liveDirectoryOn(): Promise<boolean> {
  * batch to the provider. "off" for a church that doesn't show details live,
  * without touching the provider. When the records can't be reached every
  * detail that would have come from them is unavailable, and when two42's own
- * reads fail once the church is known to show details live, the whole answer
- * is; the rest of the directory is unaffected either way.
+ * reads fail for a church connected to a provider that shows details live,
+ * the whole answer is; the rest of the directory is unaffected either way.
  */
 export async function readLiveDirectory(viewerId: string, today = new Date()): Promise<LiveDirectory> {
   const secret = loadRecordsSecret();
