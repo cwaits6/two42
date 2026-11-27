@@ -86,7 +86,9 @@ $$;
 -- child suggestions lose their birthday and grade. Values a member changed
 -- stay. Live -> Copy asks the next refresh to copy everyone in full, which
 -- fills the values in under the copy rules; the households and children are
--- read in full on every refresh already.
+-- read in full on every refresh already. A child added while live was added
+-- with no birthday or grade and keeps none: an added child's details are the
+-- household's, and the refresh never writes them.
 --
 -- Answers {"outcome":"busy"}, saving nothing, while a refresh holds its claim:
 -- that run read the mode when it started. Otherwise {"outcome":"saved",

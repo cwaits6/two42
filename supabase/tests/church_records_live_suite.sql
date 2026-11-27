@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(54);
+select plan(62);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -329,6 +329,33 @@ select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records
 select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.records_live_hide('grade', true)$q$),
   'RC001', 'and a grade isn''t a member''s to hide');
 
+update public.profiles set family_id = pg_temp.fx('home'), relationship = 'child' where id = pg_temp.fx('mia');
+select ok((select role in ('member', 'admin') from public.profiles where id = pg_temp.fx('mia')),
+  'non-vacuity: someone else in the linked household who is a member');
+select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('address', false)$q$),
+  'RC001', 'only the household''s primary or spouse shows or hides its address');
+select is((select state from public.records_household_values where family_id = pg_temp.fx('home') and field = 'address'),
+  'cleared', 'so the household''s address stays hidden');
+select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('anniversary', false)$q$),
+  'RC001', 'or its anniversary');
+select is(
+  (select array_agg(state order by profile_id) from public.records_field_values
+    where field = 'anniversary' and profile_id in (pg_temp.fx('henry'), pg_temp.fx('chloe'))),
+  array['cleared', 'cleared'], 'which stays hidden too');
+
+-- A child added while live is added with no birthday or grade, which the
+-- directory reads live while the church stays live.
+update public.records_org_settings set suggest_children = true where org_id = pg_temp.fx('org');
+insert into fx select 'lily', id from public.records_child_suggestions
+  where org_id = pg_temp.fx('org') and external_person_id = '200';
+select is(pg_temp.attempt('henry.mockingham@example.test',
+  format('select public.records_add_suggested_child(%L)', pg_temp.fx('lily'))),
+  'rows:1', 'the household adds its suggested child while live');
+insert into fx select 'lily_row', family_member_id from public.records_child_suggestions
+  where org_id = pg_temp.fx('org') and external_person_id = '200';
+select is((select array[birth_month, birth_day, graduation_year] from public.family_members where id = pg_temp.fx('lily_row')),
+  array[null, null, null]::smallint[], 'with no birthday or grade stored');
+
 -- ── Live -> Copy ────────────────────────────────────────────────────────────
 select is(public.records_save_mode(pg_temp.fx('org'), 'copy', pg_temp.fx('admin')),
   '{"outcome": "saved", "removed": 0}'::jsonb, 'switching back to copy removes nothing');
@@ -338,6 +365,8 @@ select is((select state from public.records_household_values where family_id = p
   'cleared', 'where a clear made in live mode stays the household''s');
 select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.records_live_hide('birthday', true)$q$),
   'RC001', 'with nothing live, there is nothing to hide');
+select is((select array[birth_month, birth_day, graduation_year] from public.family_members where id = pg_temp.fx('lily_row')),
+  array[null, null, null]::smallint[], 'a child added while live keeps none after the switch: they are the household''s to enter');
 
 -- ── One church's rows unreachable from another, on every records_* table ────
 -- A table added later without a row here fails the first check until it is covered.

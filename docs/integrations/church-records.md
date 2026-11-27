@@ -552,7 +552,9 @@ T42-274. A church admin chooses **Live from your church's records** under
   details are ordinary two42 data and stay, like values left after a link
   ends. **Live → Copy** asks the next refresh to copy everyone in full, and
   the admin's page starts **Refresh now**; households and children are read in
-  full every refresh already.
+  full every refresh already. A child added while live was added with no
+  birthday or grade, and the refresh never writes an added child's details,
+  so after the switch they stay empty until the household enters them.
 - **Never stored.** The refresh, nightly and **Refresh now**, reads the mode
   inside its claim and plans no live-only field (`storedFields()`), copies no
   household address, and suggests children with names and photo only. Under

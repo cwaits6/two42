@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
+import type { ModeAnswer } from "@/lib/integrations/records/store";
 import type { RecordsMode as Mode } from "@/supabase/functions/_shared/records-copy";
 import { call, errorText } from "./requests";
 
@@ -19,7 +20,7 @@ export function removalText(count: number): string {
 }
 
 export function RecordsMode({ label, onChange }: { label: string; onChange: (mode: Mode) => void }) {
-  const [data, setData] = useState<{ mode: Mode; copiedCount: number } | null>(null);
+  const [data, setData] = useState<ModeAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,7 +33,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
         setError(errorText("load how two42 uses your church's records", res.status, res.data));
         return;
       }
-      const loaded = res.data as unknown as { mode: Mode; copiedCount: number };
+      const loaded = res.data as unknown as ModeAnswer;
       setData(loaded);
       onChange(loaded.mode);
     } catch (err) {
@@ -61,7 +62,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
       if (mode === "live") {
         toast.success("Saved. Details now come live from your church's records.");
       } else {
-        toast.success("Saved. Your church's records fill these details in at the refresh.");
+        toast.success("Saved. The refresh copies details from your church's records under What two42 copies.");
         // Fills the details in without waiting for the night; a failure here leaves it to the nightly run.
         await call("/api/admin/church-records/refresh", { method: "POST" }).catch(() => null);
       }
