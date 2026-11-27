@@ -161,6 +161,8 @@ Deno.test("a family's address outside its home locations isn't used", async () =
   const { source } = rock({
     ...FAMILY_ROUTES,
     "/api/Groups": () => json([{ Id: 500, GroupLocations: [{ LocationId: 702, GroupLocationTypeValueId: 99 }] }]),
+    "/api/Locations": () =>
+      json([{ Id: 702, Street1: "1 Work Plaza", Street2: "", City: "Austin", State: "TX", PostalCode: "78701", Country: "US" }]),
   });
   const [family] = await source.families(creds, ["500"], { children: false });
   assertEquals(family.address, null);
