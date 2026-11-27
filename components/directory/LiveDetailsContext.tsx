@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
-import { LIVE_UNAVAILABLE, type HideableField, type LiveDirectory, type LiveDirectoryOn, type LiveSlot } from "@/lib/integrations/records/livePlan";
+import { LIVE_UNAVAILABLE, type HideableField, type LiveDirectory, type LiveDirectoryOn } from "@/lib/integrations/records/livePlan";
 
 export interface LiveControls {
   live: LiveDirectoryOn;
@@ -81,10 +81,8 @@ export function useLiveDirectory(enabled: boolean) {
     () => (live?.mode === "live" ? { live, hide, busy } : null),
     [live, hide, busy],
   );
-  return { live: enabled ? live : null, controls: enabled ? controls : null, reload };
+  return { controls: enabled ? controls : null, reload };
 }
-
-export const isUnavailable = (slot: LiveSlot<unknown> | undefined) => slot?.state === "unavailable";
 
 /** What a detail from the church's records shows when the records can't be reached. */
 export const NOT_AVAILABLE = "Not available right now";

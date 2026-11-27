@@ -14,7 +14,6 @@ import {
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
 import { LiveDetailsProvider, useLiveDirectory } from "@/components/directory/LiveDetailsContext";
 import { applyLiveDetails } from "@/components/directory/liveDetails";
-import type { LiveDirectoryOn } from "@/lib/integrations/records/livePlan";
 import { calendarDate } from "@/components/directory/utils";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
@@ -43,8 +42,6 @@ export interface DirectoryContextValue {
   loading: boolean;
   error: boolean;
   reload: () => void;
-  /** Details shown live from the church's records, or null when the church shows none. */
-  live: LiveDirectoryOn | null;
 }
 
 const DirectoryContext = createContext<DirectoryContextValue | null>(null);
@@ -85,8 +82,8 @@ export function DirectoryProvider({
   const data = useDirectoryData(membershipIds);
   const live = useLiveDirectory(recordsLive);
   const merged = useMemo(
-    () => applyLiveDetails(data.members, data.families, live.live),
-    [data.members, data.families, live.live],
+    () => applyLiveDetails(data.members, data.families, live.controls?.live ?? null),
+    [data.members, data.families, live.controls],
   );
   const profileMap = useMemo(
     () => (merged.members === data.members ? data.profileMap : Object.fromEntries(merged.members.map((m) => [m.id, m]))),
@@ -143,7 +140,6 @@ export function DirectoryProvider({
     loading: data.loading,
     error: data.error,
     reload,
-    live: live.controls?.live ?? null,
   };
 
   return (

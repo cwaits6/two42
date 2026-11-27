@@ -7,13 +7,14 @@ import { DirRow } from "@/components/directory/DirRow";
 import { CelebrationList } from "@/components/directory/CelebrationList";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
-import { NOT_AVAILABLE } from "@/components/directory/LiveDetailsContext";
+import { NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import { someUnavailable } from "@/components/directory/liveDetails";
 import { anniversaryEntries } from "@/components/directory/celebrations";
 import { formatOccurrence } from "@/components/directory/utils";
 
 function AnniversariesTabInner() {
-  const { families, today, live } = useDirectory();
+  const { families, today } = useDirectory();
+  const live = useLiveControls()?.live ?? null;
 
   const entries = useMemo(() => anniversaryEntries(families, today), [families, today]);
 

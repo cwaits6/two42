@@ -10,7 +10,7 @@ import { DirRow } from "@/components/directory/DirRow";
 import { CelebrationList } from "@/components/directory/CelebrationList";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
-import { NOT_AVAILABLE } from "@/components/directory/LiveDetailsContext";
+import { NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import { someUnavailable } from "@/components/directory/liveDetails";
 import {
   birthdayEntries,
@@ -25,7 +25,8 @@ import {
 } from "@/components/directory/utils";
 
 function BirthdaysTabInner() {
-  const { members, families, basePath, today, live } = useDirectory();
+  const { members, families, basePath, today } = useDirectory();
+  const live = useLiveControls()?.live ?? null;
   const searchParams = useSearchParams();
   const includeNonAttendees = parseIncludeNonAttendees(searchParams.get("household"));
 
