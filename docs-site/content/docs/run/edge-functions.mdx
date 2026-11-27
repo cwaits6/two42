@@ -86,7 +86,7 @@ select net.http_post(
 
 Read the answer in `net._http_response` and the function's log under **Edge Functions**, **refresh-church-records**, **Logs**.
 
-- **Passed:** the answer lists the run, with `connected`, `copied` and `failed` in it, whether it is a 200 or a 500 that lists churches under `cutShort`, `notStarted`, `busy` or `copyFailed`.
+- **Passed:** the answer lists the run, with `connected`, `copied` and `failed` in it, whether it is a 200 or a 500 that lists churches under `failed`, `cutShort`, `notStarted`, `busy` or `copyFailed`. A church under `failed` means the check passed but that church's refresh failed; read the log before scheduling it.
 - **Failed:** the 500 "The runtime didn't refuse a loopback address, so no church was refreshed.", with a "church records refresh stopped: the address check failed" line in the log. Don't schedule it.
 - **Not checked:** `{"orgs":0}` with a "church records refresh skipped: the integration is off" line means `RECORDS_KEY_SECRET` isn't set, and the 500 "RECORDS_KEY_SECRET is not a valid key." means it isn't a valid key. Neither ran the check: set the secret and call it again. The 500 "The church records refresh stopped before it finished." means the check passed but the run failed; read the log before scheduling it.
 

@@ -536,9 +536,10 @@ runtime is built on has. Schedule it only after a first call on the hosted
 project has passed that check. The check runs only once `RECORDS_KEY_SECRET`
 holds a valid key, so set it first, then call the function once with the
 service key. It passed when the answer lists the run (`connected`, `copied`,
-`failed`), as a 200 or as a 500 listing churches under `cutShort`,
-`notStarted`, `busy` or `copyFailed`. The "didn't refuse a loopback address"
-500 means it failed. `{"orgs":0}` or the "not a valid key" 500 means the
+`failed`), as a 200 or as a 500 listing churches under `failed`,
+`cutShort`, `notStarted`, `busy` or `copyFailed`; a church under `failed`
+means its refresh failed after the check passed, so read the log before
+scheduling. The "didn't refuse a loopback address" 500 means it failed. `{"orgs":0}` or the "not a valid key" 500 means the
 secret is missing or wrong and nothing was checked.
 
 ### Still open
