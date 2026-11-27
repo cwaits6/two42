@@ -144,7 +144,7 @@ async function members(
 }
 
 /** The family's home address: of its home locations, the one marked for mail first, as Rock's own family view picks it. */
-function homeLocationIds(groupRows: readonly Record<string, unknown>[], homeType: number | null) {
+export function homeLocationIds(groupRows: readonly Record<string, unknown>[], homeType: number | null) {
   const byFamily = new Map<number, number>();
   if (homeType === null) return byFamily;
   for (const row of groupRows) {
@@ -160,7 +160,7 @@ function homeLocationIds(groupRows: readonly Record<string, unknown>[], homeType
   return byFamily;
 }
 
-function parseAddress(row: Record<string, unknown>): RecordsAddress {
+export function parseAddress(row: Record<string, unknown>): RecordsAddress {
   return {
     street1: text(row.Street1),
     street2: text(row.Street2),

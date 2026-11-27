@@ -12,6 +12,8 @@ import type { FieldSettings } from "./settings";
 import { openKey } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
+import type { LiveSources } from "./livePlan";
+import { LIVE_ONLY_FIELDS, RECORDS_MODES, type RecordsMode, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import {
   CONFIRM_HOUSEHOLD_OUTCOMES,
   type ConfirmHouseholdOutcome,
@@ -450,4 +452,118 @@ export async function confirmHousehold(orgId: string, suggestionId: string, conf
   const answer = CONFIRM_HOUSEHOLD_OUTCOMES.find((outcome) => outcome === data);
   if (!answer) throw new RecordsStoreError("records household confirm gave no answer");
   return answer;
+}
+
+export interface ChurchMode {
+  mode: RecordsMode;
+  suggestChildren: boolean;
+}
+
+/** Copy unless the church chose live; no row is copy. */
+export async function readMode(orgId: string): Promise<ChurchMode> {
+  const service = await createServiceClient();
+  const { data, error } = await service
+    .from("records_org_settings")
+    .select("mode, suggest_children")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (error) throw new RecordsStoreError("records mode read failed", { cause: error });
+  return { mode: data?.mode === "live" ? "live" : "copy", suggestChildren: data?.suggest_children ?? false };
+}
+
+/** How many details from the records switching to live would remove. */
+export async function liveCopiedCount(orgId: string): Promise<number> {
+  const service = await createServiceClient();
+  const { data, error } = await service.rpc("records_live_copied_count", { _org_id: orgId });
+  if (error || typeof data !== "number") throw new RecordsStoreError("records copied count read failed", { cause: error });
+  return data;
+}
+
+export type SaveModeOutcome = { outcome: "saved"; removed: number } | { outcome: "busy" };
+
+/** Switching to live removes every value still the church's, in one transaction; "busy" while a refresh runs. */
+export async function saveMode(orgId: string, mode: RecordsMode, updatedBy: string): Promise<SaveModeOutcome> {
+  const service = await createServiceClient();
+  const { data, error } = await service.rpc("records_save_mode", { _org_id: orgId, _mode: mode, _updated_by: updatedBy });
+  if (error) throw new RecordsStoreError("records mode write failed", { cause: error });
+  const answer = data as { outcome?: unknown; removed?: unknown } | null;
+  if (answer?.outcome === "busy") return { outcome: "busy" };
+  if (answer?.outcome === "saved" && typeof answer.removed === "number") return { outcome: "saved", removed: answer.removed };
+  throw new RecordsStoreError("records mode write gave no answer");
+}
+
+export const isRecordsMode = (value: unknown): value is RecordsMode =>
+  (RECORDS_MODES as readonly unknown[]).includes(value);
+
+const IDS_PER_READ = 100;
+
+async function inChunks<T>(ids: readonly string[], read: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+  const found: T[] = [];
+  for (let i = 0; i < ids.length; i += IDS_PER_READ) {
+    const { data, error } = await read(ids.slice(i, i + IDS_PER_READ));
+    if (error) throw new RecordsStoreError("records live sources read failed", { cause: error });
+    found.push(...(data ?? []));
+  }
+  return found;
+}
+
+/**
+ * The links and sources of exactly these people, households and household
+ * members, which the caller read through the viewer's own RLS-scoped client.
+ * Never a value from the records: only which fields come from them and each
+ * source's state.
+ */
+export async function readLiveSources(
+  orgId: string,
+  visible: { profiles: readonly string[]; households: readonly string[]; members: readonly string[] },
+  suggestChildren: boolean,
+): Promise<LiveSources> {
+  const service = await createServiceClient();
+  const [settings, personLinks, personValues, householdLinks, householdValues, children] = await Promise.all([
+    service.from("records_field_settings").select("field").eq("org_id", orgId),
+    inChunks(visible.profiles, (chunk) =>
+      service.from("records_person_links").select("profile_id, external_person_id").eq("org_id", orgId).in("profile_id", chunk),
+    ),
+    inChunks(visible.profiles, (chunk) =>
+      service
+        .from("records_field_values")
+        .select("profile_id, field, state")
+        .eq("org_id", orgId)
+        .in("field", ["birthday", "anniversary"])
+        .in("profile_id", chunk),
+    ),
+    inChunks(visible.households, (chunk) =>
+      service.from("records_household_links").select("family_id, external_family_id").eq("org_id", orgId).in("family_id", chunk),
+    ),
+    inChunks(visible.households, (chunk) =>
+      service
+        .from("records_household_values")
+        .select("family_id, state")
+        .eq("org_id", orgId)
+        .eq("field", "address")
+        .in("family_id", chunk),
+    ),
+    suggestChildren
+      ? inChunks(visible.members, (chunk) =>
+          service
+            .from("records_child_suggestions")
+            .select("family_member_id, external_person_id")
+            .eq("org_id", orgId)
+            .eq("state", "added")
+            .in("family_member_id", chunk),
+        )
+      : Promise.resolve([]),
+  ]);
+  if (settings.error) throw new RecordsStoreError("records field settings read failed", { cause: settings.error });
+  const liveFields = new Set<string>(LIVE_ONLY_FIELDS);
+  return {
+    fields: new Set((settings.data ?? []).map((row) => row.field).filter((field) => liveFields.has(field))),
+    personLinks: new Map(personLinks.map((row) => [row.profile_id, row.external_person_id])),
+    householdLinks: new Map(householdLinks.map((row) => [row.family_id, row.external_family_id])),
+    personStates: new Map(personValues.map((row) => [`${row.profile_id}:${row.field}`, row.state as ValueState])),
+    addressStates: new Map(householdValues.map((row) => [row.family_id, row.state as ValueState])),
+    children: new Map(
+      children.flatMap((row) => (row.family_member_id ? [[row.family_member_id, row.external_person_id] as const] : [])),
+    ),
+  };
 }
