@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
+import type { RecordsIntakeDestination } from "@/lib/integrations/records/types";
 import { intakeContext, providerRefusal, serverError, writeKey } from "../context";
 
 /**
@@ -9,6 +10,8 @@ import { intakeContext, providerRefusal, serverError, writeKey } from "../contex
  * so the key never sits in an address.
  */
 
+export type DestinationsAnswer = { destinations: RecordsIntakeDestination[] };
+
 export async function POST(request: Request) {
   const context = await intakeContext();
   if (!context.ok) return context.response;
@@ -17,7 +20,7 @@ export async function POST(request: Request) {
   try {
     const creds = await writeKey(ctx, body);
     if (creds instanceof Response) return creds;
-    return NextResponse.json({ destinations: await ctx.intake.destinations(creds) });
+    return NextResponse.json<DestinationsAnswer>({ destinations: await ctx.intake.destinations(creds) });
   } catch (err) {
     const refusal = providerRefusal(ctx, err);
     if (refusal) return refusal;

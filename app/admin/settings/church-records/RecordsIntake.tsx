@@ -12,7 +12,8 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
 import type { RecordsIntakeDestination, RecordsIntakeSetup } from "@/lib/integrations/records/types";
-import type { IntakeAnswer, IntakeSaveAnswer } from "@/app/api/admin/church-records/intake/route";
+import type { IntakeAnswer, IntakeReadAnswer, IntakeSaveAnswer } from "@/app/api/admin/church-records/intake/route";
+import type { DestinationsAnswer } from "@/app/api/admin/church-records/intake/destinations/route";
 import { call, errorText } from "./requests";
 
 const INTAKE = "/api/admin/church-records/intake";
@@ -31,7 +32,7 @@ export function RecordsIntake({ label, setup }: { label: string; setup: RecordsI
         setError(errorText("load sending new people", res.status, res.data));
         return;
       }
-      setIntake((res.data?.intake as IntakeAnswer | null) ?? null);
+      setIntake((res.data as IntakeReadAnswer | null)?.intake ?? null);
     } catch (err) {
       logError("Church records new people load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
@@ -193,7 +194,7 @@ function IntakeForm({
         toast.error(errorText(`find ${setup.destinationLabel}s`, res.status, res.data));
         return;
       }
-      setDestinations((res.data?.destinations as RecordsIntakeDestination[]) ?? []);
+      setDestinations((res.data as DestinationsAnswer | null)?.destinations ?? []);
     } catch (err) {
       logError("Church records new people destinations failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);

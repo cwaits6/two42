@@ -41,8 +41,11 @@ export interface IntakeAnswer {
   lastFailure: string | null;
 }
 
+/** What GET and DELETE answer: the setting, or null while off. */
+export type IntakeReadAnswer = { intake: IntakeAnswer | null };
+
 /** What PUT answers on a save: the setting, or `saved` alone when it couldn't be read back. */
-export type IntakeSaveAnswer = { intake: IntakeAnswer | null } | { saved: true };
+export type IntakeSaveAnswer = IntakeReadAnswer | { saved: true };
 
 async function answer(ctx: IntakeContext): Promise<IntakeAnswer | null> {
   const settings = await readIntakeSettings(ctx.orgId);
@@ -65,7 +68,7 @@ export async function GET() {
   if (!context.ok) return context.response;
   const { ctx } = context;
   try {
-    return NextResponse.json({ intake: await answer(ctx) });
+    return NextResponse.json<IntakeReadAnswer>({ intake: await answer(ctx) });
   } catch (err) {
     logError("Church records new people read failed", err, { route: "/api/admin/church-records/intake", ids: { org: ctx.orgId } });
     return serverError("Couldn't load sending new people.");
@@ -131,7 +134,7 @@ export async function DELETE() {
   const { ctx } = context;
   try {
     await deleteIntakeSettings(ctx.orgId);
-    return NextResponse.json({ intake: null });
+    return NextResponse.json<IntakeReadAnswer>({ intake: null });
   } catch (err) {
     logError("Church records new people turn off failed", err, { route: "/api/admin/church-records/intake", ids: { org: ctx.orgId } });
     return serverError("Couldn't turn off sending new people.");
