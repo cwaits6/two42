@@ -28,7 +28,7 @@ import {
   householdPhoneLabel,
   showsHouseholdPhone,
 } from "@/components/directory/utils";
-import { LiveHideButton, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
+import { LiveHideButton, LiveUnavailableNote, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 import type { ComponentType, ReactNode } from "react";
 
@@ -169,6 +169,8 @@ export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
             </a>
           </ContactLine>
         )}
+
+        <LiveUnavailableNote />
 
         {/* Address */}
         {addressUnavailable && <ContactLine icon={MapPin}>Address — {NOT_AVAILABLE}</ContactLine>}

@@ -51,6 +51,7 @@ export function applyLiveDetails(
 /** Whether any of this kind of date from the church's records couldn't be read. */
 export function someUnavailable(live: LiveDirectoryOn | null, kind: "birthday" | "anniversary"): boolean {
   if (!live) return false;
+  if (live.unavailable) return true;
   if (kind === "anniversary") return Object.values(live.households).some((h) => h.anniversary?.state === "unavailable");
   return [...Object.values(live.people), ...Object.values(live.children)].some((p) => p.birthday?.state === "unavailable");
 }

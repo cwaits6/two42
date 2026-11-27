@@ -27,7 +27,7 @@ import type { Relationship } from "./relationships.ts";
 export const HOUSEHOLD_FIELDS = ["address", "phone_home"] as const;
 export type HouseholdField = (typeof HOUSEHOLD_FIELDS)[number];
 
-const ADDRESS_COLUMNS = ["address_line1", "address_line2", "city", "state", "postal_code"] as const;
+export const ADDRESS_COLUMNS = ["address_line1", "address_line2", "city", "state", "postal_code"] as const;
 
 export const HOUSEHOLD_FIELD_COLUMNS: Record<HouseholdField, readonly string[]> = {
   address: ADDRESS_COLUMNS,

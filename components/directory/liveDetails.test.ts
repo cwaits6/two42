@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { anniversaryEntries, birthdayEntries, celebrationSections } from "@/components/directory/celebrations";
 import { applyLiveDetails, someUnavailable } from "@/components/directory/liveDetails";
 import { calendarDate } from "@/components/directory/utils";
-import { liveDirectory, type LiveSources, planLiveRequest } from "@/lib/integrations/records/livePlan";
+import { LIVE_UNAVAILABLE, liveDirectory, type LiveSources, planLiveRequest } from "@/lib/integrations/records/livePlan";
 import type { RecordsLiveDetails } from "@/lib/integrations/records/types";
 import type { DirectoryProfile, FamilyDirectoryFull, HouseholdFamilyMember, HouseholdMember } from "@/lib/types";
 import { churchValues } from "@/supabase/functions/_shared/records-copy";
@@ -240,5 +240,14 @@ describe("live details", () => {
     expect(someUnavailable(live, "anniversary")).toBe(true);
     const merged = applyLiveDetails(blank.people, blank.families, live);
     expect(birthdayEntries(merged.members, merged.families, true).map((e) => e.key)).toEqual([`profile-${EVE}`]);
+  });
+
+  it("say so for both lists when nothing could be read, without changing a row", () => {
+    const { people, families } = rows(() => ({}), () => ({}), {});
+    expect(someUnavailable(LIVE_UNAVAILABLE, "birthday")).toBe(true);
+    expect(someUnavailable(LIVE_UNAVAILABLE, "anniversary")).toBe(true);
+    const merged = applyLiveDetails(people, families, LIVE_UNAVAILABLE);
+    expect(merged.members).toEqual(people);
+    expect(merged.families).toEqual(families);
   });
 });

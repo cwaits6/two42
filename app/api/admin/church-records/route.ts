@@ -5,7 +5,7 @@ import { parseRecordsAddress } from "@/lib/integrations/records/address";
 import { sealKey } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
-import { providerFor } from "@/lib/integrations/records/providers";
+import { liveSourceOf, providerFor } from "@/lib/integrations/records/providers";
 import { deleteConnection, readConnection, saveConnection } from "@/lib/integrations/records/store";
 
 /**
@@ -35,7 +35,7 @@ function summary(connection: Awaited<ReturnType<typeof readConnection>>) {
     providerLabel: provider?.label ?? connection.provider,
     canCopy: !!provider?.copy,
     canSuggestHouseholds: !!provider?.copy?.households,
-    canShowLive: !!provider?.copy && !!provider.live,
+    canShowLive: liveSourceOf(provider) !== null,
   };
 }
 

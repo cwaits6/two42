@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordsError } from "./errors";
-import { liveDirectory, type LiveSources, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
+import { LIVE_UNAVAILABLE, liveDirectory, type LiveSources, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
 import type { RecordsLiveDetails } from "./types";
 
 const ORG = "00000000-0000-0000-0000-0000000000aa";
@@ -25,7 +25,10 @@ const person = (id: string, over: Partial<VisiblePerson> = {}): VisiblePerson =>
 const household = (id: string, over: Partial<VisibleHousehold> = {}): VisibleHousehold => ({
   id,
   address_line1: null,
+  address_line2: null,
   city: null,
+  state: null,
+  postal_code: null,
   anniversary_month: null,
   anniversary_day: null,
   family_members_list: [],
@@ -116,6 +119,17 @@ describe("planLiveRequest", () => {
     expect(child.canHide).toEqual({ person: VIEWER, household: null });
   });
 
+  it("leaves a household's own partial address alone, as the copy does", () => {
+    const planned = planLiveRequest({
+      viewer: VIEWER_ROW,
+      people: VISIBLE_PEOPLE,
+      households: [household(HOME, { state: "TX", postal_code: "78701" })],
+      sources: SOURCES,
+    });
+    expect(planned.families).toEqual([]);
+    expect(planned.planned.some((p) => p.field === "address")).toBe(false);
+  });
+
   it("asks for a child's details only for a child added from the records' suggestions", () => {
     expect(plan({ children: new Map() }).people).toEqual(["100", "101"]);
   });
@@ -165,7 +179,10 @@ const store = vi.hoisted(() => ({
   readLiveSources: vi.fn(),
 }));
 const provider = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock("./providers", () => ({ providerFor: (id: unknown) => (id === "rock" ? provider.current : null) }));
+vi.mock("./providers", async (actual) => ({
+  ...(await actual<typeof import("./providers")>()),
+  providerFor: (id: unknown) => (id === "rock" ? provider.current : null),
+}));
 const details = vi.hoisted(() => vi.fn());
 const tables = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 vi.mock("./store", () => store);
@@ -193,7 +210,7 @@ describe("readLiveDirectory", () => {
     vi.clearAllMocks();
     tables.data = { profiles_directory: VISIBLE_PEOPLE, families_directory_full: VISIBLE_HOUSEHOLDS, profiles: VIEWER_ROW };
     store.readMode.mockResolvedValue({ mode: "live", suggestChildren: true });
-    provider.current = { id: "rock", live: { details } };
+    provider.current = { id: "rock", copy: {}, live: { details } };
     store.readConnection.mockResolvedValue({ provider: "rock", baseUrl: "https://rock.example.org" });
     store.loadCredentials.mockResolvedValue({
       provider: provider.current,
@@ -218,8 +235,22 @@ describe("readLiveDirectory", () => {
   });
 
   it("is off for a provider that can't show details live", async () => {
-    provider.current = { id: "rock" };
-    expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+    for (const current of [{ id: "rock", copy: {} }, { id: "rock", live: { details } }]) {
+      provider.current = current;
+      expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+    }
+  });
+
+  it("answers wholly unavailable, never off, when two42's own reads fail in a church that shows details live", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    store.readLiveSources.mockRejectedValueOnce(new Error("sources"));
+    expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
+    store.readMode.mockRejectedValueOnce(new Error("mode"));
+    expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
+    tables.data = { ...tables.data, profiles: null };
+    expect(await readLiveDirectory(VIEWER)).toEqual(LIVE_UNAVAILABLE);
+    spy.mockRestore();
+    expect(details).not.toHaveBeenCalled();
   });
 
   it("with a key that can't be opened, answers unavailable details without asking the records", async () => {

@@ -5,9 +5,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
-import type { LiveDirectory, LiveDirectoryOn, LiveSlot } from "@/lib/integrations/records/livePlan";
-
-export type HideableField = "birthday" | "anniversary" | "address";
+import { LIVE_UNAVAILABLE, type HideableField, type LiveDirectory, type LiveDirectoryOn, type LiveSlot } from "@/lib/integrations/records/livePlan";
 
 export interface LiveControls {
   live: LiveDirectoryOn;
@@ -30,7 +28,8 @@ export function LiveDetailsProvider({ value, children }: { value: LiveControls |
 /**
  * Loads the live details once per directory, as one request, only when the
  * church shows details live. Never cached: the browser is asked not to keep
- * them, and the route answers no-store.
+ * them, and the route answers no-store. A failed request reads as unavailable,
+ * never as a church with nothing live, so no detail looks absent when it isn't.
  */
 export function useLiveDirectory(enabled: boolean) {
   const [live, setLive] = useState<LiveDirectory | null>(null);
@@ -42,13 +41,13 @@ export function useLiveDirectory(enabled: boolean) {
     if (!enabled) return;
     let cancelled = false;
     fetch("/api/directory/live", { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<LiveDirectory>) : null))
+      .then((res) => (res.ok ? (res.json() as Promise<LiveDirectory>) : LIVE_UNAVAILABLE))
       .then((body) => {
         if (!cancelled) setLive(body);
       })
       .catch((err) => {
         logError("Directory live details load failed", err, { route: "/directory" });
-        if (!cancelled) setLive(null);
+        if (!cancelled) setLive(LIVE_UNAVAILABLE);
       });
     return () => {
       cancelled = true;
@@ -90,18 +89,30 @@ export const isUnavailable = (slot: LiveSlot<unknown> | undefined) => slot?.stat
 /** What a detail from the church's records shows when the records can't be reached. */
 export const NOT_AVAILABLE = "Not available right now";
 
+/** On a card, when nothing about its details from the church's records could be read. */
+export function LiveUnavailableNote() {
+  if (!useLiveControls()?.live.unavailable) return null;
+  return (
+    <p className="text-base text-muted-foreground" role="status">
+      Details from your church&apos;s records: {NOT_AVAILABLE}
+    </p>
+  );
+}
+
 /** The viewer's own detail shown live: hide it from the directory, or show it again. */
 export function LiveHideButton({ field, hidden }: { field: HideableField; hidden: boolean }) {
   const controls = useLiveControls();
   if (!controls) return null;
+  const label = hidden ? "Show again" : "Don't show";
   return (
     <button
       type="button"
+      aria-label={`${label}: ${field}`}
       className="ml-2 inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 disabled:opacity-50"
       disabled={controls.busy}
       onClick={() => controls.hide(field, !hidden)}
     >
-      {hidden ? "Show again" : "Don't show"}
+      {label}
     </button>
   );
 }

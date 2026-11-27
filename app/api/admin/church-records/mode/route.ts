@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { logError } from "@/lib/log";
 import { gateError, hidden, recordsSecretOrNull } from "@/lib/integrations/records/http";
-import { providerFor } from "@/lib/integrations/records/providers";
+import { liveSourceOf, providerFor } from "@/lib/integrations/records/providers";
 import { isRecordsMode, liveCopiedCount, readConnection, readMode, saveMode } from "@/lib/integrations/records/store";
 
 /**
@@ -21,10 +21,9 @@ import { isRecordsMode, liveCopiedCount, readConnection, readMode, saveMode } fr
  */
 
 
-async function liveProvider(orgId: string) {
+async function liveSource(orgId: string) {
   const connection = await readConnection(orgId);
-  const provider = connection && providerFor(connection.provider);
-  return provider?.live && provider.copy ? provider : null;
+  return connection && liveSourceOf(providerFor(connection.provider));
 }
 
 export async function GET() {
@@ -32,7 +31,7 @@ export async function GET() {
   const gate = await requireOrgAdmin();
   if (!gate.ok) return gateError(gate.status);
   try {
-    if (!(await liveProvider(gate.orgId))) return hidden();
+    if (!(await liveSource(gate.orgId))) return hidden();
     const [{ mode }, copiedCount] = await Promise.all([readMode(gate.orgId), liveCopiedCount(gate.orgId)]);
     return NextResponse.json({ mode, copiedCount });
   } catch (err) {
@@ -51,7 +50,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Choose Copy into two42 or Live from your church's records." }, { status: 400 });
   }
   try {
-    if (!(await liveProvider(gate.orgId))) return hidden();
+    if (!(await liveSource(gate.orgId))) return hidden();
     const saved = await saveMode(gate.orgId, mode, gate.user.id);
     if (saved.outcome === "busy") {
       return NextResponse.json(

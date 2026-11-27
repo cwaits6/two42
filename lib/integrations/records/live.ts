@@ -12,8 +12,9 @@ import { logError, logWarn } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { RecordsError } from "./errors";
 import { loadRecordsSecret } from "./crypto";
-import { liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
-import { providerFor } from "./providers";
+import { ADDRESS_COLUMNS } from "@/supabase/functions/_shared/records-households";
+import { LIVE_UNAVAILABLE, liveDirectory, type LiveDirectory, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
+import { liveSourceOf, providerFor } from "./providers";
 import { loadCredentials, readConnection, readLiveSources, readMode } from "./store";
 import type { RecordsLiveDetails } from "./types";
 
@@ -23,7 +24,7 @@ const OFF: LiveDirectory = { mode: "off" };
 async function liveConnection(orgId: string) {
   const church = await readMode(orgId);
   if (church.mode !== "live") return null;
-  const source = providerFor((await readConnection(orgId))?.provider)?.live;
+  const source = liveSourceOf(providerFor((await readConnection(orgId))?.provider));
   return source ? { ...church, source } : null;
 }
 
@@ -55,8 +56,9 @@ export async function liveDirectoryOn(): Promise<boolean> {
  * The live details of everyone `viewerId` may see in the directory, from one
  * batch to the provider. "off" for a church that doesn't show details live,
  * without touching the provider. When the records can't be reached every
- * detail that would have come from them is unavailable, and the rest of the
- * directory is unaffected.
+ * detail that would have come from them is unavailable, and when two42's own
+ * reads fail once the church is known to show details live, the whole answer
+ * is; the rest of the directory is unaffected either way.
  */
 export async function readLiveDirectory(viewerId: string, today = new Date()): Promise<LiveDirectory> {
   const secret = loadRecordsSecret();
@@ -70,7 +72,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     connection = await liveConnection(orgId);
   } catch (err) {
     logError("Church records live mode read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
-    return OFF;
+    return LIVE_UNAVAILABLE;
   }
   if (!connection) return OFF;
 
@@ -78,13 +80,13 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     supabase.from("profiles_directory").select("id, family_id, relationship, birth_month, birth_day"),
     supabase
       .from("families_directory_full")
-      .select("id, address_line1, city, anniversary_month, anniversary_day, family_members_list"),
+      .select(`id, ${ADDRESS_COLUMNS.join(", ")}, anniversary_month, anniversary_day, family_members_list`),
     supabase.from("profiles").select("id, family_id, relationship").eq("id", viewerId).maybeSingle(),
   ]);
   const readError = people.error ?? households.error ?? viewer.error;
   if (readError || !viewer.data) {
     logError("Church records live directory read failed", readError ?? undefined, { route: "/api/directory/live", ids: { org: orgId } });
-    return OFF;
+    return LIVE_UNAVAILABLE;
   }
   const visiblePeople = (people.data ?? []) as VisiblePerson[];
   const visibleHouseholds = ((households.data ?? []) as unknown as VisibleHousehold[]).map((h) => ({
@@ -105,7 +107,7 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     );
   } catch (err) {
     logError("Church records live sources read failed", err, { route: "/api/directory/live", ids: { org: orgId } });
-    return OFF;
+    return LIVE_UNAVAILABLE;
   }
 
   const plan = planLiveRequest({ viewer: viewer.data, people: visiblePeople, households: visibleHouseholds, sources });

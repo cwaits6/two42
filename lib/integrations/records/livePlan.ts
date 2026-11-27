@@ -3,8 +3,8 @@
 // RLS-scoped directory read, so the provider is asked about exactly the people
 // the viewer may already see and no one else. Values pass through here on the
 // way to the viewer and are never stored, logged or put in an error.
-import { formDate, formGraduationYear, type ValueState } from "@/supabase/functions/_shared/records-copy";
-import { householdChurchValues } from "@/supabase/functions/_shared/records-households";
+import { formDate, formGraduationYear, isEmptyValue, pick, type Columns, type ValueState } from "@/supabase/functions/_shared/records-copy";
+import { ADDRESS_COLUMNS, householdChurchValues } from "@/supabase/functions/_shared/records-households";
 import type { RecordsLiveDetails } from "./types";
 
 /** "shown": the records' value. "empty": the records have none. "hidden": the viewer hid it and may show it again. */
@@ -23,13 +23,9 @@ export interface LiveAnniversary extends LiveDate {
   year: number | null;
 }
 
-export interface LiveAddress {
-  address_line1: string;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  postal_code: string | null;
-}
+type AddressColumns = Record<(typeof ADDRESS_COLUMNS)[number], string | null>;
+
+export type LiveAddress = AddressColumns & { address_line1: string };
 
 export interface LivePersonSlots {
   birthday?: LiveSlot<LiveDate>;
@@ -47,6 +43,8 @@ export interface LiveChildSlots {
 
 export interface LiveDirectoryOn {
   mode: "live";
+  /** Nothing could be read, from the records or from two42, so no detail is known to be live or not; every slot is then empty. */
+  unavailable: boolean;
   /** By profile id. */
   people: Record<string, LivePersonSlots>;
   /** By household id. */
@@ -60,6 +58,16 @@ export interface LiveDirectoryOn {
 /** "off": the church shows nothing live, and the directory is exactly as without church records. */
 export type LiveDirectory = { mode: "off" } | LiveDirectoryOn;
 
+/** A church that shows details live, when nothing about them could be read. */
+export const LIVE_UNAVAILABLE: LiveDirectoryOn = {
+  mode: "live",
+  unavailable: true,
+  people: {},
+  households: {},
+  children: {},
+  canHide: { person: null, household: null },
+};
+
 export interface VisiblePerson {
   id: string;
   family_id: string | null;
@@ -68,10 +76,8 @@ export interface VisiblePerson {
   birth_day: number | null;
 }
 
-export interface VisibleHousehold {
+export interface VisibleHousehold extends AddressColumns {
   id: string;
-  address_line1: string | null;
-  city: string | null;
   anniversary_month: number | null;
   anniversary_day: number | null;
   family_members_list: {
@@ -105,7 +111,11 @@ type Planned =
   | { kind: "household"; id: string; field: "address"; from: string }
   | { kind: "child"; id: string; field: "birthday" | "grade"; from: string };
 
-type HiddenSlot = { kind: "person" | "household"; id: string; field: "birthday" | "anniversary" | "address" };
+/** The live details a member may hide from the directory; records_live_hide() accepts these. */
+export const HIDEABLE_FIELDS = ["birthday", "anniversary", "address"] as const;
+export type HideableField = (typeof HIDEABLE_FIELDS)[number];
+
+type HiddenSlot = { kind: "person" | "household"; id: string; field: HideableField };
 
 export interface LivePlan {
   /** External person ids to ask for: only visible, linked people and visible children. */
@@ -168,9 +178,10 @@ export function planLiveRequest(input: {
 
     const family = sources.householdLinks.get(household.id);
     if (sources.fields.has("address") && family) {
+      const own: AddressColumns = household;
       const state = sources.addressStates.get(household.id);
       if (state === "cleared") hide({ kind: "household", id: household.id, field: "address" });
-      else if (state !== "changed" && !household.address_line1 && !household.city) {
+      else if (state !== "changed" && isEmptyValue(pick(own, ADDRESS_COLUMNS))) {
         planned.push({ kind: "household", id: household.id, field: "address", from: family });
       }
     }
@@ -193,6 +204,17 @@ export function planLiveRequest(input: {
   };
 }
 
+function liveAddress(columns: Columns): LiveAddress | null {
+  const text = (c: (typeof ADDRESS_COLUMNS)[number]) => {
+    const v = columns[c];
+    return typeof v === "string" && v ? v : null;
+  };
+  const line1 = text("address_line1");
+  return line1
+    ? { address_line1: line1, address_line2: text("address_line2"), city: text("city"), state: text("state"), postal_code: text("postal_code") }
+    : null;
+}
+
 const date = (d: { month: number | null; day: number | null }): LiveSlot<LiveDate> => {
   const { month, day } = formDate({ ...d, year: null });
   return month && day ? { state: "shown", value: { month, day } } : { state: "empty" };
@@ -205,7 +227,7 @@ const date = (d: { month: number | null; day: number | null }): LiveSlot<LiveDat
  * unavailable.
  */
 export function liveDirectory(plan: LivePlan, details: RecordsLiveDetails | null, today: Date): LiveDirectoryOn {
-  const result: LiveDirectoryOn = { mode: "live", people: {}, households: {}, children: {}, canHide: plan.canHide };
+  const result: LiveDirectoryOn = { mode: "live", unavailable: false, people: {}, households: {}, children: {}, canHide: plan.canHide };
   const slots = (kind: Planned["kind"] | HiddenSlot["kind"], id: string): Record<string, unknown> => {
     const bucket = kind === "person" ? result.people : kind === "household" ? result.households : result.children;
     return ((bucket as Record<string, Record<string, unknown>>)[id] ??= {});
@@ -219,10 +241,8 @@ export function liveDirectory(plan: LivePlan, details: RecordsLiveDetails | null
     }
     if (slot.kind === "household" && slot.field === "address") {
       const address = details.families.get(slot.from);
-      const value = address ? householdChurchValues({ address, homePhone: null }, () => null).address : null;
-      target.address = value?.address_line1
-        ? { state: "shown", value: value as unknown as LiveAddress }
-        : { state: "empty" };
+      const value = address ? liveAddress(householdChurchValues({ address, homePhone: null }, () => null).address) : null;
+      target.address = value ? { state: "shown", value } : { state: "empty" };
       continue;
     }
     const person = details.people.get(slot.from);

@@ -1,5 +1,5 @@
 import { rockProvider } from "@/lib/integrations/rock/provider";
-import type { RecordsProvider, RecordsProviderId } from "./types";
+import type { RecordsLiveSource, RecordsProvider, RecordsProviderId } from "./types";
 
 const PROVIDERS: Record<RecordsProviderId, RecordsProvider> = { rock: rockProvider };
 
@@ -11,4 +11,12 @@ export function providerFor(id: unknown): RecordsProvider | null {
 /** Every provider a church admin can connect, in the order the connect form offers them. */
 export function listProviders(): RecordsProvider[] {
   return Object.values(PROVIDERS);
+}
+
+/**
+ * The provider's live reads, or null when it can't show details live. Live mode
+ * needs the copy too: switching back to copy fills the details in through it.
+ */
+export function liveSourceOf(provider: RecordsProvider | null | undefined): RecordsLiveSource | null {
+  return provider?.copy && provider.live ? provider.live : null;
 }

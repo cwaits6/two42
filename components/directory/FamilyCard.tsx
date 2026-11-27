@@ -12,7 +12,7 @@ import { DirRow, PhoneText } from "@/components/directory/DirRow";
 import { isOwnHousehold } from "@/components/directory/ownEntry";
 import { profileHouseholdHref } from "@/lib/profileTabs";
 import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
-import { LiveHideButton, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
+import { LiveHideButton, LiveUnavailableNote, NOT_AVAILABLE, useLiveControls } from "@/components/directory/LiveDetailsContext";
 import type {
   DirectoryProfile,
   FamilyDirectoryFull,
@@ -104,6 +104,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId, t
       <h2 className="font-serif text-2xl md:text-3xl font-medium text-foreground">
         {family.family_name}
       </h2>
+      <LiveUnavailableNote />
 
       <div className="space-y-2.5">
         {members.map((m) => {
