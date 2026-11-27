@@ -112,7 +112,7 @@ export function RecordsMode({ label, onChange }: { label: string; onChange: (mod
         <p className="text-lg">
           {data.mode === "copy"
             ? `Details are copied from ${label} into two42 and kept up to date every night.`
-            : `Address, birthday, anniversary and a child's grade are read from ${label} each time someone opens the directory, only for people they can already see, and are never stored in two42.`}
+            : `The address, birthday, anniversary and child's grade you turn on under What two42 copies are read from ${label} each time someone opens the directory, only for people they can already see, and are never stored in two42.`}
         </p>
         <p className="text-base text-muted-foreground">
           Either way, two42 keeps each linked person&apos;s name, sign-in email, phones, gender and photo. If your church

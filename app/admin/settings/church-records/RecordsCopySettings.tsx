@@ -197,7 +197,7 @@ export function RecordsCopySettings({ label, live }: { label: string; live: bool
                     value={choices[field] ?? "off"}
                     onChange={(value) => setChoices((prev) => ({ ...prev, [field]: value }))}
                   />
-                  {live && isLiveOnly(field) && (
+                  {live && isLiveOnly(field) && (choices[field] ?? "off") !== "off" && (
                     <p className="text-base font-medium text-muted-foreground">
                       Shown live from {label}, never stored in two42.
                     </p>

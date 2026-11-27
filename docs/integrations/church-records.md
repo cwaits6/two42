@@ -580,6 +580,9 @@ T42-274. A church admin chooses **Live from your church's records** under
   path. Grades are fetched only for children added from a suggestion while
   the church suggests children: a linked person's own grade row is on no
   directory screen.
+- **Field settings gate it.** Only a live-only field the church turns on under
+  **What two42 copies** is read live; one set to "Not from your church's
+  records" is neither read nor marked live on the admin's page.
 - **Hiding.** A live value is never in two42 for a member to leave out, so
   `records_live_hide()` records a `cleared` source instead: a member's own
   birthday, or, for a household's primary or spouse, its address and
@@ -588,14 +591,19 @@ T42-274. A church admin chooses **Live from your church's records** under
   member's if the church switches back to copy.
 - **Not reachable.** When the provider fails, or the key can't be opened,
   every detail that would have come from it shows "Not available right now";
-  the rest of the directory is unaffected. The log line carries the error's
-  kind only.
+  the rest of the directory is unaffected. When two42's own reads fail once
+  the church is known to be live (the mode, the directory, the sources), or
+  the request itself fails, the answer is `LIVE_UNAVAILABLE`: each entry and
+  both lists say their details from the records aren't available, rather than
+  showing none. The log line carries the error's kind only.
 - **Never cached.** The route answers `Cache-Control: private, no-store` and
   is dynamic, the browser fetches it with `cache: "no-store"`, and the
   provider's requests are `no-store`. Nothing is kept server-side. Caching on
   the person's device is T42-275, not built.
 - **Providers.** Live is the optional `live` capability of `RecordsProvider`
-  (`RecordsLiveSource.details()`); shared code asks whether a provider has it.
+  (`RecordsLiveSource.details()`); shared code asks `liveSourceOf()` in
+  `lib/integrations/records/providers.ts`, which also needs `copy`, since
+  switching back fills the details in through it.
   Rock's is `lib/integrations/rock/live.ts`.
 
 ### What is read
