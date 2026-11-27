@@ -9,7 +9,7 @@ import {
   readIntakeStatus,
   saveIntakeSettings,
 } from "@/lib/integrations/records/intake";
-import { badRequest, type IntakeContext, intakeContext, providerRefusal, serverError, writeKey } from "./context";
+import { badRequest, connectionChanged, type IntakeContext, intakeContext, providerRefusal, serverError, writeKey } from "./context";
 
 /**
  * /api/admin/church-records/intake — sending people who join two42 to the
@@ -116,9 +116,7 @@ export async function PUT(request: Request) {
     logError("Church records new people save failed", err, { route: "/api/admin/church-records/intake", step: "save", ids: { org: ctx.orgId } });
     return serverError("Couldn't save sending new people.");
   }
-  if (saved === "connection_changed") {
-    return NextResponse.json({ error: "The connection changed. Reload and try again." }, { status: 409 });
-  }
+  if (saved === "connection_changed") return connectionChanged();
 
   try {
     return NextResponse.json<IntakeSaveAnswer>({ intake: await answer(ctx) });

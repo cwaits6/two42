@@ -56,6 +56,10 @@ export function serverError(message: string) {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
+export function connectionChanged() {
+  return NextResponse.json({ error: "The connection changed. Reload and try again." }, { status: 409 });
+}
+
 export function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
@@ -70,6 +74,8 @@ export async function writeKey(ctx: IntakeContext, body: Record<string, unknown>
   if (!typed) {
     const saved = await loadIntakeCredentials(ctx.orgId, ctx.secret);
     if (!saved) return badRequest(`Paste the ${ctx.intake.setup.keyLabel.toLowerCase()}.`);
+    // The saved key belongs to the connection it was loaded with; never send it to another one's address.
+    if (saved.connectionId !== ctx.connectionId) return connectionChanged();
     key = saved.creds.key;
   } else if (!RECORDS_KEY_SHAPE.test(typed)) {
     return badRequest(`Paste the ${ctx.intake.setup.keyLabel.toLowerCase()} from ${ctx.provider.label}, with no spaces.`);

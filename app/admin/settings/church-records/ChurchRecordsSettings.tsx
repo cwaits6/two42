@@ -143,7 +143,7 @@ function PeopleSettings({ connection, providers }: { connection: Connection; pro
       )}
       {intakeSetup && (
         <RecordsIntake
-          key={`intake:${connection.provider}${connection.baseUrl}`}
+          key={`intake:${connection.provider}${connection.baseUrl}${connection.keyHint}`}
           label={connection.providerLabel}
           setup={intakeSetup}
         />

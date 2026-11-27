@@ -57,12 +57,14 @@ export function SetupAccountForm() {
   const [attempt, setAttempt] = useState(0);
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
   const [formError, setFormError] = useState<ReactNode>(null);
-  const [share, setShare] = useState(false);
+  // Held with the link it was given for, so a different link starts unticked.
+  const [sharedFor, setSharedFor] = useState<string | null>(null);
   const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
+  const share = token !== null && sharedFor === token;
 
   useEffect(() => {
     async function verifyToken() {
@@ -254,7 +256,7 @@ export function SetupAccountForm() {
           onEdit={(field) => setErrors((prev) => ({ ...prev, [field]: undefined }))}
         />
         {view.link.shareWith && (
-          <ShareDetailsRow churchName={view.link.shareWith} checked={share} onChange={setShare} />
+          <ShareDetailsRow churchName={view.link.shareWith} checked={share} onChange={(on) => setSharedFor(on ? token : null)} />
         )}
         {formError && (
           <p role="alert" className="text-base text-destructive">

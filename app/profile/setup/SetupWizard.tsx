@@ -58,6 +58,8 @@ interface PendingPerson extends PersonDraft {
 }
 
 /** Each step's label in the progress list is also its heading. */
+const INTAKE_TIMEOUT_MS = 10_000;
+
 const STEPS = ["About you", "Gender", "Contact", "Household", "Work"] as const;
 type StepName = (typeof STEPS)[number];
 
@@ -523,13 +525,23 @@ export function SetupWizard({
         .eq("id", profile.id);
       if (setupError) throw setupError;
 
-      // Sent by the server after the response; setup finishes whatever happens to it.
+      // Sent by the server after the response; setup finishes whatever happens
+      // to a send, but stays put until a withdrawn consent is confirmed, since
+      // a finished setup can't be reopened to withdraw it.
       if (share && (shareDetails || share.consented)) {
-        await fetch("/api/church-records/intake", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ share: shareDetails }),
-        }).catch((err) => logWarn("Sharing details with the church office failed", err, { route: "/profile/setup" }));
+        let saved = false;
+        try {
+          const res = await fetch("/api/church-records/intake", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ share: shareDetails }),
+            signal: AbortSignal.timeout(INTAKE_TIMEOUT_MS),
+          });
+          saved = res.ok;
+        } catch (err) {
+          logWarn("Sharing details with the church office failed", err, { route: "/profile/setup" });
+        }
+        if (!saved && !shareDetails) throw new Error("church records consent withdraw failed");
       }
 
       if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);

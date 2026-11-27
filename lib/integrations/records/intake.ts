@@ -57,6 +57,7 @@ export async function readIntakeSettings(orgId: string): Promise<IntakeSettings 
 }
 
 export interface IntakeCredentials {
+  connectionId: string;
   provider: RecordsProvider;
   intake: RecordsIntake;
   creds: RecordsCredentials;
@@ -84,6 +85,7 @@ export async function loadIntakeCredentials(orgId: string, secret: Buffer): Prom
   const intake = provider?.intake;
   if (!provider || !intake) return null;
   return {
+    connectionId: connection.data.connection_id,
     provider,
     intake,
     creds: {

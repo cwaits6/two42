@@ -142,10 +142,17 @@ describe("/api/admin/church-records/intake", () => {
   });
 
   it("keeps the saved key when none is given", async () => {
-    intakeStore.loadIntakeCredentials.mockResolvedValue({ creds: { baseUrl: CONNECTION.baseUrl, key: WRITE_KEY } });
+    intakeStore.loadIntakeCredentials.mockResolvedValue({ connectionId: "c1", creds: { baseUrl: CONNECTION.baseUrl, key: WRITE_KEY } });
     intakeStore.readIntakeSettings.mockResolvedValue(SETTINGS);
     expect((await put({ destinationId: "42" })).status).toBe(200);
     expect(stubIntake.checkDestination).toHaveBeenCalledWith({ baseUrl: CONNECTION.baseUrl, key: WRITE_KEY }, "42");
+  });
+
+  it("never sends a saved key from a newer connection to the address it read", async () => {
+    intakeStore.loadIntakeCredentials.mockResolvedValue({ connectionId: "c2", creds: { baseUrl: "https://other.example.test", key: WRITE_KEY } });
+    expect((await put({ destinationId: "42" })).status).toBe(409);
+    expect(stubIntake.checkDestination).not.toHaveBeenCalled();
+    expect(intakeStore.saveIntakeSettings).not.toHaveBeenCalled();
   });
 
   it("answers saved, not a failure, when the setting saved but couldn't be read back", async () => {

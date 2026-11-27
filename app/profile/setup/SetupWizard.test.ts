@@ -349,6 +349,16 @@ describe("sharing details with the church office in the setup wizard", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/church-records/intake", expect.objectContaining({ body: '{"share":false}' }));
   });
 
+  it("stays on setup with an error when a withdrawal isn't confirmed, so Finish can try again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    await mountShared({ churchName: "Sample Church", consented: true });
+    await act(async () => field("share_details").click());
+    await finish();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("Finish setup");
+  });
+
   it("finishes setup when the request fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
     await mountShared({ churchName: "Sample Church", consented: false });
