@@ -55,3 +55,16 @@ describe("safeFetch", () => {
     await expect(safeFetch("https://[::1]/api/People")).rejects.toBeInstanceOf(RefusedAddressError);
   });
 });
+
+describe("safeFetch's methods", () => {
+  it("refuses any method but GET and POST, before any connection", async () => {
+    await expect(safeFetch("https://10.0.0.5/api/People", { method: "PUT" })).rejects.toThrow("Only GET and POST");
+    await expect(safeFetch("https://10.0.0.5/api/People", { method: "DELETE" })).rejects.toThrow("Only GET and POST");
+  });
+
+  it("refuses a request body, before any connection", async () => {
+    await expect(safeFetch("https://10.0.0.5/api/Workflows", { method: "POST", body: "{}" })).rejects.toThrow(
+      "Request bodies aren't sent.",
+    );
+  });
+});

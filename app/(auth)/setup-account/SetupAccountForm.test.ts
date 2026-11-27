@@ -171,3 +171,43 @@ describe("SetupAccountForm submit", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 });
+
+describe("SetupAccountForm sharing details with the church office", () => {
+  async function submitShared(link: SetupLink, tick: boolean) {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(link))
+      .mockResolvedValueOnce(Response.json({ redirect: "/dashboard" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(SetupAccountForm)));
+    const box = container.querySelector<HTMLInputElement>("#share_details");
+    if (tick) await act(async () => box!.click());
+    for (const id of ["password", "confirmPassword"]) {
+      container.querySelector<HTMLInputElement>(`#${id}`)!.value = PASSWORD;
+    }
+    await act(async () => {
+      container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    return { box, body: JSON.parse(fetchMock.mock.calls[1][1].body as string) };
+  }
+
+  it("shows the box unticked, with the church's name, only when the church asks", async () => {
+    await render(async () => Response.json({ name: "Ada", email: "ada@example.com", shareWith: "Sample Church" }));
+    const box = container.querySelector<HTMLInputElement>("#share_details");
+    expect(box?.checked).toBe(false);
+    expect(container.textContent).toContain("Share my details with Sample Church's office");
+  });
+
+  it("has no box when the church doesn't send new people", async () => {
+    await render(async () => Response.json({ name: "Ada", email: "ada@example.com" }));
+    expect(container.querySelector("#share_details")).toBeNull();
+  });
+
+  it("sends the person's choice with the password", async () => {
+    const link = { name: "Ada", email: "ada@example.com", shareWith: "Sample Church" };
+    expect((await submitShared(link, true)).body.share).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    expect((await submitShared(link, false)).body.share).toBe(false);
+  });
+});

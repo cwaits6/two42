@@ -16,10 +16,11 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { logError } from "@/lib/log";
-import type { RecordsConnectStep } from "@/lib/integrations/records/types";
+import type { RecordsConnectStep, RecordsIntakeSetup } from "@/lib/integrations/records/types";
 import { PersonLinks } from "./PersonLinks";
 import { RecordsCopySettings } from "./RecordsCopySettings";
 import { RecordsHouseholds } from "./RecordsHouseholds";
+import { RecordsIntake } from "./RecordsIntake";
 import { RecordsMode } from "./RecordsMode";
 import { call, errorText } from "./requests";
 
@@ -42,6 +43,8 @@ export interface ProviderChoice {
   id: string;
   label: string;
   connect: RecordsConnectStep;
+  /** How the provider asks for sending new people, when it can. */
+  intake: RecordsIntakeSetup | null;
 }
 
 export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice[] }) {
@@ -76,7 +79,7 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
     <PageContainer size="reading">
       <PageHeader
         title="Church records"
-        subtitle="Connect the software your church keeps its records in, link people here to their records, and choose what two42 copies from them. two42 only reads from it."
+        subtitle="Connect the software your church keeps its records in, link people here to their records, and choose what two42 copies from them. two42 only reads from it, unless you turn on sending new people."
         backHref="/admin/settings"
         backLabel="Back to Church settings"
       />
@@ -98,14 +101,14 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="people" keepMounted className="space-y-8">
-                <PeopleSettings connection={connection} />
+                <PeopleSettings connection={connection} providers={providers} />
               </TabsContent>
               <TabsContent value="households">
                 <RecordsHouseholds key={connection.provider + connection.baseUrl} label={connection.providerLabel} />
               </TabsContent>
             </Tabs>
           ) : (
-            <PeopleSettings connection={connection} />
+            <PeopleSettings connection={connection} providers={providers} />
           )}
         </div>
       ) : (
@@ -115,8 +118,9 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
   );
 }
 
-function PeopleSettings({ connection }: { connection: Connection }) {
+function PeopleSettings({ connection, providers }: { connection: Connection; providers: ProviderChoice[] }) {
   const [mode, setMode] = useState<Mode>("copy");
+  const intakeSetup = providers.find((p) => p.id === connection.provider)?.intake;
   const [modeSaves, setModeSaves] = useState(0);
   return (
     <>
@@ -135,6 +139,13 @@ function PeopleSettings({ connection }: { connection: Connection }) {
           label={connection.providerLabel}
           live={connection.canShowLive && mode === "live"}
           reloads={modeSaves}
+        />
+      )}
+      {intakeSetup && (
+        <RecordsIntake
+          key={`intake:${connection.provider}${connection.baseUrl}`}
+          label={connection.providerLabel}
+          setup={intakeSetup}
         />
       )}
     </>

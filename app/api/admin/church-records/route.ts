@@ -4,7 +4,7 @@ import { logError } from "@/lib/log";
 import { parseRecordsAddress } from "@/lib/integrations/records/address";
 import { sealKey } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
-import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
+import { gateError, hidden, RECORDS_KEY_SHAPE, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { liveSourceOf, providerFor } from "@/lib/integrations/records/providers";
 import { deleteConnection, readConnection, saveConnection } from "@/lib/integrations/records/store";
 
@@ -23,9 +23,6 @@ import { deleteConnection, readConnection, saveConnection } from "@/lib/integrat
  *
  * The org is the caller's own, from requireOrgAdmin(), never the request.
  */
-
-// Rock generates 24-character keys; an admin can type their own.
-const KEY_SHAPE = /^[\x21-\x7e]{8,200}$/;
 
 function summary(connection: Awaited<ReturnType<typeof readConnection>>) {
   if (!connection) return null;
@@ -67,7 +64,7 @@ export async function PUT(request: Request) {
   const address = parseRecordsAddress(typeof body?.address === "string" ? body.address : "", provider.label);
   if (!address.ok) return NextResponse.json({ error: address.reason }, { status: 400 });
   const key = typeof body?.key === "string" ? body.key.trim() : "";
-  if (!KEY_SHAPE.test(key)) {
+  if (!RECORDS_KEY_SHAPE.test(key)) {
     return NextResponse.json({ error: `Paste the key from ${provider.label}, with no spaces.` }, { status: 400 });
   }
 

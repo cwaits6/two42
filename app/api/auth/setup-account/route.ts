@@ -18,6 +18,8 @@ import {
   setupUserId,
 } from "../setup-link";
 import type { SetupAccountResponse } from "../setup-response";
+import { recordsIntegrationEnabled } from "@/lib/integrations/records/enabled";
+import { recordConsent } from "@/lib/integrations/records/intake";
 
 const invalid = () => NextResponse.json<SetupAccountResponse>(INVALID_LINK, { status: 404 });
 const failed = () =>
@@ -26,7 +28,7 @@ const logAccountLookup = (error: unknown) =>
   logError("Setup account: account lookup failed", error, { route: "/api/auth/setup-account" });
 
 /**
- * POST /api/auth/setup-account — { token, password }
+ * POST /api/auth/setup-account — { token, password, share? }
  *
  * Creates the account a setup link was sent for, already confirmed, so the
  * form can sign the person in straight away whatever the project's
@@ -37,6 +39,10 @@ const logAccountLookup = (error: unknown) =>
  * consumed last so that any earlier failure leaves it live: a retry finds the
  * account under the link's derived id, sets the password just typed, and
  * finishes the remaining steps.
+ *
+ * `share: true` records the person's consent to be sent to their church's
+ * records, once the account is set up; nothing is sent until profile setup,
+ * and a failure to record it never stops the account.
  */
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
@@ -44,6 +50,7 @@ export async function POST(request: Request) {
   if (!token) return invalid();
 
   const rawPassword = (body as { password?: unknown }).password;
+  const share = (body as { share?: unknown }).share === true;
   const password = typeof rawPassword === "string" ? rawPassword : "";
   const passwordError = passwordFieldErrors(password, password).password;
   if (passwordError) {
@@ -276,6 +283,12 @@ export async function POST(request: Request) {
   }
   if (!(await consumeLink(true))) {
     return failed();
+  }
+
+  if (share && recordsIntegrationEnabled()) {
+    await recordConsent(orgId, userId).catch((err) =>
+      logError("Setup account: saving the records consent failed", err, { route: "/api/auth/setup-account", ids }),
+    );
   }
 
   return NextResponse.json<SetupAccountResponse>({

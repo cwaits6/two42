@@ -1,5 +1,5 @@
 import { rockProvider } from "@/lib/integrations/rock/provider";
-import type { RecordsLiveSource, RecordsProvider, RecordsProviderId } from "./types";
+import type { RecordsIntake, RecordsLiveSource, RecordsProvider, RecordsProviderId } from "./types";
 
 const PROVIDERS: Record<RecordsProviderId, RecordsProvider> = { rock: rockProvider };
 
@@ -19,4 +19,9 @@ export function listProviders(): RecordsProvider[] {
  */
 export function liveSourceOf(provider: RecordsProvider | null | undefined): RecordsLiveSource | null {
   return provider?.copy && provider.live ? provider.live : null;
+}
+
+/** The provider's way of sending new people, or null when it has none. */
+export function intakeOf(provider: RecordsProvider | null | undefined): RecordsIntake | null {
+  return provider?.intake ?? null;
 }

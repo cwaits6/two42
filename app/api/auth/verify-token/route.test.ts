@@ -14,6 +14,14 @@ vi.mock("@/lib/supabase/server", () => ({
 const logError = vi.fn();
 vi.mock("@/lib/log", () => ({ logError: (...args: unknown[]) => logError(...args) }));
 
+const intake = { on: vi.fn(), name: vi.fn() };
+vi.mock("@/lib/integrations/records/intake", () => ({
+  intakeOnFor: (...args: unknown[]) => intake.on(...args),
+  churchName: (...args: unknown[]) => intake.name(...args),
+}));
+const recordsOn = { value: true };
+vi.mock("@/lib/integrations/records/enabled", () => ({ recordsIntegrationEnabled: () => recordsOn.value }));
+
 const { POST } = await import("./route");
 
 const TOKEN = "b".repeat(64);
@@ -119,5 +127,42 @@ describe("POST /api/auth/verify-token", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual(INVALID);
     expect(createServiceClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/auth/verify-token — sharing details with the church office", () => {
+  beforeEach(() => {
+    recordsOn.value = true;
+    intake.on.mockReset().mockResolvedValue(false);
+    intake.name.mockReset().mockResolvedValue("Sample Church");
+  });
+
+  it("names the link's church only when it sends new people to its records", async () => {
+    fakeService({ row: LIVE });
+    expect(await (await post({ token: TOKEN })).json()).toEqual({ name: LIVE.name, email: LIVE.email });
+    expect(intake.on).toHaveBeenCalledWith(LIVE.org_id);
+    intake.on.mockResolvedValue(true);
+    expect(await (await post({ token: TOKEN })).json()).toEqual({
+      name: LIVE.name,
+      email: LIVE.email,
+      shareWith: "Sample Church",
+    });
+    expect(intake.name).toHaveBeenCalledWith(LIVE.org_id);
+  });
+
+  it("asks nothing while church records are off", async () => {
+    recordsOn.value = false;
+    fakeService({ row: LIVE });
+    expect(await (await post({ token: TOKEN })).json()).toEqual({ name: LIVE.name, email: LIVE.email });
+    expect(intake.on).not.toHaveBeenCalled();
+  });
+
+  it("leaves the box out, and the link valid, when the setting can't be read", async () => {
+    intake.on.mockRejectedValue(new Error("down"));
+    fakeService({ row: LIVE });
+    const res = await post({ token: TOKEN });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ name: LIVE.name, email: LIVE.email });
+    expect(logError).toHaveBeenCalledWith("Setup link: church records sending read failed", expect.anything(), expect.anything());
   });
 });

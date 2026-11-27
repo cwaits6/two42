@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
+import { ShareDetailsRow } from "@/components/profile/ShareDetailsRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { isChildWithoutAccount } from "@/lib/household";
@@ -41,7 +42,7 @@ import {
   type PersonDraft,
   type StepErrors,
 } from "./setupValidation";
-import { logError } from "@/lib/log";
+import { logError, logWarn } from "@/lib/log";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { forgetSetupRedirects } from "./actions";
 
@@ -246,6 +247,8 @@ interface SetupWizardProps {
   householdName: string | null;
   /** Which of their details came from the church's records, so a locked one isn't offered for editing. */
   records?: ProfileRecords | null;
+  /** Offered when the church sends new people to its records; `consented` when they ticked the box at sign-up. */
+  share?: { churchName: string; consented: boolean } | null;
 }
 
 export function SetupWizard({
@@ -253,6 +256,7 @@ export function SetupWizard({
   userEmail,
   householdName: initialHouseholdName,
   records = null,
+  share = null,
 }: SetupWizardProps) {
   const nameLocked = isLocked(records, "name");
   const genderLocked = isLocked(records, "gender");
@@ -285,6 +289,7 @@ export function SetupWizard({
     !!(profile.phone_home || profile.phone_work),
   );
   const [hideEmail, setHideEmail] = useState(profile.hide_email ?? false);
+  const [shareDetails, setShareDetails] = useState(share?.consented ?? false);
 
   const [gender, setGender] = useState<Gender | null>(profile.gender);
 
@@ -517,6 +522,15 @@ export function SetupWizard({
         .update({ setup_completed: true })
         .eq("id", profile.id);
       if (setupError) throw setupError;
+
+      // Sent by the server after the response; setup finishes whatever happens to it.
+      if (share && (shareDetails || share.consented)) {
+        await fetch("/api/church-records/intake", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ share: shareDetails }),
+        }).catch((err) => logWarn("Sharing details with the church office failed", err, { route: "/profile/setup" }));
+      }
 
       if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
@@ -815,6 +829,13 @@ export function SetupWizard({
                     />
                     <FieldError fieldId="phone_work" message={errors.phone_work} />
                   </div>
+                </>
+              )}
+
+              {share && (
+                <>
+                  <Separator />
+                  <ShareDetailsRow churchName={share.churchName} checked={shareDetails} onChange={setShareDetails} />
                 </>
               )}
             </>

@@ -10,6 +10,7 @@ import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ErrorState } from "@/components/states/ErrorState";
+import { ShareDetailsRow } from "@/components/profile/ShareDetailsRow";
 import { AccountAgeNotice } from "../_components/AccountAgeNotice";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
@@ -56,6 +57,7 @@ export function SetupAccountForm() {
   const [attempt, setAttempt] = useState(0);
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
   const [formError, setFormError] = useState<ReactNode>(null);
+  const [share, setShare] = useState(false);
   const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
@@ -94,7 +96,7 @@ export function SetupAccountForm() {
       }
 
       const link: SetupLink = await res.json();
-      setView({ kind: "ready", link: { name: link.name, email: link.email } });
+      setView({ kind: "ready", link: { name: link.name, email: link.email, shareWith: link.shareWith } });
     }
     verifyToken().catch((err) => {
       logError("Failed to verify the account setup link", err, { route: "/setup-account" });
@@ -125,7 +127,7 @@ export function SetupAccountForm() {
       res = await fetch("/api/auth/setup-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password, ...(link.shareWith ? { share } : {}) }),
       });
       body = await res.json().catch(() => ({}));
     } catch (err) {
@@ -251,6 +253,9 @@ export function SetupAccountForm() {
           errors={errors}
           onEdit={(field) => setErrors((prev) => ({ ...prev, [field]: undefined }))}
         />
+        {view.link.shareWith && (
+          <ShareDetailsRow churchName={view.link.shareWith} checked={share} onChange={setShare} />
+        )}
         {formError && (
           <p role="alert" className="text-base text-destructive">
             {formError}
