@@ -521,6 +521,7 @@ export function SetupWizard({
       // Sent by the server after the response; setup finishes whatever happens
       // to a send, but a withdrawal must be confirmed before setup is marked
       // complete, since a finished setup can't be reopened to withdraw it.
+      let alreadySent = false;
       if (share && (shareDetails || share.consented)) {
         let saved = false;
         try {
@@ -530,7 +531,9 @@ export function SetupWizard({
             body: JSON.stringify({ share: shareDetails }),
             signal: AbortSignal.timeout(INTAKE_TIMEOUT_MS),
           });
-          saved = res.ok;
+          // 409 on a withdrawal: a send already started and can't be stopped.
+          alreadySent = !shareDetails && res.status === 409;
+          saved = res.ok || alreadySent;
         } catch (err) {
           logWarn("Sharing details with the church office failed", err, { route: "/profile/setup" });
         }
@@ -544,7 +547,8 @@ export function SetupWizard({
         .eq("id", profile.id);
       if (setupError) throw setupError;
 
-      if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
+      if (alreadySent) toast.info(`Profile set up. Your details were already sent to ${share?.churchName}'s office.`);
+      else if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
       await forgetSetupRedirects();
       router.push("/dashboard");

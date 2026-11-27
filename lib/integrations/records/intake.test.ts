@@ -60,8 +60,9 @@ vi.mock("@/lib/supabase/server", () => ({
         const rows = tables.records_intake_requests;
         const row = rows.find((r) => r.org_id === args._org_id && r.profile_id === args._profile_id);
         if (!row) rows.push({ org_id: args._org_id, profile_id: args._profile_id, state: "withdrawn" });
-        else if (row.state === "consented") row.state = "withdrawn";
-        return { data: null, error: null };
+        else if (row.state === "consented" || row.state === "withdrawn") row.state = "withdrawn";
+        else return { data: "too_late", error: null };
+        return { data: "withdrawn", error: null };
       }
       return { data: claim, error: null };
     },
@@ -233,7 +234,9 @@ describe("withdrawConsent", () => {
       { org_id: ORG, profile_id: "waiting", state: "consented" },
       { org_id: "org-2", profile_id: "waiting", state: "consented" },
     ];
-    for (const id of ["sent", "failed", "waiting", "never"]) await withdrawConsent(ORG, id);
+    const results = [];
+    for (const id of ["sent", "failed", "waiting", "never"]) results.push(await withdrawConsent(ORG, id));
+    expect(results).toEqual(["too_late", "too_late", "withdrawn", "withdrawn"]);
     expect(rpcs.map((r) => r.name)).toEqual(Array(4).fill("records_intake_withdraw"));
     expect(await intakeOffer(ORG, "sent")).toBe("done");
     expect(await intakeOffer(ORG, "failed")).toBe("done");

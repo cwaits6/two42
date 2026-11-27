@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(30);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -275,11 +275,25 @@ select is(
 delete from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member');
 select public.records_intake_withdraw(pg_temp.fx('org'), pg_temp.fx('member'));
 select public.records_intake_consent(pg_temp.fx('org'), pg_temp.fx('member'));
+
+select is(
+  pg_temp.requests(pg_temp.fx('org')),
+  array['admin@local.dev:failed', 'leo.loremsworth@example.test:withdrawn'],
+  'a withdrawal with no consent before it still beats the sign-up consent write');
+
 insert into acc values ('retick', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));
 
 select is(
   public.records_intake_claim(pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.acc('retick')),
-  'claimed', 'a withdrawal with no consent before it still beats the sign-up write, and ticking the box again at profile setup sends');
+  'claimed', 'ticking the box again at profile setup sends');
+
+select is(
+  array[
+    public.records_intake_withdraw(pg_temp.fx('org'), pg_temp.fx('member')),
+    (select state::text from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member'))
+  ],
+  array['too_late', 'sending'],
+  'a withdrawal after the send was claimed answers too_late and leaves the claimed send to finish');
 
 delete from public.records_intake_requests where org_id = pg_temp.fx('org') and profile_id = pg_temp.fx('member');
 insert into acc values ('old_setting', public.records_intake_accept(pg_temp.fx('org'), pg_temp.fx('member')));

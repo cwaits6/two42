@@ -256,11 +256,16 @@ export async function acceptConsent(orgId: string, profileId: string): Promise<s
   return data ?? null;
 }
 
-/** Withdraws a consent not yet claimed, and keeps the withdrawal so nothing earlier can send. */
-export async function withdrawConsent(orgId: string, profileId: string): Promise<void> {
+/**
+ * Withdraws a consent not yet claimed, and keeps the withdrawal so nothing
+ * earlier can send. "too_late" when a send was already claimed, sent or
+ * failed: it can't be stopped, so the withdrawal must not be confirmed.
+ */
+export async function withdrawConsent(orgId: string, profileId: string): Promise<"withdrawn" | "too_late"> {
   const service = await createServiceClient();
-  const { error } = await service.rpc("records_intake_withdraw", { _org_id: orgId, _profile_id: profileId });
+  const { data, error } = await service.rpc("records_intake_withdraw", { _org_id: orgId, _profile_id: profileId });
   if (error) throw new RecordsStoreError("records intake consent withdraw failed", { cause: error });
+  return data === "too_late" ? "too_late" : "withdrawn";
 }
 
 /**

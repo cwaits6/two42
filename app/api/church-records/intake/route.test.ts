@@ -84,6 +84,7 @@ describe("POST /api/church-records/intake", () => {
   });
 
   it("withdraws a consent when unticked, and sends nothing", async () => {
+    intake.withdrawConsent.mockResolvedValue("withdrawn");
     expect((await post({ share: false })).status).toBe(200);
     expect(intake.withdrawConsent).toHaveBeenCalledWith("org-1", "p1");
     expect(after).not.toHaveBeenCalled();
@@ -94,6 +95,14 @@ describe("POST /api/church-records/intake", () => {
     expect((await post({ share: true })).status).toBe(200);
     intake.acceptConsent.mockRejectedValue(new Error("down"));
     expect((await post({ share: true })).status).toBe(500);
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("never confirms a withdrawal once a send was claimed", async () => {
+    intake.withdrawConsent.mockResolvedValue("too_late");
+    const res = await post({ share: false });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "Your details were already sent to the church office.", alreadySent: true });
     expect(after).not.toHaveBeenCalled();
   });
 

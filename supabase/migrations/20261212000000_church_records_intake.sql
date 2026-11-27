@@ -147,10 +147,12 @@ end;
 $$;
 
 -- Withdraws a consent not yet claimed, and keeps the withdrawal, so a later
--- sign-up consent write or a deferred send from before it does nothing. A
--- send already claimed, sent or failed is left as it is.
+-- sign-up consent write or a deferred send from before it does nothing:
+-- 'withdrawn'. A send already claimed, sent or failed can't be withdrawn and
+-- is left as it is: 'too_late', so the caller never confirms a withdrawal
+-- while that send can still go.
 create function public.records_intake_withdraw(_org_id uuid, _profile_id uuid)
-  returns void
+  returns text
   language plpgsql
   security invoker
   set search_path = ''
@@ -160,7 +162,8 @@ begin
   values (_org_id, _profile_id, 'withdrawn')
   on conflict (org_id, profile_id) do update
     set state = 'withdrawn', setting_id = null, accept_id = null, consented_at = now()
-    where public.records_intake_requests.state = 'consented';
+    where public.records_intake_requests.state in ('consented', 'withdrawn');
+  return case when found then 'withdrawn' else 'too_late' end;
 end;
 $$;
 

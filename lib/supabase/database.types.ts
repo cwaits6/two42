@@ -2876,7 +2876,7 @@ isOneToOne: false
 { Args: { "_org_id": string,"_profile_id": string }; Returns: string
                            },
 "records_intake_withdraw":
-{ Args: { "_org_id": string,"_profile_id": string }; Returns: undefined
+{ Args: { "_org_id": string,"_profile_id": string }; Returns: string
                            },
 "records_is_empty":
 { Args: { "_value": Json }; Returns: boolean

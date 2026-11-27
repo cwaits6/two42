@@ -670,7 +670,9 @@ anyone else, through the suggestions and an admin's confirmation.
   already sent. A box ticked at sign-up shows ticked at profile setup, and can
   be unticked there. Unticked sends nothing. Unticking is kept, so a sign-up
   consent written after it, or a send queued before it, does nothing; ticking
-  the box again at profile setup sends.
+  the box again at profile setup sends. Once a send has started it can't be
+  withdrawn: unticking then answers that the details were already sent, and
+  setup finishes.
 - **What is sent: name, email and phone, nothing else.** The first and last
   name as saved at profile setup, the sign-in email, and one phone: the
   mobile, or the home phone if there is no mobile. Never a preferred name,
