@@ -533,9 +533,13 @@ with a 500 if it doesn't.
 It runs on the Supabase Edge Runtime, hosted or the CLI's, with no version to
 pin: it needs `Deno.connect` and `Deno.startTls`, which the Deno 2.1 line the
 runtime is built on has. Schedule it only after a first call on the hosted
-project has passed that check: call it once with the service key, and expect
-no "didn't refuse a loopback address" 500 and no "the address check failed"
-line in the function's log.
+project has passed that check. The check runs only once `RECORDS_KEY_SECRET`
+holds a valid key, so set it first, then call the function once with the
+service key. It passed when the answer lists the run (`connected`, `copied`,
+`failed`), as a 200 or as a 500 listing churches under `cutShort`,
+`notStarted`, `busy` or `copyFailed`. The "didn't refuse a loopback address"
+500 means it failed. `{"orgs":0}` or the "not a valid key" 500 means the
+secret is missing or wrong and nothing was checked.
 
 ### Still open
 
