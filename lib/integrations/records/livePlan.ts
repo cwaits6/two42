@@ -5,6 +5,7 @@
 // way to the viewer and are never stored, logged or put in an error.
 import { formDate, formGraduationYear, isEmptyValue, pick, type Columns, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import { ADDRESS_COLUMNS, householdChurchValues } from "@/supabase/functions/_shared/records-households";
+import type { DirectoryProfile, FamilyDirectoryFull, HouseholdFamilyMember } from "@/lib/types";
 import type { RecordsLiveDetails } from "./types";
 
 /** "shown": the records' value. "empty": the records have none. "hidden": the viewer hid it and may show it again. */
@@ -68,26 +69,17 @@ export const LIVE_UNAVAILABLE: LiveDirectoryOn = {
   canHide: { person: null, household: null },
 };
 
-export interface VisiblePerson {
-  id: string;
-  family_id: string | null;
-  relationship: string | null;
-  birth_month: number | null;
-  birth_day: number | null;
-}
+export type VisiblePerson = Pick<DirectoryProfile, "id" | "family_id" | "relationship" | "birth_month" | "birth_day">;
 
-export interface VisibleHousehold extends AddressColumns {
-  id: string;
-  anniversary_month: number | null;
-  anniversary_day: number | null;
-  family_members_list: {
-    id: string;
-    claimed_profile_id: string | null;
-    birth_month: number | null;
-    birth_day: number | null;
-    graduation_year: number | null;
-  }[];
-}
+export type VisibleHousehold = Pick<
+  FamilyDirectoryFull,
+  "id" | (typeof ADDRESS_COLUMNS)[number] | "anniversary_month" | "anniversary_day"
+> & {
+  family_members_list: Pick<
+    HouseholdFamilyMember,
+    "id" | "claimed_profile_id" | "birth_month" | "birth_day" | "graduation_year"
+  >[];
+};
 
 /** What two42 holds about these visible people's links and sources; never a value from the records. */
 export interface LiveSources {

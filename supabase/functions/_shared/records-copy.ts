@@ -32,6 +32,12 @@ export type FieldMode = "locked" | "member";
 export const RECORDS_MODES = ["copy", "live"] as const;
 export type RecordsMode = (typeof RECORDS_MODES)[number];
 
+export const isRecordsMode = (value: unknown): value is RecordsMode =>
+  (RECORDS_MODES as readonly unknown[]).includes(value);
+
+/** A church's stored mode; no row, or anything else, is copy. */
+export const storedRecordsMode = (value: unknown): RecordsMode => (isRecordsMode(value) ? value : "copy");
+
 /**
  * What live mode never stores, a person's or their household's: read from the
  * records when a screen needs them. Kept beside records_live_only_field() in

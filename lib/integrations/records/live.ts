@@ -100,10 +100,15 @@ export async function readLiveDirectory(viewerId: string, today = new Date()): P
     return LIVE_UNAVAILABLE;
   }
   const visiblePeople = (people.data ?? []) as VisiblePerson[];
-  const visibleHouseholds = ((households.data ?? []) as unknown as VisibleHousehold[]).map((h) => ({
-    ...h,
-    family_members_list: Array.isArray(h.family_members_list) ? h.family_members_list : [],
-  }));
+  const visibleHouseholds = (households.data ?? []).map(
+    (h) =>
+      ({
+        ...h,
+        family_members_list: Array.isArray(h.family_members_list)
+          ? (h.family_members_list as unknown as VisibleHousehold["family_members_list"])
+          : [],
+      }) as VisibleHousehold,
+  );
 
   let sources;
   try {

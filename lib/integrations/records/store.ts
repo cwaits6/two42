@@ -13,7 +13,7 @@ import { openKey } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
 import type { LiveSources } from "./livePlan";
-import { LIVE_ONLY_FIELDS, RECORDS_MODES, type RecordsMode, type ValueState } from "@/supabase/functions/_shared/records-copy";
+import { LIVE_ONLY_FIELDS, storedRecordsMode, type RecordsMode, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import {
   CONFIRM_HOUSEHOLD_OUTCOMES,
   type ConfirmHouseholdOutcome,
@@ -468,7 +468,7 @@ export async function readMode(orgId: string): Promise<ChurchMode> {
     .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw new RecordsStoreError("records mode read failed", { cause: error });
-  return { mode: data?.mode === "live" ? "live" : "copy", suggestChildren: data?.suggest_children ?? false };
+  return { mode: storedRecordsMode(data?.mode), suggestChildren: data?.suggest_children ?? false };
 }
 
 /** How many details from the records switching to live would remove. */
@@ -477,6 +477,12 @@ export async function liveCopiedCount(orgId: string): Promise<number> {
   const { data, error } = await service.rpc("records_live_copied_count", { _org_id: orgId });
   if (error || typeof data !== "number") throw new RecordsStoreError("records copied count read failed", { cause: error });
   return data;
+}
+
+/** What GET /api/admin/church-records/mode answers. */
+export interface ModeAnswer {
+  mode: RecordsMode;
+  copiedCount: number;
 }
 
 export type SaveModeOutcome =
@@ -493,9 +499,6 @@ export async function saveMode(orgId: string, mode: RecordsMode, updatedBy: stri
   if (answer?.outcome === "saved" && typeof answer.removed === "number") return { outcome: "saved", removed: answer.removed };
   throw new RecordsStoreError("records mode write gave no answer");
 }
-
-export const isRecordsMode = (value: unknown): value is RecordsMode =>
-  (RECORDS_MODES as readonly unknown[]).includes(value);
 
 const IDS_PER_READ = 100;
 

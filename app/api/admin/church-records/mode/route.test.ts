@@ -9,7 +9,6 @@ const store = vi.hoisted(() => ({
   readMode: vi.fn(),
   liveCopiedCount: vi.fn(),
   saveMode: vi.fn(),
-  isRecordsMode: (value: unknown) => value === "copy" || value === "live",
 }));
 vi.mock("@/lib/integrations/records/store", () => store);
 

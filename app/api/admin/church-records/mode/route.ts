@@ -3,7 +3,8 @@ import { requireOrgAdmin } from "@/lib/members/access";
 import { logError } from "@/lib/log";
 import { gateError, hidden, recordsSecretOrNull } from "@/lib/integrations/records/http";
 import { liveSourceOf, providerFor } from "@/lib/integrations/records/providers";
-import { isRecordsMode, liveCopiedCount, readConnection, readMode, saveMode } from "@/lib/integrations/records/store";
+import { liveCopiedCount, type ModeAnswer, readConnection, readMode, saveMode } from "@/lib/integrations/records/store";
+import { isRecordsMode } from "@/supabase/functions/_shared/records-copy";
 
 /**
  * /api/admin/church-records/mode — whether the church copies its records'
@@ -33,7 +34,7 @@ export async function GET() {
   try {
     if (!(await liveSource(gate.orgId))) return hidden();
     const [{ mode }, copiedCount] = await Promise.all([readMode(gate.orgId), liveCopiedCount(gate.orgId)]);
-    return NextResponse.json({ mode, copiedCount });
+    return NextResponse.json<ModeAnswer>({ mode, copiedCount });
   } catch (err) {
     logError("Church records mode read failed", err, { route: "/api/admin/church-records/mode", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't load how two42 uses your church's records." }, { status: 500 });

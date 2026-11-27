@@ -121,11 +121,11 @@ function PeopleSettings({ connection }: { connection: Connection }) {
     <>
       <PersonLinks key={connection.provider + connection.baseUrl + connection.keyHint} label={connection.providerLabel} />
       {connection.canShowLive && (
-        <RecordsMode key={connection.provider + connection.baseUrl} label={connection.providerLabel} onChange={setMode} />
+        <RecordsMode key={`mode:${connection.provider}${connection.baseUrl}`} label={connection.providerLabel} onChange={setMode} />
       )}
       {connection.canCopy && (
         <RecordsCopySettings
-          key={connection.provider + connection.baseUrl}
+          key={`copy:${connection.provider}${connection.baseUrl}`}
           label={connection.providerLabel}
           live={connection.canShowLive && mode === "live"}
         />

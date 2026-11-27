@@ -23,6 +23,7 @@ import {
   isLiveOnly,
   type StoredValue,
   storedFields,
+  storedRecordsMode,
   type ValueField,
   type ValueRow,
   type ValueState,
@@ -338,7 +339,7 @@ export async function refreshOrg(db: RecordsRefreshClient, options: RefreshOptio
       "records settings",
     );
     const church: ChurchSettings = {
-      mode: orgSettings?.mode === "live" ? "live" : "copy",
+      mode: storedRecordsMode(orgSettings?.mode),
       suggestChildren: orgSettings?.suggest_children === true,
     };
     cursor = await run(db, options, claimed[0].cursor, result, church.mode);
