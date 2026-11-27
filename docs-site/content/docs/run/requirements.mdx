@@ -19,7 +19,7 @@ Resend and Google Maps are not needed locally. See [Run it locally](/docs/run/lo
 
 - A [Supabase](https://supabase.com/dashboard) project.
 - A [Resend](https://resend.com) account with a verified sending domain.
-- A host for the Next.js app that runs Node.js 26. The hosted service uses Vercel; `vercel.json` in the repository is that host's configuration.
+- A host for the Next.js app that runs Node.js 26. The hosted service uses Vercel: `vercel.json` (the app) and `docs-site/vercel.json` (the docs site) are its configuration, and both skip preview builds of draft pull requests ([Deploy](/docs/run/deploy#deploy-the-app)).
 - A domain. The app serves one origin, set in `NEXT_PUBLIC_SITE_URL`.
 - An SMTP sender for Supabase Auth's password-reset emails. Supabase's built-in sender is rate-limited and meant for testing.
 
