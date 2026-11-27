@@ -315,6 +315,7 @@ describe("readLiveDirectory", () => {
     org.answer = { data: null, error: null };
     expect(await liveDirectoryOn()).toBe(false);
     expect(await readLiveDirectory(VIEWER)).toEqual({ mode: "off" });
+    expect(spy.mock.calls.some(([line]) => String(line).includes("Org resolution returned NULL"))).toBe(true);
     spy.mockRestore();
     expect(store.readConnection).not.toHaveBeenCalled();
   });

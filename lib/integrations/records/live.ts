@@ -33,7 +33,9 @@ async function requestOrg(supabase: Supabase): Promise<{ orgId: string | null; f
     logError("Org resolution failed", error, { step: stepOf("directory live") });
     return { orgId: null, failed: true };
   }
-  return { orgId: typeof data === "string" ? data : null, failed: false };
+  const orgId = typeof data === "string" ? data : null;
+  if (!orgId) logError("Org resolution returned NULL", undefined, { step: stepOf("directory live") });
+  return { orgId, failed: false };
 }
 
 /** The church's live connection, or null when it doesn't show details live: never connected, copy mode, or a provider without it. */
