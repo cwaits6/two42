@@ -1,5 +1,11 @@
 {
   "framework": "nextjs",
   "regions": ["pdx1"],
-  "ignoreCommand": "sh scripts/vercel-ignore-build.sh app"
+  "ignoreCommand": "sh scripts/vercel-ignore-build.sh app",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "**": false
+    }
+  }
 }

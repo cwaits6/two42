@@ -58,7 +58,7 @@ The app answers only on the `NEXT_PUBLIC_SITE_URL` host, plus `localhost`, `127.
 
 `vercel.json` sets the framework to Next.js and the Vercel region to `pdx1`.
 
-It also skips a build when nothing the app is built from changed (migrations, the schema dump and other files under `supabase/` don't count, except `supabase/functions/_shared`), and skips preview builds of draft pull requests (`scripts/vercel-ignore-build.sh`). A skipped build still shows a passing Vercel check. When a pull request is marked ready, the `Vercel build on ready` workflow builds its latest commit for the app and the docs site. It needs the `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` and `VERCEL_TEAM_ID` repository secrets, and finds the docs site's project by the name in the `VERCEL_DOCS_PROJECT` repository variable (`two42-docs` when unset). Without them, push a commit after marking the pull request ready.
+Both `vercel.json` files deploy only `main`: pull requests get no preview deployment, and CI's `Playwright boundaries` and `Docs site build` jobs build the app and the docs site instead. To look at a branch on Vercel, run `vercel deploy` from it. A push to `main` also skips the build when nothing the project is built from changed (migrations, the schema dump and other files under `supabase/` don't count, except `supabase/functions/_shared`), using `scripts/vercel-ignore-build.sh`.
 
 <Callout type="warn">
 Keep two copies of the prayer keys outside the host. Prayer request text sealed with a lost `PRAYER_BODY_KEY` cannot be recovered.
