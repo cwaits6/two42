@@ -191,6 +191,8 @@ The write key's role needs exactly these, and nothing else:
 - **View** on the **WorkflowTypes** REST controller, for **Find workflow types** and the check when you save. Sending doesn't use it: without it, finding and saving are refused, and sending still works.
 - **View** on the workflow type you choose. Rock RMS checks this from version 20.0.12 on, and only when it starts a workflow, so a key missing it saves, and its first send fails and is named on the card. Versions before 20.0.12, such as 19.x, don't check it. Grant it anyway, so sending keeps working after Rock RMS is upgraded.
 
+These were checked on Rock RMS 19.3.4 by removing each one in turn: without the first, sending fails; without the second, finding and saving are refused. Removing the third changed nothing on 19.3.4, as expected. Its effect from 20.0.12 on hasn't been checked on a real Rock RMS yet.
+
 1. Under Admin Tools › Settings › Security Roles, add a role, such as "two42 send new people", with no members but the user below.
 2. Under Admin Tools › Settings › REST Controllers, open **Workflows**, and under its actions open `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`; under that action's Security, allow **Edit** for the role. Then open **WorkflowTypes** and, under Security, allow **View** for the role. Grant nothing else.
 3. Under Admin Tools › Settings › Workflow Configuration, add a workflow type for new people, such as "New people from two42", active, with four text attributes whose keys are exactly FirstName, LastName, Email and Phone. Give it your own activities for staff to review the person and decide how they are added, and make sure it is persisted, so staff can find it. Under the workflow type's Security, allow **View** for the role.
