@@ -1036,6 +1036,31 @@ another person in the same household (read `org_id = _org_id`) has cleared
 it. `supabase/tests/church_records_value_sources_suite.sql` proves another
 church's sources and person state are untouched.
 
+`20261215000000_church_records_household_anniversary.sql` adds
+`records_household_anniversary`, the household anniversary's source once per
+household. It carries `org_id uuid not null default app_current_org_id()`,
+the restrictive isolation floor, composite foreign keys to `family_units
+(id, org_id)` and `records_connections (org_id, connection_id)`, and grants
+`authenticated` only `select (org_id, family_id, state, church_value)` under a
+policy shaped like `records_household_values`'s (the household's members and
+church admins of that church; never `connection_id`). It replaces
+`records_apply_copy()`, `records_save_field_settings()`, `records_save_mode()`
+and `records_live_anniversary_households()` with the same signatures, answers,
+`SECURITY INVOKER` and grants. `records_apply_copy()` also reads the linked
+people of the person's household (`records_person_links` joined to `profiles`
+on `org_id = _org_id` and the household it locked) to check the reads in
+`_expected -> 'anniversaries'` against them, and upserts the household's row
+(`org_id = _org_id`, the household it locked, the connection of this person's
+own link). The settings save and the mode switch delete or forget the
+church's household anniversary sources with `org_id = _org_id`, as they do the
+others. The migration also moves each per-person anniversary source to the
+household that person is in, within its own church (`group by org_id`).
+`records_live_anniversary_guard()` is a `BEFORE INSERT OR UPDATE` trigger on
+the new table, `SECURITY INVOKER`, that reads only the written row's own
+church's mode and refuses a `records` source or a church value in live mode,
+as `records_live_value_guard()` does. `supabase/tests/church_records_household_anniversary_suite.sql`
+proves another church's rows are unread and untouched.
+
 ## Church records households — service-key only, SECURITY INVOKER
 
 `records_save_children_setting(_org_id, _on, _updated_by)`,
@@ -1132,8 +1157,10 @@ household come only from `auth.uid()`'s own profile (`org_id =
 app_current_org_id()`), never a parameter; the church must be in live mode,
 the person or household linked to the records, and the caller an approved
 member. It writes or deletes only `cleared` rows with no church value, on
-`org_id = _me.org_id` and the caller's own profile or household (the
-anniversary on each linked person of that household). Anything else raises
+`org_id = _me.org_id` and the caller's own profile or household. Since
+`20261215000000_church_records_household_anniversary.sql` the anniversary's is
+one `records_household_anniversary` row for the caller's own household, with
+the connection of a person linked in it (read `org_id = _me.org_id`). Anything else raises
 `RC001`. `set search_path = ''`, everything schema-qualified, EXECUTE revoked
 from `public` and `anon` and granted to `authenticated` only.
 `supabase/tests/church_records_live_suite.sql` covers a household's spouse, a
@@ -1190,7 +1217,18 @@ in that church. `records_household_value_edit()`
 household's address and home phone: a `BEFORE UPDATE` trigger on
 `family_units` that writes only `records_household_values` rows with
 `org_id = old.org_id and family_id = old.id`, under the same role check,
-`search_path` and EXECUTE revocation. `set search_path = ''`, everything schema-qualified, and
+`search_path` and EXECUTE revocation.
+`20261215000000_church_records_household_anniversary.sql` replaces all four.
+A member's clear is written as a `cleared` source even with none there yet,
+an `insert … on conflict do update` with no church value, only when the
+person (`records_person_links where org_id = old.org_id and profile_id =
+old.id`, or `old.claimed_profile_id`) or the household (`records_household_links
+where org_id = old.org_id and family_id = old.id`) is linked in the same
+church; a church with no connection has no links, so nothing is written. The
+household trigger writes only the `records_household_anniversary` row with
+`org_id = old.org_id and family_id = old.id`, taking the connection of a
+person linked in that household in that church, and no longer touches
+`records_field_values`. `set search_path = ''`, everything schema-qualified, and
 EXECUTE revoked from `public`, `anon` and `authenticated` (a trigger still
 fires for every role).
 
