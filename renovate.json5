@@ -103,7 +103,7 @@
     // deployed function lacked forwarded-parse and every request 500'd. Lift
     // these caps only once a `next build` lists forwarded-parse (and the rest
     // of the family's runtime deps) in .next/server/instrumentation.js.nft.json,
-    // and check a preview deployment with OTEL_EXPORTER_OTLP_ENDPOINT set.
+    // and check a `vercel deploy` preview with OTEL_EXPORTER_OTLP_ENDPOINT set.
     {
       "description": "Hold @opentelemetry/api below the 3.x family's peer range",
       "matchPackageNames": ["@opentelemetry/api"],

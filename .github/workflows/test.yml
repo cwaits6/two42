@@ -110,7 +110,9 @@ jobs:
 
       # The path filter lives inside the job rather than on the workflow so
       # the check always reports: a required check that never reports blocks
-      # the PR forever. Only these paths can change what the specs see.
+      # the PR forever. Only these paths can change what the specs see. With no
+      # preview deployments, this is also the only check that builds the app, so
+      # the list must name every file the build reads.
       - name: Check whether the change can reach the suite
         id: changes
         env:
@@ -119,7 +121,7 @@ jobs:
           set -o pipefail
           git fetch --no-tags --depth=1 origin "$BASE"
           changed=$(git diff --name-only "$BASE" HEAD)
-          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^\.github/workflows/test\.yml$|^scripts/start-supabase-stack\.sh$' <<< "$changed"; then
+          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^instrumentation\.node\.ts$|^tsconfig\.json$|^postcss\.config\.mjs$|^public/|^supabase/functions/_shared/|^\.github/workflows/test\.yml$|^scripts/start-supabase-stack\.sh$' <<< "$changed"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Playwright boundaries: ran" >> "$GITHUB_STEP_SUMMARY"
           else

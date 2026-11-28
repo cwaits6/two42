@@ -1,3 +1,9 @@
 {
-  "ignoreCommand": "sh ../scripts/vercel-ignore-build.sh docs"
+  "ignoreCommand": "sh ../scripts/vercel-ignore-build.sh docs",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "**": false
+    }
+  }
 }
