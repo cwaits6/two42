@@ -3219,6 +3219,21 @@ $$;
 ALTER FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."records_intake_link_cleanup"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.records_intake_requests
+   where org_id = new.org_id and profile_id = new.profile_id and state = 'consented';
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_intake_link_cleanup"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."records_intake_settings_cleanup"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -9183,6 +9198,10 @@ CREATE OR REPLACE TRIGGER "records_household_value_edit" BEFORE UPDATE OF "addre
 
 
 
+CREATE OR REPLACE TRIGGER "records_intake_link_cleanup" AFTER INSERT OR UPDATE OF "profile_id" ON "public"."records_person_links" FOR EACH ROW EXECUTE FUNCTION "public"."records_intake_link_cleanup"();
+
+
+
 CREATE OR REPLACE TRIGGER "records_intake_settings_cleanup" AFTER DELETE ON "public"."records_intake_settings" FOR EACH ROW EXECUTE FUNCTION "public"."records_intake_settings_cleanup"();
 
 
@@ -11983,6 +12002,11 @@ GRANT ALL ON FUNCTION "public"."records_intake_claim"("_org_id" "uuid", "_profil
 
 REVOKE ALL ON FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_intake_consent"("_org_id" "uuid", "_profile_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_intake_link_cleanup"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_intake_link_cleanup"() TO "service_role";
 
 
 
