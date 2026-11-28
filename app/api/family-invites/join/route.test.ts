@@ -3,9 +3,10 @@
 // only after the person is in the household.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 type Result = { data: unknown; error: unknown };
-type Call = { table: string; op: "select" | "update"; payload?: unknown; filters: unknown[][] };
+type Call = { table: string; op: "select" | "update" | "delete"; payload?: unknown; filters: unknown[][] };
 
 let calls: Call[] = [];
 let results: Record<string, Result | Result[]> = {};
@@ -21,7 +22,7 @@ function chain(table: string, op: Call["op"], payload?: unknown) {
   const answer = (Array.isArray(entry) ? entry.shift() : entry) ?? { data: null, error: null };
   const result = () => answer;
   const c: Record<string, unknown> = {};
-  for (const m of ["eq", "is", "select"]) {
+  for (const m of ["eq", "is", "not", "select"]) {
     c[m] = (...args: unknown[]) => {
       if (m !== "select") call.filters.push([m, ...args]);
       return c;
@@ -37,6 +38,7 @@ function client() {
     from: (table: string) => ({
       select: () => chain(table, "select"),
       update: (payload: unknown) => chain(table, "update", payload),
+      delete: () => chain(table, "delete"),
     }),
   };
 }
@@ -87,10 +89,17 @@ function given(opts: {
     "profiles.update": { data: [{ id: USER.id }], error: null },
     "family_members.update": { data: [{ id: MEMBER.id }], error: null },
     "family_invites.update": { data: [{ id: INVITE.id }], error: null },
+    "records_field_values.delete": { data: null, error: null },
+    "records_person_state.update": { data: null, error: null },
   };
 }
 
-const updates = () => calls.filter((c) => c.op === "update");
+const RECORDS = ["records_field_values", "records_person_state"];
+const writes = () => calls.filter((c) => c.op !== "select");
+/** The join's own writes, without the church records reset. */
+let log: ReturnType<typeof vi.spyOn>;
+const updates = () => writes().filter((c) => !RECORDS.includes(c.table));
+const recordsWrites = () => writes().filter((c) => RECORDS.includes(c.table));
 
 beforeEach(() => {
   calls = [];
@@ -98,6 +107,7 @@ beforeEach(() => {
   given({});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("POST /api/family-invites/join", () => {
@@ -299,5 +309,77 @@ describe("POST /api/family-invites/join", () => {
 
     expect((await post()).status).toBe(500);
     expect(calls.map((c) => c.table)).toEqual(["family_invites"]);
+  });
+  describe("church records", () => {
+    it("drops the anniversary source before the link, then marks the person to be copied in full", async () => {
+      expect((await post()).status).toBe(200);
+
+      expect(writes().map((c) => `${c.table}.${c.op}`)).toEqual([
+        "records_field_values.delete",
+        "profiles.update",
+        "records_person_state.update",
+        "family_members.update",
+        "family_invites.update",
+      ]);
+      const [source, state] = recordsWrites();
+      expect(source.filters).toEqual([
+        ["eq", "org_id", "org-1"],
+        ["eq", "profile_id", "user-1"],
+        ["eq", "field", "anniversary"],
+      ]);
+      expect(state.payload).toEqual({ copied_at: null });
+      expect(state.filters).toEqual([
+        ["eq", "org_id", "org-1"],
+        ["eq", "profile_id", "user-1"],
+        ["not", "copied_at", "is", null],
+      ]);
+    });
+
+    it("resets nothing for someone already in the household", async () => {
+      given({ profile: { ...PROFILE, family_id: "fam-1" } });
+
+      expect((await post()).status).toBe(200);
+      expect(recordsWrites()).toHaveLength(0);
+    });
+
+    it("asks for no full copy when a concurrent press made the link", async () => {
+      results["profiles.update"] = { data: [], error: null };
+      results["profiles.select"] = [
+        { data: PROFILE, error: null },
+        { data: { family_id: "fam-1" }, error: null },
+      ];
+
+      expect((await post()).status).toBe(200);
+      expect(recordsWrites().map((c) => c.table)).toEqual(["records_field_values"]);
+    });
+
+    it("joins someone not linked to the church's records, whose reset matches no row", async () => {
+      results["records_field_values.delete"] = { data: [], error: null };
+      results["records_person_state.update"] = { data: [], error: null };
+
+      expect((await post()).status).toBe(200);
+      expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+    });
+
+    it("leaves the copy state alone and still joins when dropping the source fails", async () => {
+      results["records_field_values.delete"] = { data: null, error: { message: "boom" } };
+
+      const res = await post();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ joined: true });
+      expect(recordsWrites().map((c) => c.table)).toEqual(["records_field_values"]);
+      expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+      const lines = loggedLines(log);
+      expect(lines).toEqual([expect.objectContaining({ level: "error", route: "/api/family-invites/join" })]);
+      expect(JSON.stringify(lines)).not.toContain("boom");
+    });
+
+    it("still joins when marking the copy fails", async () => {
+      results["records_person_state.update"] = { data: null, error: { message: "boom" } };
+
+      expect((await post()).status).toBe(200);
+      expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+    });
   });
 });

@@ -220,6 +220,25 @@ Deno.test("the anniversary needs a household and the grade a household member ro
   assertEquals(both.grade, { graduation_year: 2031 });
 });
 
+Deno.test("someone who moved household, their anniversary source dropped, keeps the new household's date and fills an empty one", () => {
+  const church = person({ anniversary: { month: 6, day: 1, year: 2001 } });
+  const entered = { anniversary_month: 9, anniversary_day: 20, anniversary_year: 1998 };
+  const moved = (household: Columns, stored: Record<string, StoredValue> = {}) =>
+    planPersonCopy(input({ anniversary: "member" }, { person: church, current: { profile: profile(), household, grade: null }, stored }));
+
+  const kept = moved(entered);
+  assertEquals(kept.household, {});
+  assertEquals(kept.values, [{ field: "anniversary", state: "changed", church_value: { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 } }]);
+
+  const filled = moved({ anniversary_month: null, anniversary_day: null, anniversary_year: null });
+  assertEquals(filled.household, { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 });
+  assertEquals(filled.filled, ["anniversary"]);
+
+  // Why the source goes before the copy is marked: the old household's would replace the date.
+  const oldSource = moved(entered, { anniversary: { state: "records", churchValue: { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 } } });
+  assertEquals(oldSource.household, { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 });
+});
+
 Deno.test("the church's photo is downloaded only to fill an empty photo or follow a new one", () => {
   const withPhoto = person({ photo: "77" });
   const empty = planPersonCopy(input({ photo: "member" }, { person: withPhoto }));

@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
+import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "@/lib/integrations/records/householdMove";
 
 /**
  * POST /api/household/link-member
@@ -106,6 +107,14 @@ export async function POST(request: Request) {
   // defence — this write bypasses RLS, so it must be confined to the caller's
   // own org explicitly.
   const service = await createServiceClient();
+  // Only the service key writes it; householdMove.ts says why it goes before the move.
+  const sourceError = await dropAnniversarySourceBeforeMove(service, currentProfile.org_id, profile_id);
+  if (sourceError) {
+    logError("link-member: dropping the church records anniversary source failed", sourceError, {
+      route: "/api/household/link-member",
+      ids: { user: user.id, target: profile_id },
+    });
+  }
   const { data: updated, error } = await service
     .from("profiles")
     .update({
@@ -127,6 +136,16 @@ export async function POST(request: Request) {
       { error: "This member was assigned to a household by someone else just now. Refresh and try again." },
       { status: 409 },
     );
+  }
+
+  if (!sourceError) {
+    const copyError = await copyInFullAfterMove(service, currentProfile.org_id, profile_id);
+    if (copyError) {
+      logError("link-member: asking for a full church records copy failed", copyError, {
+        route: "/api/household/link-member",
+        ids: { user: user.id, target: profile_id },
+      });
+    }
   }
 
   return NextResponse.json({
