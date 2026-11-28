@@ -339,7 +339,19 @@ function requestHead(url: URL, method: string, headers: Record<string, string>):
     lines.push(`${name}: ${value}`);
   }
   lines.push("connection: close", "", "");
-  return new TextEncoder().encode(lines.join("\r\n"));
+  return byteString(lines.join("\r\n"));
+}
+
+// Header values are byte strings, one byte per code point; UTF-8 would change
+// any value above 0x7f. Headers and URL leave nothing above 0xff to send.
+function byteString(text: string): Uint8Array {
+  const out = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code > 0xff) throw new TypeError("A request header isn't a byte string.");
+    out[i] = code;
+  }
+  return out;
 }
 
 async function writeAll(conn: SocketConn, bytes: Uint8Array) {
@@ -483,6 +495,11 @@ function latin1(bytes: Bytes): string {
   return out;
 }
 
+// Only space and tab: String#trim would also drop 0xa0, a byte a value may carry.
+function trimOws(text: string): string {
+  return text.replace(/^[ \t]+|[ \t]+$/g, "");
+}
+
 async function readHead(reader: ByteReader): Promise<{ status: number; headers: Headers }> {
   // Interim 1xx answers come before the real one and carry no body.
   while (true) {
@@ -496,7 +513,7 @@ async function readHead(reader: ByteReader): Promise<{ status: number; headers: 
     for (const field of fields) {
       const colon = field.indexOf(":");
       if (colon <= 0 || /^\s/.test(field)) throw new TypeError("The response is malformed.");
-      headers.append(field.slice(0, colon).trim(), field.slice(colon + 1).trim());
+      headers.append(trimOws(field.slice(0, colon)), trimOws(field.slice(colon + 1)));
     }
     if (status >= 200) return { status, headers };
   }

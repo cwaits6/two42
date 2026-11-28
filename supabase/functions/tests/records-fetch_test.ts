@@ -16,6 +16,7 @@ interface Fake {
   connected: [string, number][];
   tlsNames: string[];
   sent: () => string;
+  bytes: () => Uint8Array;
   closed: () => boolean;
 }
 
@@ -29,6 +30,7 @@ function fakeSockets(
   const connected: [string, number][] = [];
   const tlsNames: string[] = [];
   let written = "";
+  let raw: number[] = [];
   let closed = false;
   let rest = typeof answer === "string" ? new TextEncoder().encode(answer) : answer;
   const conn: SocketConn = {
@@ -42,6 +44,7 @@ function fakeSockets(
     },
     write(p) {
       written += new TextDecoder().decode(p);
+      raw = [...raw, ...p];
       return Promise.resolve(p.length);
     },
     close() {
@@ -67,6 +70,7 @@ function fakeSockets(
     connected,
     tlsNames,
     sent: () => written,
+    bytes: () => new Uint8Array(raw),
     closed: () => closed,
   };
 }
@@ -232,6 +236,23 @@ Deno.test("header bytes above 0x7f keep their values", async () => {
   ]));
   const response = await socketFetch(fake.sockets)("https://rock.example.org/");
   assertEquals(response.headers.get("x-name"), "a\u0080\u00e9");
+});
+
+Deno.test("header values are sent and read byte for byte, keeping 0xa0 at either end", async () => {
+  const fake = fakeSockets(PUBLIC, new Uint8Array([
+    ...new TextEncoder().encode("HTTP/1.1 200 OK\r\nx-name: "),
+    0xa0,
+    0x61,
+    0xa0,
+    ...new TextEncoder().encode(" \t\r\ncontent-length: 0\r\n\r\n"),
+  ]));
+  const response = await socketFetch(fake.sockets)("https://rock.example.org/", { headers: { "x-name": "caf\u00e9" } });
+  const sent = fake.bytes();
+  const line = [..."\r\nx-name: caf"].map((c) => c.charCodeAt(0));
+  const at = sent.findIndex((_, i) => line.every((b, j) => sent[i + j] === b));
+  assert(at >= 0, "x-name line not sent");
+  assertEquals([...sent.subarray(at + line.length, at + line.length + 3)], [0xe9, 0x0d, 0x0a]);
+  assertEquals(response.headers.get("x-name"), "\u00a0a\u00a0");
 });
 
 Deno.test("a body of many one-byte chunks is decoded whole", async () => {
