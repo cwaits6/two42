@@ -13,8 +13,6 @@ import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "@/lib/inte
  *
  * Body: { profile_id: string }
  */
-const ROUTE = "/api/household/link-member";
-
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -110,7 +108,13 @@ export async function POST(request: Request) {
   // own org explicitly.
   const service = await createServiceClient();
   // Only the service key writes it; householdMove.ts says why it goes before the move.
-  const sourceDropped = await dropAnniversarySourceBeforeMove(service, currentProfile.org_id, profile_id, ROUTE);
+  const sourceError = await dropAnniversarySourceBeforeMove(service, currentProfile.org_id, profile_id);
+  if (sourceError) {
+    logError("link-member: dropping the church records anniversary source failed", sourceError, {
+      route: "/api/household/link-member",
+      ids: { user: user.id, target: profile_id },
+    });
+  }
   const { data: updated, error } = await service
     .from("profiles")
     .update({
@@ -134,7 +138,15 @@ export async function POST(request: Request) {
     );
   }
 
-  if (sourceDropped) await copyInFullAfterMove(service, currentProfile.org_id, profile_id, ROUTE);
+  if (!sourceError) {
+    const copyError = await copyInFullAfterMove(service, currentProfile.org_id, profile_id);
+    if (copyError) {
+      logError("link-member: asking for a full church records copy failed", copyError, {
+        route: "/api/household/link-member",
+        ids: { user: user.id, target: profile_id },
+      });
+    }
+  }
 
   return NextResponse.json({
     data: { profile_id, family_id: currentProfile.family_id, relationship: relationship ?? null },

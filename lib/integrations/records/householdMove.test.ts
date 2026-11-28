@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { loggedLines } from "@/lib/log/testing";
 import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "./householdMove";
 
 type Row = Record<string, unknown>;
@@ -39,7 +38,6 @@ const client = { from: query } as unknown as SupabaseClient<Database>;
 const ORG = "11111111-1111-4111-8111-111111111111";
 const MOVER = "22222222-2222-4222-8222-222222222222";
 const label = (id: unknown) => (id === ORG ? "org-1" : id === MOVER ? "mover" : id);
-const ROUTE = "/api/family-invites/join";
 const source = (profile: string, field: string, state: string, org_id = ORG) => ({
   org_id,
   profile_id: profile === "mover" ? MOVER : profile,
@@ -52,7 +50,6 @@ const copied = (profile: string, org_id = ORG) => ({
   copied_at: "2026-11-01T00:00:00Z",
 });
 
-let log: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   failing = {};
   order = [];
@@ -65,7 +62,6 @@ beforeEach(() => {
     ],
     records_person_state: [copied("mover"), copied("spouse"), copied("mover", "org-2")],
   };
-  log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 const fields = () => tables.records_field_values.map((r) => `${label(r.org_id)}:${label(r.profile_id)}:${r.field}`);
@@ -73,40 +69,36 @@ const copiedAt = () => tables.records_person_state.map((r) => `${label(r.org_id)
 
 describe("dropAnniversarySourceBeforeMove", () => {
   it("drops only the mover's anniversary source", async () => {
-    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE)).toBe(true);
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER)).toBeNull();
 
     expect(order).toEqual(["records_field_values"]);
     expect(fields()).toEqual(["org-1:mover:birthday", "org-1:spouse:anniversary", "org-2:mover:anniversary"]);
-    expect(loggedLines(log)).toEqual([]);
   });
 
   it.each(["cleared", "changed"])("drops a %s anniversary source too", async (state) => {
     tables.records_field_values = [source("mover", "anniversary", state)];
 
-    await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE);
+    await dropAnniversarySourceBeforeMove(client, ORG, MOVER);
 
     expect(fields()).toEqual([]);
   });
 
-  it("is true for someone with no source", async () => {
-    expect(await dropAnniversarySourceBeforeMove(client, ORG, "not-linked", ROUTE)).toBe(true);
+  it("succeeds for someone with no source", async () => {
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, "not-linked")).toBeNull();
     expect(fields()).toHaveLength(4);
   });
 
-  it.each(["error", "throw"] as const)("answers false and logs when the delete fails (%s)", async (how) => {
+  it.each(["error", "throw"] as const)("answers a failed delete (%s) instead of throwing", async (how) => {
     failing.records_field_values = how;
 
-    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE)).toBe(false);
-
-    expect(loggedLines(log)).toEqual([
-      expect.objectContaining({ level: "error", route: ROUTE, step: "records_field_values", ids: { org: ORG, profile: MOVER } }),
-    ]);
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER)).toBeTruthy();
+    expect(fields()).toContain("org-1:mover:anniversary");
   });
 });
 
 describe("copyInFullAfterMove", () => {
   it("marks only the mover to be copied in full", async () => {
-    await copyInFullAfterMove(client, ORG, MOVER, ROUTE);
+    expect(await copyInFullAfterMove(client, ORG, MOVER)).toBeNull();
 
     expect(copiedAt()).toEqual([
       "org-1:mover:null",
@@ -116,19 +108,14 @@ describe("copyInFullAfterMove", () => {
   });
 
   it("is harmless for someone never copied", async () => {
-    await copyInFullAfterMove(client, ORG, "not-linked", ROUTE);
+    expect(await copyInFullAfterMove(client, ORG, "not-linked")).toBeNull();
 
-    expect(copiedAt()).toHaveLength(3);
-    expect(loggedLines(log)).toEqual([]);
+    expect(copiedAt()).not.toContain("org-1:not-linked:null");
   });
 
-  it.each(["error", "throw"] as const)("logs a failure (%s) without the error's text, and doesn't throw", async (how) => {
+  it.each(["error", "throw"] as const)("answers a failed update (%s) instead of throwing", async (how) => {
     failing.records_person_state = how;
 
-    await expect(copyInFullAfterMove(client, ORG, MOVER, ROUTE)).resolves.toBeUndefined();
-
-    const lines = loggedLines(log);
-    expect(lines).toEqual([expect.objectContaining({ level: "error", step: "records_person_state" })]);
-    expect(JSON.stringify(lines)).not.toContain("boom");
+    expect(await copyInFullAfterMove(client, ORG, MOVER)).toBeTruthy();
   });
 });

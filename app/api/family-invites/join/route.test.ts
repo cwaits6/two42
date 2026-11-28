@@ -3,6 +3,7 @@
 // only after the person is in the household.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 type Result = { data: unknown; error: unknown };
 type Call = { table: string; op: "select" | "update" | "delete"; payload?: unknown; filters: unknown[][] };
@@ -96,6 +97,7 @@ function given(opts: {
 const RECORDS = ["records_field_values", "records_person_state"];
 const writes = () => calls.filter((c) => c.op !== "select");
 /** The join's own writes, without the church records reset. */
+let log: ReturnType<typeof vi.spyOn>;
 const updates = () => writes().filter((c) => !RECORDS.includes(c.table));
 const recordsWrites = () => writes().filter((c) => RECORDS.includes(c.table));
 
@@ -105,6 +107,7 @@ beforeEach(() => {
   given({});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("POST /api/family-invites/join", () => {
@@ -367,6 +370,9 @@ describe("POST /api/family-invites/join", () => {
       expect(await res.json()).toEqual({ joined: true });
       expect(recordsWrites().map((c) => c.table)).toEqual(["records_field_values"]);
       expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+      const lines = loggedLines(log);
+      expect(lines).toEqual([expect.objectContaining({ level: "error", route: "/api/family-invites/join" })]);
+      expect(JSON.stringify(lines)).not.toContain("boom");
     });
 
     it("still joins when marking the copy fails", async () => {

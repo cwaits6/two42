@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => fakeQueryClient(db.service, null),
 }));
 
-const records = vi.hoisted(() => ({ drop: vi.fn(async () => true), copy: vi.fn(async () => {}) }));
+const records = vi.hoisted(() => ({ drop: vi.fn(async (): Promise<unknown> => null), copy: vi.fn(async (): Promise<unknown> => null) }));
 vi.mock("@/lib/integrations/records/householdMove", () => ({
   dropAnniversarySourceBeforeMove: records.drop,
   copyInFullAfterMove: records.copy,
@@ -35,7 +35,7 @@ const link = () =>
 let log: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.restoreAllMocks();
-  records.drop.mockReset().mockResolvedValue(true);
+  records.drop.mockReset().mockResolvedValue(null);
   records.copy.mockClear();
   log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
@@ -63,7 +63,7 @@ describe("POST /api/household/link-member when the database refuses", () => {
 });
 
 describe("POST /api/household/link-member and the church's records", () => {
-  const ARGS = [expect.anything(), "org-1", "p-2", "/api/household/link-member"];
+  const ARGS = [expect.anything(), "org-1", "p-2"];
 
   it("drops the person's anniversary source, links them, then asks for a full copy, in the caller's church", async () => {
     db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
@@ -76,7 +76,7 @@ describe("POST /api/household/link-member and the church's records", () => {
   });
 
   it("links them without asking for a full copy when dropping the source failed", async () => {
-    records.drop.mockResolvedValue(false);
+    records.drop.mockResolvedValue({ code: "42501", message: "boom" });
     db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
     db.service = { profiles: [{ data: [{ id: "p-2" }], error: null }] };
 

@@ -6,8 +6,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { logError, logWarn } from "@/lib/log";
 
 
-const ROUTE = "/api/family-invites/join";
-
 function failed() {
   return NextResponse.json({ error: "Failed to join the household" }, { status: 500 });
 }
@@ -105,8 +103,17 @@ export async function POST(request: Request) {
   // The member's relationship, not the column default, so a spouse or child
   // joining never reads as a second primary with a primary's rights.
   // Before the link; householdMove.ts says why.
-  const sourceDropped =
-    profile.family_id === null && (await dropAnniversarySourceBeforeMove(service, invite.org_id, user.id, ROUTE));
+  let sourceDropped = false;
+  if (profile.family_id === null) {
+    const sourceError = await dropAnniversarySourceBeforeMove(service, invite.org_id, user.id);
+    if (sourceError) {
+      logError("family-invites/join: dropping the church records anniversary source failed", sourceError, {
+        route: "/api/family-invites/join",
+        ids,
+      });
+    }
+    sourceDropped = !sourceError;
+  }
   const link = service
     .from("profiles")
     .update({ family_id: invite.family_id, relationship: member.relationship })
@@ -144,7 +151,13 @@ export async function POST(request: Request) {
   // this household and can't tell it moved. Undoing the link below needs
   // nothing put back, as the dropped source was a household already left.
   if (sourceDropped && linked && linked.length > 0) {
-    await copyInFullAfterMove(service, invite.org_id, user.id, ROUTE);
+    const copyError = await copyInFullAfterMove(service, invite.org_id, user.id);
+    if (copyError) {
+      logError("family-invites/join: asking for a full church records copy failed", copyError, {
+        route: "/api/family-invites/join",
+        ids,
+      });
+    }
   }
 
   // Never take over a member another account already claimed.
