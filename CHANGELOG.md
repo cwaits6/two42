@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.33.0](https://github.com/cwaits6/two42/compare/v0.32.0...v0.33.0) (2026-11-28)
+
+
+### Features
+
+* **admin:** let church admins connect their church's records and link people ([#834](https://github.com/cwaits6/two42/issues/834)) ([8f4e758](https://github.com/cwaits6/two42/commit/8f4e7589b691c8f413519845ac25f2266b6c7464))
+* **admin:** show church admins anonymous usage counts, kept inside the app ([#786](https://github.com/cwaits6/two42/issues/786)) ([5f6b046](https://github.com/cwaits6/two42/commit/5f6b04697cf6156a5b972bd5298573c2fefdb337))
+* **auth:** let a person with an account join a household from its invite ([#785](https://github.com/cwaits6/two42/issues/785)) ([34e4bc2](https://github.com/cwaits6/two42/commit/34e4bc2e0b86c56ee7f7b8781f77282e1f8f622c))
+* **church-records:** copy members' details from the church's records, field by field ([#877](https://github.com/cwaits6/two42/issues/877)) ([e27a189](https://github.com/cwaits6/two42/commit/e27a189cf507ac2b52ed61e7f571286587b44d73))
+* **church-records:** let an operator rotate the church records secret without churches reconnecting ([#900](https://github.com/cwaits6/two42/issues/900)) ([a42726d](https://github.com/cwaits6/two42/commit/a42726d3deb365937b0082453facd0d9c4e127bc))
+* **church-records:** send people who join two42 to the church's records ([#887](https://github.com/cwaits6/two42/issues/887)) ([d36eb18](https://github.com/cwaits6/two42/commit/d36eb189ed0033b50b831ea90b7bf1e95adfd3f9))
+* **church-records:** show directory details live from the church's records ([#886](https://github.com/cwaits6/two42/issues/886)) ([048a6d4](https://github.com/cwaits6/two42/commit/048a6d44b0469036358b642fa1cfb0443a708b46))
+* **church-records:** suggest households and children from the church's records ([#884](https://github.com/cwaits6/two42/issues/884)) ([d395076](https://github.com/cwaits6/two42/commit/d395076e5cb55bc1244e414e5286b3cb105adf53))
+* **dinner-club:** keep dinner club tables full when people drop out or join late ([#863](https://github.com/cwaits6/two42/issues/863)) ([06093fa](https://github.com/cwaits6/two42/commit/06093fa6d5e82c9b5540b94e27eb3d8e83642c4e))
+* **dinner-club:** let a leader run a dinner club season in their group ([#860](https://github.com/cwaits6/two42/issues/860)) ([cc5c3c3](https://github.com/cwaits6/two42/commit/cc5c3c39d372820d4319d355a4d95ea70103bb9e))
+* **directory:** let people edit their details from their own directory entry ([#818](https://github.com/cwaits6/two42/issues/818)) ([243176d](https://github.com/cwaits6/two42/commit/243176d088bab7daf9e1d9acd5b0674b5d28ba5e))
+* **giving:** let people enter an amount before opening Venmo from Give ([#819](https://github.com/cwaits6/two42/issues/819)) ([9f2cc4e](https://github.com/cwaits6/two42/commit/9f2cc4e4cc9df89c51c0edc98c4365d101d28f49))
+* **lessons:** play lesson videos on the lesson page ([#817](https://github.com/cwaits6/two42/issues/817)) ([c3c47d8](https://github.com/cwaits6/two42/commit/c3c47d8ff362e96cdf5a50276895f00b19790a76))
+* **prayer:** let people comment on a prayer request, publicly, privately or without their name ([#822](https://github.com/cwaits6/two42/issues/822)) ([7c1c346](https://github.com/cwaits6/two42/commit/7c1c3468677f7f4bfd9e36c6f290a70e140825ef))
+* **profile:** add gender, title, suffix and a child's grade to profiles ([#876](https://github.com/cwaits6/two42/issues/876)) ([36efacb](https://github.com/cwaits6/two42/commit/36efacb2c164a73e5326788d671ecb604f259f6a))
+* **profile:** let people crop their profile photo ([#763](https://github.com/cwaits6/two42/issues/763)) ([c0002f0](https://github.com/cwaits6/two42/commit/c0002f037f572ebac3eef07695c1d365feab7b70))
+* **supper-club:** let a supper's host set how long the supper lasts ([#873](https://github.com/cwaits6/two42/issues/873)) ([6b06172](https://github.com/cwaits6/two42/commit/6b06172d78d4c31497b7b1d1ade6eba9e4d91429))
+* **supper-club:** rename the dinner club to Supper club, run as rotations with generated titles ([#870](https://github.com/cwaits6/two42/issues/870)) ([5b33006](https://github.com/cwaits6/two42/commit/5b330060bb3c46cf12c537de7e31eb37eb6fb56c))
+* **supper-club:** show the next supper on Home and close the gaps left in the Supper club ([#875](https://github.com/cwaits6/two42/issues/875)) ([75d6911](https://github.com/cwaits6/two42/commit/75d6911e165046eb8e1a4797602966e022047351))
+
+
+### Bug Fixes
+
+* **admin:** capitalize names, lowercase emails and send the first admin's invite when a church is added ([#765](https://github.com/cwaits6/two42/issues/765)) ([3643798](https://github.com/cwaits6/two42/commit/364379808d9284bc9ff96338de8b0a6424bbcf58))
+* **auth:** sign new members in as soon as they set a password ([#764](https://github.com/cwaits6/two42/issues/764)) ([bfa3b5c](https://github.com/cwaits6/two42/commit/bfa3b5c3cc2aca76fd42b257a640d831db0aaf6a))
+* **auth:** sign this device out when the server can't be told ([#772](https://github.com/cwaits6/two42/issues/772)) ([0a76226](https://github.com/cwaits6/two42/commit/0a76226f7a6aab534a873d1f5a037cf617ce0e6c))
+* **calendar:** keep the meeting ID and passcode on events added to Apple Calendar ([#820](https://github.com/cwaits6/two42/issues/820)) ([0fa3744](https://github.com/cwaits6/two42/commit/0fa37447ad42330bc763d544b75766b5ec09900b))
+* **church-records:** clear a sign-up consent once the person is linked to the records ([#905](https://github.com/cwaits6/two42/issues/905)) ([1bd7365](https://github.com/cwaits6/two42/commit/1bd73658442c4d4afae77e3efabeab6d9b0d5b2c))
+* **church-records:** close four gaps on the church records admin page ([#898](https://github.com/cwaits6/two42/issues/898)) ([69e9151](https://github.com/cwaits6/two42/commit/69e91518de8b6d36fa09e9a8d15b21e8595b19db))
+* **church-records:** keep members' clears and copy the anniversary after a household is confirmed ([#899](https://github.com/cwaits6/two42/issues/899)) ([0ce691c](https://github.com/cwaits6/two42/commit/0ce691c66e05489e7588b6e11729e340c50067a1))
+* **church-records:** make the church records refresh run on the Edge Runtime ([#901](https://github.com/cwaits6/two42/issues/901)) ([658d00e](https://github.com/cwaits6/two42/commit/658d00e800ebd33a9beda04e5bd2448346fc49e9))
+* **db:** show a group's own color in Find a group and remove retired fields ([#766](https://github.com/cwaits6/two42/issues/766)) ([fd49df4](https://github.com/cwaits6/two42/commit/fd49df4b2af3832a08aa40f241955522d9629f1b))
+* **directory:** clear the Semgrep finding in the hidden-household test ([#816](https://github.com/cwaits6/two42/issues/816)) ([5c33d83](https://github.com/cwaits6/two42/commit/5c33d83ca10884c67c451bc1ea5a0702af905875)), closes [#815](https://github.com/cwaits6/two42/issues/815)
+* **directory:** hide a household from the directory when every adult in it is hidden ([#823](https://github.com/cwaits6/two42/issues/823)) ([7393f65](https://github.com/cwaits6/two42/commit/7393f6562ff8c1c4a53fca888e29842ec4ee88a3))
+* **directory:** keep a person hidden from the directory out of the Households tab ([#810](https://github.com/cwaits6/two42/issues/810)) ([47c7228](https://github.com/cwaits6/two42/commit/47c722880634293b4022ce4acee7f9865ae45c0a))
+* **directory:** keep the directory's household panel open after editing, and link the household tab one way ([#829](https://github.com/cwaits6/two42/issues/829)) ([01e892a](https://github.com/cwaits6/two42/commit/01e892a78e6d9f345d7072d22a1bb050f3315534))
+* **directory:** show Edit and Remove only in an edit mode, and one Add announcement button ([#762](https://github.com/cwaits6/two42/issues/762)) ([6b8444a](https://github.com/cwaits6/two42/commit/6b8444a58a00170ee9ff48952d8fd7459ba4941a))
+* **giving:** open Venmo does nothing on a phone ([#825](https://github.com/cwaits6/two42/issues/825)) ([b4f9871](https://github.com/cwaits6/two42/commit/b4f98716891209252e3042497e2d404eea67c42c))
+* **platform:** send one invite when a church is added twice at the same moment ([#830](https://github.com/cwaits6/two42/issues/830)) ([4f7fe75](https://github.com/cwaits6/two42/commit/4f7fe75df3d82e2f88fe996dffb87366a00a4d69))
+* **profile:** keep the capitals people type in names like DeSantis and Mack ([#778](https://github.com/cwaits6/two42/issues/778)) ([30e6e95](https://github.com/cwaits6/two42/commit/30e6e954906f6135534d3b1d755de1c7d97357e9))
+* **profile:** let members add their own household during profile setup ([#821](https://github.com/cwaits6/two42/issues/821)) ([9a51806](https://github.com/cwaits6/two42/commit/9a51806b3e8d7971526c7b93d24f119416e51dd9))
+
 ## [0.32.0](https://github.com/cwaits6/two42/compare/v0.31.0...v0.32.0) (2026-11-11)
 
 
