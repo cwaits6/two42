@@ -59,6 +59,8 @@ export function isPublicAddress(address: string): boolean {
 }
 
 const TIMEOUT_MS = 10_000;
+// How long one checked address may take to connect while others remain to try.
+const CONNECT_ATTEMPT_MS = 3_000;
 const MAX_BYTES = 5 * 1024 * 1024;
 
 type Resolve = (hostname: string, options: LookupAllOptions, callback: (err: Error | null, addresses: LookupAddress[]) => void) => void;
@@ -243,12 +245,35 @@ function closeQuietly(conn: SocketConn | undefined) {
   }
 }
 
+/** A connect that gives up after `ms`, closing the connection if it opens later. */
+function connectWithin(sockets: Sockets, address: string, port: number, ms: number | undefined): Promise<SocketConn> {
+  if (ms === undefined) return sockets.connect(address, port);
+  return new Promise((resolve, reject) => {
+    let late = false;
+    const timer = setTimeout(() => {
+      late = true;
+      reject(new TypeError("The connection timed out."));
+    }, ms);
+    sockets.connect(address, port).then(
+      (opened) => {
+        clearTimeout(timer);
+        if (late) closeQuietly(opened);
+        else resolve(opened);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * The fetch-shaped records request over a socket opened to an address checked
  * moments before, so nothing resolves the name between the check and the connect.
  * Speaks HTTP/1.1 with `connection: close`: the callers ask for one small answer.
  */
-export function socketFetch(sockets: Sockets): FetchLike {
+export function socketFetch(sockets: Sockets, attemptMs = CONNECT_ATTEMPT_MS): FetchLike {
   return async (input, init = {}) => {
     const { url, hostname, method, headers, signal } = prepare(input, init);
     if (signal?.aborted) throw new TypeError("The request was aborted.");
@@ -281,9 +306,10 @@ export function socketFetch(sockets: Sockets): FetchLike {
       const port = Number(url.port || 443);
       let tcp: SocketConn | undefined;
       let lastError: unknown;
-      for (const address of addresses) {
+      for (const [i, address] of addresses.entries()) {
+        const last = i === addresses.length - 1;
         try {
-          tcp = keep(await sockets.connect(address, port));
+          tcp = keep(await connectWithin(sockets, address, port, last ? undefined : attemptMs));
           break;
         } catch (err) {
           if (halted) throw halted;
@@ -354,7 +380,8 @@ class ByteReader {
     const chunk = new Uint8Array(16 * 1024);
     const n = await this.#conn.read(chunk);
     if (n === null) return false;
-    const read = chunk.subarray(0, n);
+    // A short read is copied so the stored bytes don't keep the whole buffer alive.
+    const read = n === chunk.length ? chunk : chunk.slice(0, n);
     this.#pending = this.#pending.length ? concat([this.#pending, read], this.#pending.length + n) : read;
     return true;
   }

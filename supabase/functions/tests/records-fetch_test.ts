@@ -257,6 +257,31 @@ Deno.test("the next checked address is tried when one won't connect", async () =
   assertEquals(fake.connected, [["2606:4700::1111", 443]]);
 });
 
+Deno.test("an address that never connects gives way to the next, and closes if it opens late", async () => {
+  const fake = fakeSockets([...PUBLIC, { address: "2606:4700::1111", family: 6 }], OK);
+  let openLate!: (conn: SocketConn) => void;
+  let lateClosed = false;
+  const sockets: Sockets = {
+    ...fake.sockets,
+    connect: (address, port) =>
+      address === "93.184.215.14"
+        ? new Promise((resolve) => (openLate = resolve))
+        : fake.sockets.connect(address, port),
+  };
+  const response = await socketFetch(sockets, 10)("https://rock.example.org/");
+  assertEquals(response.status, 200);
+  assertEquals(fake.connected, [["2606:4700::1111", 443]]);
+  openLate({
+    read: () => Promise.resolve(null),
+    write: (p) => Promise.resolve(p.length),
+    close() {
+      lateClosed = true;
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEquals(lateClosed, true);
+});
+
 Deno.test("only GET and POST without a body go over https", async () => {
   const fake = fakeSockets(PUBLIC, OK);
   const fetcher = socketFetch(fake.sockets);
