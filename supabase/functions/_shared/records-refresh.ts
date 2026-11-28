@@ -659,7 +659,7 @@ async function copyBatch(
         .order("profile_id"),
     "values",
   )) {
-    // The anniversary's source is the household's; a person's own row is no longer read.
+    // The anniversary's source is the household's, read below. Per-person rows of it stay until a migration drops them.
     if (row.field === "anniversary") continue;
     const forPerson = stored.get(row.profile_id) ?? new Map<ValueField, StoredValue>();
     forPerson.set(row.field as ValueField, { state: row.state as ValueState, churchValue: row.church_value });
@@ -677,13 +677,10 @@ async function copyBatch(
       "household anniversaries",
     );
   const anniversaries = new Map<string, StoredValue>();
-  const keepAnniversaries = (familyId: string, rows: HouseholdAnniversaryRow[]) => {
-    anniversaries.delete(familyId);
+  const keepAnniversaries = (rows: HouseholdAnniversaryRow[]) => {
     for (const row of rows) anniversaries.set(row.family_id, { state: row.state as ValueState, churchValue: row.church_value });
   };
-  if (familyIds.length > 0) {
-    for (const row of await readAnniversaries(familyIds)) keepAnniversaries(row.family_id, [row]);
-  }
+  if (familyIds.length > 0) keepAnniversaries(await readAnniversaries(familyIds));
 
   let handled = 0;
   for (const link of batch) {
@@ -720,7 +717,7 @@ async function copyBatch(
       if (outcome.photoSkipped) result.photosSkipped++;
       if (outcome.stale) retry.push(link.profile_id);
       // A spouse later in the batch plans on the household's anniversary and
-      // its source as the database holds them now, not the batch's first read.
+      // its source as this copy left them, not the batch's first read.
       if (outcome.anniversaryPlanned && familyId) {
         const [row] = await allRows(
           () =>
@@ -734,7 +731,8 @@ async function copyBatch(
         );
         if (row) households.set(row.id, row);
         else households.delete(familyId);
-        keepAnniversaries(familyId, await readAnniversaries([familyId]));
+        anniversaries.delete(familyId);
+        keepAnniversaries(await readAnniversaries([familyId]));
       }
     } catch (err) {
       result.failed++;

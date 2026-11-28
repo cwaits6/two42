@@ -26,7 +26,7 @@ export async function readProfileRecords(profileIds: string[], noticeFor?: strin
   const supabase = await createClient();
   const [settings, values, notice] = await Promise.all([
     supabase.from("records_field_settings").select("field, mode"),
-    // The anniversary's source is the household's; a person's own row of it is no longer kept up to date.
+    // The anniversary's source is the household's. Per-person rows of it stay until a migration drops them.
     supabase
       .from("records_field_values")
       .select("profile_id, field, state, church_value")
