@@ -177,7 +177,9 @@ How it works:
   links the household to the family, and asks the next refresh to copy the
   people it moved in full: the anniversary is copied only through a person
   already in the household, so someone copied before they had one would
-  otherwise never bring it in. Whoever stays behind keeps their
+  otherwise never bring it in. Each person who changes household loses
+  their anniversary source, which was the old household's, so that copy is
+  a first fill and keeps a date the new household entered. Whoever stays behind keeps their
   household with its address, phone, photo, anniversary and the people in it
   without an account; it is never deleted. A suggestion where anyone leaves a
   household they're in is **Check first**, confirmed one at a time; the rest
@@ -415,10 +417,13 @@ and kept up to date.
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   `records` and `changed` sources, so its values become ordinary two42 data,
-  but keeps each `cleared` one with the church's value forgotten, so turning
-  the field on again leaves a member's clear empty in copy mode and hidden in
-  live mode. A changed value needs no source to survive, since a first fill
-  never replaces what a member entered; an empty one does. Any change asks
+  but keeps each `cleared` one with the church's value forgotten. Turned on
+  again as member-changeable, a member's clear stays empty in copy mode and
+  hidden in live mode, and a changed value needs no source to survive, since
+  a first fill never replaces what a member entered; an empty one does.
+  Turned on again as locked (`name`, `suffix`, `title`, `gender` or `grade`),
+  the field takes the church's value wherever the church has one, over a
+  clear or a change, and its source is `records` again. Any change asks
   the next refresh to copy everyone in full. A save is refused while a refresh holds
   its claim, because that refresh works from the settings it read when it
   started.
