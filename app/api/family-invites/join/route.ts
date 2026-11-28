@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { householdInviteVerdict } from "@/app/join/family/[token]/joinVerdict";
 import { isUuid } from "@/lib/groups/active";
-import { restartCopyAfterHouseholdMove } from "@/lib/integrations/records/householdMove";
+import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "@/lib/integrations/records/householdMove";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { logError, logWarn } from "@/lib/log";
 
+
+const ROUTE = "/api/family-invites/join";
 
 function failed() {
   return NextResponse.json({ error: "Failed to join the household" }, { status: 500 });
@@ -102,6 +104,9 @@ export async function POST(request: Request) {
   //
   // The member's relationship, not the column default, so a spouse or child
   // joining never reads as a second primary with a primary's rights.
+  // Before the link; householdMove.ts says why.
+  const sourceDropped =
+    profile.family_id === null && (await dropAnniversarySourceBeforeMove(service, invite.org_id, user.id, ROUTE));
   const link = service
     .from("profiles")
     .update({ family_id: invite.family_id, relationship: member.relationship })
@@ -138,8 +143,8 @@ export async function POST(request: Request) {
   // Here rather than after the claim: a retry finds the profile already in
   // this household and can't tell it moved. Undoing the link below needs
   // nothing put back, as the dropped source was a household already left.
-  if (profile.family_id === null && linked && linked.length > 0) {
-    await restartCopyAfterHouseholdMove(service, invite.org_id, user.id, "/api/family-invites/join");
+  if (sourceDropped && linked && linked.length > 0) {
+    await copyInFullAfterMove(service, invite.org_id, user.id, ROUTE);
   }
 
   // Never take over a member another account already claimed.

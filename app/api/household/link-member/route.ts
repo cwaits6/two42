@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
-import { restartCopyAfterHouseholdMove } from "@/lib/integrations/records/householdMove";
+import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "@/lib/integrations/records/householdMove";
 
 /**
  * POST /api/household/link-member
@@ -13,6 +13,8 @@ import { restartCopyAfterHouseholdMove } from "@/lib/integrations/records/househ
  *
  * Body: { profile_id: string }
  */
+const ROUTE = "/api/household/link-member";
+
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -107,6 +109,8 @@ export async function POST(request: Request) {
   // defence — this write bypasses RLS, so it must be confined to the caller's
   // own org explicitly.
   const service = await createServiceClient();
+  // Only the service key writes it; householdMove.ts says why it goes before the move.
+  const sourceDropped = await dropAnniversarySourceBeforeMove(service, currentProfile.org_id, profile_id, ROUTE);
   const { data: updated, error } = await service
     .from("profiles")
     .update({
@@ -130,7 +134,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await restartCopyAfterHouseholdMove(service, currentProfile.org_id, profile_id, "/api/household/link-member");
+  if (sourceDropped) await copyInFullAfterMove(service, currentProfile.org_id, profile_id, ROUTE);
 
   return NextResponse.json({
     data: { profile_id, family_id: currentProfile.family_id, relationship: relationship ?? null },

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { loggedLines } from "@/lib/log/testing";
-import { restartCopyAfterHouseholdMove } from "./householdMove";
+import { copyInFullAfterMove, dropAnniversarySourceBeforeMove } from "./householdMove";
 
 type Row = Record<string, unknown>;
 let tables: Record<string, Row[]>;
@@ -71,59 +71,64 @@ beforeEach(() => {
 const fields = () => tables.records_field_values.map((r) => `${label(r.org_id)}:${label(r.profile_id)}:${r.field}`);
 const copiedAt = () => tables.records_person_state.map((r) => `${label(r.org_id)}:${label(r.profile_id)}:${r.copied_at}`);
 
-describe("restartCopyAfterHouseholdMove", () => {
-  it("drops only the mover's anniversary source, then marks only them to be copied in full", async () => {
-    await restartCopyAfterHouseholdMove(client, ORG, MOVER, ROUTE);
+describe("dropAnniversarySourceBeforeMove", () => {
+  it("drops only the mover's anniversary source", async () => {
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE)).toBe(true);
 
-    expect(order).toEqual(["records_field_values", "records_person_state"]);
+    expect(order).toEqual(["records_field_values"]);
     expect(fields()).toEqual(["org-1:mover:birthday", "org-1:spouse:anniversary", "org-2:mover:anniversary"]);
-    expect(copiedAt()).toEqual([
-      "org-1:mover:null",
-      "org-1:spouse:2026-11-01T00:00:00Z",
-      "org-2:mover:2026-11-01T00:00:00Z",
-    ]);
     expect(loggedLines(log)).toEqual([]);
   });
 
   it.each(["cleared", "changed"])("drops a %s anniversary source too", async (state) => {
     tables.records_field_values = [source("mover", "anniversary", state)];
 
-    await restartCopyAfterHouseholdMove(client, ORG, MOVER, ROUTE);
+    await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE);
 
     expect(fields()).toEqual([]);
   });
 
-  it("is harmless for someone with no source and no copy state", async () => {
-    await restartCopyAfterHouseholdMove(client, ORG, "not-linked", ROUTE);
-
+  it("is true for someone with no source", async () => {
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, "not-linked", ROUTE)).toBe(true);
     expect(fields()).toHaveLength(4);
-    expect(copiedAt()).not.toContain("org-1:not-linked:null");
+  });
+
+  it.each(["error", "throw"] as const)("answers false and logs when the delete fails (%s)", async (how) => {
+    failing.records_field_values = how;
+
+    expect(await dropAnniversarySourceBeforeMove(client, ORG, MOVER, ROUTE)).toBe(false);
+
+    expect(loggedLines(log)).toEqual([
+      expect.objectContaining({ level: "error", route: ROUTE, step: "records_field_values", ids: { org: ORG, profile: MOVER } }),
+    ]);
+  });
+});
+
+describe("copyInFullAfterMove", () => {
+  it("marks only the mover to be copied in full", async () => {
+    await copyInFullAfterMove(client, ORG, MOVER, ROUTE);
+
+    expect(copiedAt()).toEqual([
+      "org-1:mover:null",
+      "org-1:spouse:2026-11-01T00:00:00Z",
+      "org-2:mover:2026-11-01T00:00:00Z",
+    ]);
+  });
+
+  it("is harmless for someone never copied", async () => {
+    await copyInFullAfterMove(client, ORG, "not-linked", ROUTE);
+
+    expect(copiedAt()).toHaveLength(3);
     expect(loggedLines(log)).toEqual([]);
   });
 
-  it.each(["error", "throw"] as const)(
-    "leaves the copy state alone when dropping the source fails (%s), and logs it",
-    async (how) => {
-      failing.records_field_values = how;
+  it.each(["error", "throw"] as const)("logs a failure (%s) without the error's text, and doesn't throw", async (how) => {
+    failing.records_person_state = how;
 
-      await expect(restartCopyAfterHouseholdMove(client, ORG, MOVER, ROUTE)).resolves.toBeUndefined();
+    await expect(copyInFullAfterMove(client, ORG, MOVER, ROUTE)).resolves.toBeUndefined();
 
-      expect(order).not.toContain("records_person_state");
-      expect(copiedAt()).toContain("org-1:mover:2026-11-01T00:00:00Z");
-      expect(loggedLines(log)).toEqual([
-        expect.objectContaining({ level: "error", route: ROUTE, step: "records_field_values", ids: { org: ORG, profile: MOVER } }),
-      ]);
-    },
-  );
-
-  it("logs a failed copy mark without throwing, the source already gone", async () => {
-    failing.records_person_state = "error";
-
-    await expect(restartCopyAfterHouseholdMove(client, ORG, MOVER, ROUTE)).resolves.toBeUndefined();
-
-    expect(fields()).not.toContain("org-1:mover:anniversary");
     const lines = loggedLines(log);
-    expect(lines).toEqual([expect.objectContaining({ level: "error", step: "records_person_state", code: "42501" })]);
+    expect(lines).toEqual([expect.objectContaining({ level: "error", step: "records_person_state" })]);
     expect(JSON.stringify(lines)).not.toContain("boom");
   });
 });

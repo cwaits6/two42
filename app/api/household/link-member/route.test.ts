@@ -14,8 +14,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => fakeQueryClient(db.service, null),
 }));
 
-const reset = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock("@/lib/integrations/records/householdMove", () => ({ restartCopyAfterHouseholdMove: reset }));
+const records = vi.hoisted(() => ({ drop: vi.fn(async () => true), copy: vi.fn(async () => {}) }));
+vi.mock("@/lib/integrations/records/householdMove", () => ({
+  dropAnniversarySourceBeforeMove: records.drop,
+  copyInFullAfterMove: records.copy,
+}));
 
 const { POST } = await import("./route");
 
@@ -32,7 +35,8 @@ const link = () =>
 let log: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.restoreAllMocks();
-  reset.mockClear();
+  records.drop.mockReset().mockResolvedValue(true);
+  records.copy.mockClear();
   log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -59,26 +63,40 @@ describe("POST /api/household/link-member when the database refuses", () => {
 });
 
 describe("POST /api/household/link-member and the church's records", () => {
-  it("restarts the copy for the person linked, in the caller's church", async () => {
+  const ARGS = [expect.anything(), "org-1", "p-2", "/api/household/link-member"];
+
+  it("drops the person's anniversary source, links them, then asks for a full copy, in the caller's church", async () => {
     db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
     db.service = { profiles: [{ data: [{ id: "p-2" }], error: null }] };
 
     expect((await link()).status).toBe(200);
-    expect(reset).toHaveBeenCalledExactlyOnceWith(expect.anything(), "org-1", "p-2", "/api/household/link-member");
+    expect(records.drop).toHaveBeenCalledExactlyOnceWith(...ARGS);
+    expect(records.copy).toHaveBeenCalledExactlyOnceWith(...ARGS);
+    expect(records.drop.mock.invocationCallOrder[0]).toBeLessThan(records.copy.mock.invocationCallOrder[0]);
   });
 
-  it("restarts nothing when someone else linked them first", async () => {
+  it("links them without asking for a full copy when dropping the source failed", async () => {
+    records.drop.mockResolvedValue(false);
+    db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
+    db.service = { profiles: [{ data: [{ id: "p-2" }], error: null }] };
+
+    expect((await link()).status).toBe(200);
+    expect(records.copy).not.toHaveBeenCalled();
+  });
+
+  it("asks for no full copy when someone else linked them first", async () => {
     db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
     db.service = { profiles: [{ data: [], error: null }] };
 
     expect((await link()).status).toBe(409);
-    expect(reset).not.toHaveBeenCalled();
+    expect(records.copy).not.toHaveBeenCalled();
   });
 
-  it("refuses someone already in a household without restarting anything", async () => {
+  it("refuses someone already in a household without touching their records", async () => {
     db.answers = { profiles: [{ data: CALLER, error: null }, { data: { ...TARGET, family_id: "fam-2" }, error: null }] };
 
     expect((await link()).status).toBe(409);
-    expect(reset).not.toHaveBeenCalled();
+    expect(records.drop).not.toHaveBeenCalled();
+    expect(records.copy).not.toHaveBeenCalled();
   });
 });

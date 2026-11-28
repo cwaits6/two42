@@ -308,12 +308,12 @@ describe("POST /api/family-invites/join", () => {
     expect(calls.map((c) => c.table)).toEqual(["family_invites"]);
   });
   describe("church records", () => {
-    it("drops the anniversary source, then marks the person to be copied in full, once the link is written", async () => {
+    it("drops the anniversary source before the link, then marks the person to be copied in full", async () => {
       expect((await post()).status).toBe(200);
 
       expect(writes().map((c) => `${c.table}.${c.op}`)).toEqual([
-        "profiles.update",
         "records_field_values.delete",
+        "profiles.update",
         "records_person_state.update",
         "family_members.update",
         "family_invites.update",
@@ -339,7 +339,7 @@ describe("POST /api/family-invites/join", () => {
       expect(recordsWrites()).toHaveLength(0);
     });
 
-    it("resets nothing when a concurrent press made the link", async () => {
+    it("asks for no full copy when a concurrent press made the link", async () => {
       results["profiles.update"] = { data: [], error: null };
       results["profiles.select"] = [
         { data: PROFILE, error: null },
@@ -347,7 +347,7 @@ describe("POST /api/family-invites/join", () => {
       ];
 
       expect((await post()).status).toBe(200);
-      expect(recordsWrites()).toHaveLength(0);
+      expect(recordsWrites().map((c) => c.table)).toEqual(["records_field_values"]);
     });
 
     it("joins someone not linked to the church's records, whose reset matches no row", async () => {
