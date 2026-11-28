@@ -392,6 +392,7 @@ class ByteReader {
     while (true) {
       const at = indexOf(this.#pending.subarray(from), delimiter);
       if (at >= 0) {
+        if (from + at > max) throw new TypeError("The response is malformed.");
         const before = this.#pending.subarray(0, from + at);
         this.#pending = this.#pending.subarray(from + at + delimiter.length);
         return before;
@@ -411,13 +412,24 @@ class ByteReader {
   }
 }
 
+// One growing buffer rather than a list of parts: a body sent as millions of
+// one-byte chunks would otherwise hold millions of views.
 class Body {
-  readonly parts: Bytes[] = [];
+  #bytes: Bytes = new Uint8Array(16 * 1024);
   size = 0;
   add(part: Bytes) {
-    this.size += part.length;
-    if (this.size > MAX_BYTES) throw new TypeError("The response is too large.");
-    this.parts.push(part);
+    const size = this.size + part.length;
+    if (size > MAX_BYTES) throw new TypeError("The response is too large.");
+    if (size > this.#bytes.length) {
+      const grown = new Uint8Array(Math.min(MAX_BYTES, Math.max(this.#bytes.length * 2, size)));
+      grown.set(this.#bytes.subarray(0, this.size));
+      this.#bytes = grown;
+    }
+    this.#bytes.set(part, this.size);
+    this.size = size;
+  }
+  bytes(): Bytes {
+    return this.#bytes.subarray(0, this.size);
   }
 }
 
@@ -461,12 +473,20 @@ async function readToEnd(reader: ByteReader, body: Body) {
   }
 }
 
+// TextDecoder's "latin1" is windows-1252, which turns 0x80-0x9f into characters
+// Headers refuses; header bytes map one-to-one onto code points instead.
+function latin1(bytes: Bytes): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 8192) out += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return out;
+}
+
 async function readHead(reader: ByteReader): Promise<{ status: number; headers: Headers }> {
   // Interim 1xx answers come before the real one and carry no body.
   while (true) {
     const raw = await reader.until(HEAD_END, MAX_HEAD_BYTES);
     if (raw === null) throw new TypeError(ENDED_EARLY);
-    const [statusLine, ...fields] = new TextDecoder("latin1").decode(raw).split("\r\n");
+    const [statusLine, ...fields] = latin1(raw).split("\r\n");
     const match = /^HTTP\/1\.[01] (\d{3})(?: .*)?$/.exec(statusLine);
     if (!match) throw new TypeError("The response is malformed.");
     const status = Number(match[1]);
@@ -500,7 +520,7 @@ async function readResponse(reader: ByteReader): Promise<Response> {
   } else {
     await readToEnd(reader, body);
   }
-  return new Response(concat(body.parts, body.size), { status, headers });
+  return new Response(body.bytes(), { status, headers });
 }
 
 /**

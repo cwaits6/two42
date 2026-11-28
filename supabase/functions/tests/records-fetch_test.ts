@@ -215,6 +215,34 @@ Deno.test("a body read to the end is refused past the size limit", async () => {
   await assertRejects(() => socketFetch(fake.sockets)("https://rock.example.org/"), TypeError, "The response is too large.");
 });
 
+Deno.test("a head past the limit is refused even when its end arrives in the same read", async () => {
+  const head = `HTTP/1.1 200 OK\r\nx-pad: ${"a".repeat(64 * 1024)}\r\n\r\n`;
+  const fake = fakeSockets(PUBLIC, head, 128 * 1024);
+  await assertRejects(() => socketFetch(fake.sockets)("https://rock.example.org/"), TypeError, "The response is malformed.");
+});
+
+Deno.test("header bytes above 0x7f keep their values", async () => {
+  const fake = fakeSockets(PUBLIC, new Uint8Array([
+    ...new TextEncoder().encode("HTTP/1.1 200 OK\r\nx-name: a"),
+    0x80,
+    0xe9,
+    ...new TextEncoder().encode("\r\ncontent-length: 0\r\n\r\n"),
+  ]));
+  const response = await socketFetch(fake.sockets)("https://rock.example.org/");
+  assertEquals(response.headers.get("x-name"), "a\u0080\u00e9");
+});
+
+Deno.test("a body of many one-byte chunks is decoded whole", async () => {
+  const count = 100_000;
+  const fake = fakeSockets(
+    PUBLIC,
+    "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n" + "1\r\nx\r\n".repeat(count) + "0\r\n\r\n",
+    64 * 1024,
+  );
+  const response = await socketFetch(fake.sockets)("https://rock.example.org/");
+  assertEquals((await response.text()).length, count);
+});
+
 Deno.test("an already aborted request never resolves the name", async () => {
   const fake = fakeSockets(PUBLIC, OK);
   const controller = new AbortController();
