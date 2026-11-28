@@ -397,7 +397,8 @@ class ByteReader {
         this.#pending = this.#pending.subarray(from + at + delimiter.length);
         return before;
       }
-      if (this.#pending.length > max) throw new TypeError("The response is malformed.");
+      // Room for a delimiter split across reads; the check above still bounds the line.
+      if (this.#pending.length > max + delimiter.length - 1) throw new TypeError("The response is malformed.");
       from = Math.max(0, this.#pending.length - delimiter.length + 1);
       if (!(await this.#more())) return null;
     }

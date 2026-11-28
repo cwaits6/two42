@@ -243,6 +243,24 @@ Deno.test("a body of many one-byte chunks is decoded whole", async () => {
   assertEquals((await response.text()).length, count);
 });
 
+Deno.test("a chunk-size line at the limit is read when its CRLF is split across reads", async () => {
+  const head = "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n";
+  const line = "0".repeat(1023) + "2";
+  const fake = fakeSockets(PUBLIC, head + line + "\r\nok\r\n0\r\n\r\n", head.length + line.length + 1);
+  const response = await socketFetch(fake.sockets)("https://rock.example.org/");
+  assertEquals(await response.text(), "ok");
+});
+
+Deno.test("a chunk-size line past the limit is refused", async () => {
+  const head = "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n";
+  const fake = fakeSockets(PUBLIC, head + "0".repeat(1024) + "2\r\nok\r\n0\r\n\r\n");
+  await assertRejects(
+    () => socketFetch(fake.sockets)("https://rock.example.org/"),
+    TypeError,
+    "The response is malformed.",
+  );
+});
+
 Deno.test("an already aborted request never resolves the name", async () => {
   const fake = fakeSockets(PUBLIC, OK);
   const controller = new AbortController();
