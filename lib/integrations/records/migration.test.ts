@@ -200,12 +200,16 @@ describe("the households migration agrees with the household rules", () => {
     const settings = new Set<string>([...RECORDS_FIELDS, ...HOUSEHOLD_FIELDS]);
     const unset = [...RECORDS_FIELDS, "preferred_name"].filter((f) => !settings.has(f));
     const body = fn("records_save_field_settings");
-    const cases = [...body.matchAll(/case v\.field ((?:when '[a-z_]+' then '[a-z_]+' )+)else v\.field end/g)];
-    expect(cases.length).toBeGreaterThan(0);
-    for (const [, arms] of cases) {
-      const mapped = Object.fromEntries([...arms.matchAll(/when '([a-z_]+)' then '([a-z_]+)'/g)].map((m) => [m[1], m[2]]));
-      expect(sorted(Object.keys(mapped))).toEqual(sorted(unset));
-      expect(mapped).toEqual({ preferred_name: "name" });
+    // Checked in each statement, since either one alone losing it acts on the wrong field.
+    for (const head of ["delete from public.records_field_values v", "update public.records_field_values v"]) {
+      const at = body.indexOf(head);
+      expect(at, head).toBeGreaterThan(-1);
+      const statement = body.slice(at, body.indexOf(";", at));
+      const arms = statement.match(/case v\.field ((?:when '[a-z_]+' then '[a-z_]+' )+)else v\.field end/)?.[1];
+      expect(arms, head).toBeDefined();
+      const mapped = Object.fromEntries([...(arms ?? "").matchAll(/when '([a-z_]+)' then '([a-z_]+)'/g)].map((m) => [m[1], m[2]]));
+      expect(sorted(Object.keys(mapped)), head).toEqual(sorted(unset));
+      expect(mapped, head).toEqual({ preferred_name: "name" });
     }
   });
 
