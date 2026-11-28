@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'URL to scan (skips Vercel lookup — useful when testing workflow changes)'
+        description: 'URL to scan instead of building the app (useful when testing workflow changes)'
         required: true
         type: string
 
@@ -48,173 +48,66 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # First because every later step opens outgoing connections, and the
+      # kernel may pick their source ports from the block the stack binds.
+      - name: Reserve the Supabase ports
+        if: github.event_name == 'pull_request'
+        run: |
+          existing=$(sysctl -n net.ipv4.ip_local_reserved_ports)
+          echo "Already reserved: ${existing:-none}"
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="${existing:+$existing,}54320-54329"
+          sudo ss -tanp '( sport >= :54320 and sport <= :54329 )'
 
-      # Resolve the URL to scan.
-      # 1. Manual dispatch: use the provided URL directly.
-      # 2. PR: poll Vercel API by commit SHA until READY.
-      #    - If Vercel cancels (CI-only commit), fall back to the last READY deployment
-      #      on this branch (valid — the app code hasn't changed).
-      #    - If Vercel never registers a deployment at all, fall back the same way after
-      #      a short grace period. A dropped GitHub -> Vercel webhook used to spin here
-      #      for the full 10 minutes and then hard-fail, leaving the PR permanently red
-      #      with no recovery except an unrelated push. The two waits are deliberately
-      #      different lengths: "no record yet" resolves within seconds of the push if it
-      #      is going to resolve at all, while "record exists, still building" legitimately
-      #      takes minutes, so only the former gets the short fuse.
-      #    - If no branch deployment has ever existed, fail. Don't scan main (misleading).
-      - name: Resolve deployment URL
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pull requests get no Vercel preview, so the scan runs against the PR's
+      # own build on a local stack, the same way the weekly full scan does.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+        if: github.event_name == 'pull_request'
+
+      - name: Start the local Supabase stack
+        if: github.event_name == 'pull_request'
+        run: scripts/start-supabase-stack.sh -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
+
+      - name: Point the build at the local stack
+        if: github.event_name == 'pull_request'
+        run: |
+          npx supabase status -o env | sed -n \
+            -e 's/^API_URL="\(.*\)"$/NEXT_PUBLIC_SUPABASE_URL=\1/p' \
+            -e 's/^ANON_KEY="\(.*\)"$/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=\1/p' \
+            | tee -a "$GITHUB_ENV"
+          npx supabase status -o env | sed -n \
+            -e 's/^SERVICE_ROLE_KEY="\(.*\)"$/SUPABASE_SECRET_KEY=\1/p' >> "$GITHUB_ENV"
+          test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
+          test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
+
+      - name: Build and start the app
+        if: github.event_name == 'pull_request'
+        run: |
+          npx next build
+          nohup npx next start -p 3142 > /dev/null 2>&1 &
+          curl --silent --fail --retry 30 --retry-delay 2 --retry-connrefused -o /dev/null http://localhost:3142/
+
+      - name: Choose the URL to scan
         id: deployment
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_REF: ${{ github.head_ref }}
           MANUAL_URL: ${{ inputs.target_url }}
-        run: |
-          if [ -n "$MANUAL_URL" ]; then
-            echo "Using manually provided URL: $MANUAL_URL"
-            echo "target=$MANUAL_URL" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          resolve_url() {
-            echo "target=https://$1" >> "$GITHUB_OUTPUT"
-            echo "Deployment ready: https://$1"
-            exit 0
-          }
-
-          # Every Vercel call goes through here: bounded timeouts and retries so a
-          # single slow or flaky response can't hang the job or (under `bash -e`)
-          # abort the scan outright. Query params are passed as --data-urlencode,
-          # never interpolated into the URL — `&`, `#` and `=` are all legal in
-          # branch names and would otherwise rewrite or truncate the query and
-          # resolve a deployment for a different ref.
-          # CURL_BUDGET caps one lookup INCLUDING its retries; callers set it from
-          # the time left on the overall deadline. --max-time is per attempt, so
-          # without --retry-max-time three retries would silently multiply it
-          # (4 x 15s + delays) and the "10 minute" bound would be fiction.
-          vercel_deployments() {
-            curl -sfS --connect-timeout 10 --max-time 15 \
-              --retry 3 --retry-delay 5 --retry-all-errors \
-              --retry-max-time "${CURL_BUDGET:-30}" \
-              --get 'https://api.vercel.com/v6/deployments' \
-              --data-urlencode "projectId=$VERCEL_PROJECT_ID" \
-              -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "$@"
-          }
-
-          # Most recent READY deployment on this branch, if any. Used whenever the
-          # head commit itself has no scannable deployment. state=READY filters
-          # server-side so a page full of BUILDING/CANCELED deployments can't hide
-          # a good one; the client-side select stays as a guard in case the filter
-          # is ignored. Exit 2 = the lookup itself failed, which is distinct from a
-          # successful lookup that found nothing (exit 0, empty output).
-          branch_fallback() {
-            # The recovery path gets its own budget rather than whatever scraps
-            # the poll loop left — it runs at most once, right before exiting.
-            local CURL_BUDGET=30
-            FB=$(vercel_deployments \
-              --data-urlencode "meta-githubCommitRef=$HEAD_REF" \
-              --data-urlencode "state=READY" \
-              --data-urlencode "limit=10") || return 2
-            jq -r '[.deployments[]? | select(.state == "READY")][0].url // ""' <<<"$FB" || return 2
-          }
-
-          # Shared exit path for "the head commit has no scannable deployment".
-          # $1 is the log line for the success case. Returns to the caller only
-          # when the branch genuinely has no READY deployment; a failed lookup is
-          # reported as itself rather than masquerading as "nothing found".
-          try_branch_fallback() {
-            if FB_URL=$(branch_fallback); then
-              if [ -n "$FB_URL" ]; then
-                echo "$1"
-                resolve_url "$FB_URL"
-              fi
-              return 0
-            fi
-            echo "::error::Could not query Vercel for prior branch deployments (network failure or unexpected response)."
-            exit 1
-          }
-
-          # Polls that saw no deployment record at all before giving up on the
-          # commit. Short on purpose: if no record exists ~2 min after the push,
-          # the webhook was dropped and one will never appear. Counts only genuine
-          # "NONE" observations, not failed lookups.
-          MISSING_ATTEMPTS=5
-          MISSING_SEEN=0
-
-          # One wall-clock deadline for the whole resolve phase. A fixed attempt
-          # count is not a time bound once each lookup can retry, so this — not
-          # the per-attempt timeouts — is what actually caps the step.
-          POLL_BUDGET=600
-          DEADLINE=$(( $(date +%s) + POLL_BUDGET ))
-
-          # Give Vercel a moment to register the deployment before first poll.
-          echo "Waiting 20s for Vercel to register deployment..."
-          sleep 20
-
-          echo "Polling for Vercel deployment (commit: $COMMIT_SHA)..."
-          i=0
-          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-            i=$((i + 1))
-            REMAINING=$(( DEADLINE - $(date +%s) ))
-            # Never let a lookup and its retries outlive the deadline.
-            CURL_BUDGET=$(( REMAINING < 30 ? REMAINING : 30 ))
-
-            # A failed lookup or unparseable body is not evidence that the
-            # deployment is missing, so it resolves to UNKNOWN and simply polls
-            # again instead of counting toward MISSING_ATTEMPTS.
-            if RESPONSE=$(vercel_deployments \
-              --data-urlencode "meta-githubCommitSha=$COMMIT_SHA" \
-              --data-urlencode "limit=1"); then
-              STATE=$(jq -r '.deployments[0].state // "NONE"' <<<"$RESPONSE") || STATE=UNKNOWN
-              URL=$(jq -r '.deployments[0].url // ""' <<<"$RESPONSE") || URL=""
-            else
-              STATE=UNKNOWN
-              URL=""
-            fi
-            [ -n "$STATE" ] || STATE=UNKNOWN
-            echo "Attempt $i (${REMAINING}s of budget left): state=$STATE"
-
-            if [ "$STATE" = "NONE" ]; then
-              MISSING_SEEN=$((MISSING_SEEN + 1))
-            fi
-
-            if [ "$STATE" = "READY" ] && [ -n "$URL" ]; then
-              resolve_url "$URL"
-            elif [ "$STATE" = "CANCELED" ]; then
-              # Vercel skipped this commit (only non-app files changed).
-              # Use the last READY deployment on this branch if one exists.
-              echo "Vercel skipped this commit — checking for prior branch deployment..."
-              try_branch_fallback "Using most recent READY deployment for branch '$HEAD_REF'"
-              echo "::error::No deployment found for this PR branch. If this is a CI-only PR, use workflow_dispatch with a target_url to test manually."
-              exit 1
-            elif [ "$STATE" = "ERROR" ]; then
-              echo "::error::Vercel deployment errored out."
-              exit 1
-            elif [ "$STATE" = "NONE" ] && [ "$MISSING_SEEN" -ge "$MISSING_ATTEMPTS" ]; then
-              # No deployment record at all after the grace period — a dropped
-              # GitHub -> Vercel webhook. Waiting out the remaining attempts cannot
-              # help: nothing is building. Scan the branch's last good build instead.
-              echo "Vercel never registered a deployment for $COMMIT_SHA after $MISSING_SEEN polls — checking for prior branch deployment..."
-              try_branch_fallback "::warning::No Vercel deployment exists for the head commit; scanning the most recent READY deployment for branch '$HEAD_REF' instead. The scan may not reflect the very latest commit."
-              echo "::error::Vercel never created a deployment for $COMMIT_SHA and this branch has no prior READY deployment. Push again to trigger one, or use workflow_dispatch with a target_url."
-              exit 1
-            fi
-
-            # Don't burn the tail of the budget on a sleep we can't poll after.
-            [ $(( DEADLINE - $(date +%s) )) -gt 20 ] || break
-            sleep 20
-          done
-          echo "::error::Timed out after ~${POLL_BUDGET}s waiting for a READY Vercel deployment (${i} polls, last state: ${STATE:-none})."
-          exit 1
+        run: echo "target=${MANUAL_URL:-http://localhost:3142}" >> "$GITHUB_OUTPUT"
 
       # Baseline scan: passive + spider only, no active attack (~3-5 min).
       # allow_issue_writing: false — findings go to the PR comment below, not a GitHub issue.
       # fail_action: false — we handle suppression and hard-fail ourselves so we can post
       # the PR comment before failing.
-      # ZAP_AUTH_HEADER/VALUE: tells ZAP to inject the Vercel bypass header on every request.
+      # ZAP_AUTH_HEADER/VALUE: tells ZAP to inject the Vercel bypass header on every request,
+      # for a manual run against a protected Vercel URL.
       # Using env vars avoids -config flags which clash with argparse's -c (config file) flag.
       # If the secret is unset, ZAP_AUTH_HEADER is empty and ZAP skips the header entirely.
       - name: ZAP Baseline Scan
