@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(37);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -319,9 +319,16 @@ select is(pg_temp.fixtureton_anniversary(), 'null', 'so the household''s anniver
 select is(pg_temp.sources() @> array['ruth:anniversary:cleared'] and not pg_temp.sources() && array['leo:anniversary:records'],
   true, 'Ruth''s clear stands and Leo gets no source that follows the church');
 
-select pg_temp.save_fields('{"phone_mobile": "member", "birthday": "member", "address": "member"}');
+select is(pg_temp.save_fields('{"phone_mobile": "member", "birthday": "member", "address": "member"}'),
+  'saved', 'the church admin turns the anniversary off with Ruth''s clear in place');
+select is((select count(*)::int from public.records_field_settings
+            where org_id = pg_temp.fx('org') and field = 'anniversary'), 0,
+  'non-vacuity: the anniversary is no longer copied');
+select is((select church_value from public.records_field_values
+            where profile_id = pg_temp.fx('ruth') and field = 'anniversary' and state = 'cleared'), '{}'::jsonb,
+  'and Ruth''s clear stays, without the church''s value');
 select is(pg_temp.save_fields('{"phone_mobile": "member", "birthday": "member", "anniversary": "member", "address": "member"}'),
-  'saved', 'the church admin turns the anniversary off and on with Ruth''s clear in place');
+  'saved', 'the church admin turns the anniversary on again');
 select is(pg_temp.copy_leo(), 'held', 'Leo''s full copy after it is held as well');
 select is(pg_temp.fixtureton_anniversary(), 'null', 'and the household''s anniversary still stays empty');
 
