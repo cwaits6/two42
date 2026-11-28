@@ -462,7 +462,8 @@ async function readChunked(reader: ByteReader, body: Body) {
   // Trailer fields, which nothing reads, up to the blank line.
   while (true) {
     const line = await reader.until(CRLF, MAX_HEAD_BYTES);
-    if (line === null || line.length === 0) return;
+    if (line === null) throw new TypeError(ENDED_EARLY);
+    if (line.length === 0) return;
   }
 }
 

@@ -198,6 +198,8 @@ Deno.test("redirects, oversized, short and malformed answers are refused", async
     ["HTTP/1.1 200 OK\r\ncontent-length: 10\r\n\r\nshort", "The response ended early."],
     ["HTTP/1.1 200 OK\r\ncontent-length: 1, 2\r\n\r\nx", "The response is malformed."],
     ["HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\nzz\r\n", "The response is malformed."],
+    ["HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n", "The response ended early."],
+    ["HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n1\r\nx\r\n0\r\na: b\r\n", "The response ended early."],
     ["SSH-2.0-OpenSSH\r\n\r\n", "The response is malformed."],
     ["HTTP/1.1 200 OK\r\ncontent-length: 3\r\n", "The response ended early."],
   ] as const) {
