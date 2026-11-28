@@ -9,6 +9,7 @@ import type {
   ApplyCopyArgs,
   ApplyHouseholdCopyArgs,
   ChildSuggestionRow,
+  HouseholdAnniversaryRow,
   HouseholdLinkRow,
   HouseholdMemberRow,
   HouseholdValueDbRow,
@@ -54,6 +55,7 @@ describe("the refresh's database shapes", () => {
     expectTypeOf<Row<"records_org_settings">>().toMatchTypeOf<OrgSettingsRow>();
     expectTypeOf<Row<"records_household_links">>().toMatchTypeOf<HouseholdLinkRow>();
     expectTypeOf<Row<"records_household_values">>().toMatchTypeOf<Omit<HouseholdValueDbRow, "church_value">>();
+    expectTypeOf<Row<"records_household_anniversary">>().toMatchTypeOf<Omit<HouseholdAnniversaryRow, "church_value">>();
     expectTypeOf<Row<"records_child_suggestions">>().toMatchTypeOf<ChildSuggestionRow>();
   });
 

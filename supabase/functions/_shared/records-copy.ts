@@ -153,6 +153,8 @@ export interface CopyInput {
   normalizePhone: (raw: string) => string | null;
   /** The church's photo once stored in two42, for the token the plan asked for. */
   storedPhoto?: { token: string; url: string } | null;
+  /** The church anniversary of every other linked person in the person's household, as read with this copy. */
+  otherAnniversaries?: readonly RecordsDate[];
   today?: Date;
 }
 
@@ -195,6 +197,24 @@ function dateColumns(date: RecordsDate, prefix: string, today: Date): Columns {
   return { [`${prefix}_month`]: month, [`${prefix}_day`]: day, [`${prefix}_year`]: year };
 }
 
+/** An anniversary from the records as the household's columns, as the forms save it. */
+export function anniversaryColumns(date: RecordsDate, today: Date = new Date()): Columns {
+  return dateColumns(date, "anniversary", today);
+}
+
+/**
+ * The household's anniversary from its linked people's records: the one value
+ * they hold, the empty value when none holds one, or null while they hold
+ * different ones. A person with none doesn't count against the others.
+ * records_apply_copy() holds the anniversary back by the same rule.
+ */
+export function householdChurchAnniversary(values: readonly Columns[]): Columns | null {
+  const columns = FIELD_COLUMNS.anniversary;
+  const held = values.filter((value) => !isEmptyValue(pick(value, columns)));
+  if (held.length === 0) return pick({}, columns);
+  return held.every((value) => sameValue(value, held[0], columns)) ? pick(held[0], columns) : null;
+}
+
 /** A graduation year the grade form can hold. */
 export function formGraduationYear(grade: number | null): number | null {
   return grade !== null && grade >= 2000 && grade <= 2100 ? grade : null;
@@ -231,7 +251,7 @@ export function churchValues(
     phone_mobile: { phone_mobile: phone(person.mobile, normalizePhone) },
     phone_work: { phone_work: phone(person.work, normalizePhone) },
     birthday: dateColumns(person.birthday, "birth", today),
-    anniversary: dateColumns(person.anniversary, "anniversary", today),
+    anniversary: anniversaryColumns(person.anniversary, today),
     grade: { graduation_year: formGraduationYear(person.graduationYear) },
   };
 }
@@ -245,6 +265,10 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
   const { settings, current, stored, person } = input;
   const plan: CopyPlan = { profile: {}, household: {}, grade: {}, values: [], filled: [], photoWanted: null };
   const church = churchValues(person, input.normalizePhone, input.today);
+  const anniversary = householdChurchAnniversary([
+    church.anniversary ?? {},
+    ...(input.otherAnniversaries ?? []).map((date) => anniversaryColumns(date, input.today)),
+  ]);
 
   const rowFor = (field: ValueField): Columns | null => {
     const table = FIELD_TABLE[field];
@@ -265,7 +289,8 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
       planPhoto(input, plan);
       continue;
     }
-    const value = church[field];
+    // Held while the household's linked people's records differ: nothing is written or recorded.
+    const value = field === "anniversary" ? anniversary : church[field];
     const row = rowFor(field);
     if (!value || !row) continue;
     const columns = FIELD_COLUMNS[field];

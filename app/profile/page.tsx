@@ -125,7 +125,7 @@ export default async function ProfilePage() {
   // Private buckets: exchange every stored avatar/photo URL for a
   // signed URL in one batch before the data reaches client renders. The
   // upload paths keep persisting raw URLs — this only touches what's shown.
-  const [signed, timeZone, recordsRead, suggestedChildren] = await Promise.all([
+  const [signed, timeZone, recordsRead, householdRead, suggestedChildren] = await Promise.all([
     mintSignedUrls([
     profile.avatar_url,
     family?.photo_url,
@@ -134,10 +134,9 @@ export default async function ProfilePage() {
     ]),
     getOrgTimeZone(),
     readProfileRecords([user.id, ...householdProfiles.map((p) => p.id)], user.id),
+    family ? readHouseholdRecords(family.id) : Promise.resolve({ ok: true, records: null } as const),
     family && canEditSpouseProfiles ? readSuggestedChildren(family.id) : Promise.resolve([]),
   ]);
-  const householdRead =
-    family && recordsRead.ok ? await readHouseholdRecords(family.id, recordsRead.byProfile) : ({ ok: true, records: null } as const);
   if (!recordsRead.ok || !householdRead.ok) {
     return (
       <PageContainer>
@@ -147,6 +146,11 @@ export default async function ProfilePage() {
     );
   }
   const records = recordsRead.byProfile[user.id];
+  // The anniversary's source is the household's, so the notice names it from there.
+  const householdAnniversary = householdRead.records?.values.anniversary;
+  const noticeRecords = householdAnniversary
+    ? { ...records, values: { ...records.values, anniversary: householdAnniversary } }
+    : records;
   profile.avatar_url = signed[0];
   if (family) family.photo_url = signed[1];
   householdProfiles.forEach((p, i) => {
@@ -163,7 +167,7 @@ export default async function ProfilePage() {
       {records.noticeDue && (
         <RecordsNotice
           profileId={profile.id}
-          fields={changeableFilled(records, { household: !!family }).map(({ label, href }) => ({ label, href }))}
+          fields={changeableFilled(noticeRecords, { household: !!family }).map(({ label, href }) => ({ label, href }))}
         />
       )}
 

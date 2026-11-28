@@ -31,6 +31,7 @@ import {
 import {
   APPLY_HOUSEHOLD_OUTCOMES,
   APPLY_OUTCOMES,
+  type ApplyCopyArgs,
   type ApplyHouseholdCopyArgs,
   LEASE_MS,
 } from "@/supabase/functions/_shared/records-refresh";
@@ -38,6 +39,7 @@ import {
 const copySql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
 const householdsSql = readFileSync("supabase/migrations/20261210000000_church_records_households.sql", "utf8");
 const liveSql = readFileSync("supabase/migrations/20261211000000_church_records_live.sql", "utf8");
+const anniversarySql = readFileSync("supabase/migrations/20261215000000_church_records_household_anniversary.sql", "utf8");
 let sql = copySql;
 
 const migrations = readdirSync("supabase/migrations")
@@ -143,11 +145,25 @@ describe("the copy migration agrees with the copy rules", () => {
     expect(sorted(written)).toEqual(sorted(PROFILE_COPY_COLUMNS));
   });
 
-  it("leaves to their own triggers the fields that aren't on the profile", () => {
+  it("watches every field on the profile, and leaves the others to their own triggers", () => {
     const body = fn("records_profile_member_edit");
-    const excluded = quoted(body.slice(body.indexOf("v.field not in ("), body.indexOf("loop")));
-    const elsewhere = (Object.keys(FIELD_TABLE) as ValueField[]).filter((f) => FIELD_TABLE[f] !== "profile");
-    expect(sorted(excluded)).toEqual(sorted(elsewhere));
+    const head = "foreach _field in array array[";
+    const listed = quoted(body.slice(body.indexOf(head), body.indexOf("]", body.indexOf(head))));
+    const onProfile = (Object.keys(FIELD_TABLE) as ValueField[]).filter((f) => FIELD_TABLE[f] === "profile");
+    expect(sorted(listed)).toEqual(sorted(onProfile));
+  });
+
+  it("reads a copy by the keys the refresh writes", () => {
+    const body = fn("records_apply_copy");
+    const expected: Required<ApplyCopyArgs["_expected"]> = {
+      person: "p",
+      profile: {},
+      household: null,
+      grade: null,
+      states: {},
+      anniversaries: {},
+    };
+    expect(sorted([...new Set(keysRead(body, "_expected"))])).toEqual(sorted(Object.keys(expected)));
   });
 
   it("answers a copy with the outcomes the refresh reads", () => {
@@ -380,5 +396,25 @@ describe("the live migration agrees with the live rules", () => {
       ...[...hide.matchAll(/_field not in \(([^)]*)\)/g)].flatMap((m) => quoted(m[1])),
     ];
     expect(sorted([...new Set(fields)])).toEqual(sorted(HIDEABLE_FIELDS));
+  });
+});
+
+describe("the household anniversary migration agrees with the copy rules", () => {
+  beforeEach(() => {
+    sql = anniversarySql;
+  });
+
+  it("records the household's anniversary source in the same states", () => {
+    const anniversary = table("records_household_anniversary");
+    expect(sorted(quoted(anniversary.slice(anniversary.indexOf("state text"), anniversary.indexOf("church_value"))))).toEqual(
+      sorted(VALUE_STATES),
+    );
+  });
+
+  it("tests the data move it runs, word for word", () => {
+    const move = between("-- runs this same statement.\n", ";") + ";";
+    expect(move).toMatch(/^insert into public\.records_household_anniversary/);
+    const suite = readFileSync("supabase/tests/church_records_household_anniversary_suite.sql", "utf8");
+    expect(suite).toContain(move);
   });
 });

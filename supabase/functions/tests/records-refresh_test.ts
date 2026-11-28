@@ -44,6 +44,7 @@ interface Fixture {
   orgSettings?: Record<string, unknown>[];
   householdLinks?: Record<string, unknown>[];
   householdValues?: Record<string, unknown>[];
+  householdAnniversaries?: Record<string, unknown>[];
   childSuggestions?: Record<string, unknown>[];
   /** Rows an update that returns its rows answers with, by table. */
   updated?: Record<string, Record<string, unknown>[]>;
@@ -70,6 +71,7 @@ function fakeDb(fixture: Fixture) {
     records_org_settings: fixture.orgSettings ?? [],
     records_household_links: fixture.householdLinks ?? [],
     records_household_values: fixture.householdValues ?? [],
+    records_household_anniversary: fixture.householdAnniversaries ?? [],
     records_child_suggestions: fixture.childSuggestions ?? [],
   };
   const chain = (call: Call) => {
@@ -485,6 +487,9 @@ Deno.test("two linked spouses copied in one batch both get their copy, the secon
       const expected = (args._expected as { household: Record<string, unknown> }).household;
       if (Object.entries(expected).some(([column, value]) => home[column] !== value)) return { data: "stale", error: null };
       Object.assign(home, args._household as object);
+      const source = (args._values as { field: string; state: string; church_value: unknown }[])
+        .find((v) => v.field === "anniversary");
+      if (source) rows.records_household_anniversary = [{ family_id: HOME, state: source.state, church_value: source.church_value }];
       return { data: "applied", error: null };
     },
   };
@@ -505,6 +510,69 @@ Deno.test("two linked spouses copied in one batch both get their copy, the secon
     anniversary_year: 2001,
   });
   assertEquals(rpcs[1]._profile, { phone_mobile: "+15125550199" });
+  const second = rpcs[1]._expected as { states: Record<string, unknown>; anniversaries: Record<string, unknown> };
+  assertEquals(second.states.anniversary, "records", "the second spouse plans on the household's source the first copy wrote");
+  assertEquals(Object.keys(second.anniversaries).sort(), [P1, P4]);
+});
+
+Deno.test("the anniversary is planned on the records of every linked person in the household, in the batch or not", async () => {
+  const HOME = "00000000-0000-0000-0000-0000000000f1";
+  const empty = { anniversary_month: null, anniversary_day: null, anniversary_year: null };
+  const housed = (id: string) => ({ id, family_id: HOME, first_name: "Kept", last_name: "Name", phone_mobile: null });
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    settings: [{ field: "anniversary", mode: "member" }, { field: "phone_mobile", mode: "member" }],
+    states: [{ profile_id: P4, copied_at: "2026-11-21T00:00:00Z", review_reason: null, review_since: null }],
+    profiles: [housed(P1), housed(P3), { id: P4, family_id: null, first_name: "Kept", last_name: "Name", phone_mobile: null }],
+    familyUnits: [{ id: HOME, ...empty }],
+  });
+  const { source, asked } = fakeSource();
+  const spouse = { ...CHURCH, id: "102", anniversary: { month: 7, day: 2, year: 1999 } };
+  const result = await refreshOrg(db, options({
+    ...source,
+    peopleForCopy: (creds, ids) => {
+      asked.peopleForCopy.push([...ids]);
+      return Promise.resolve([{ ...CHURCH, anniversary: { month: 6, day: 14, year: 2001 } }, spouse]);
+    },
+  }));
+  assertEquals(rpcs.map((args) => args._profile_id), [P1]);
+  assertEquals(asked.peopleForCopy, [["100", "102"]]);
+  assertEquals((rpcs[0]._expected as { anniversaries: unknown }).anniversaries, {
+    [P1]: { anniversary_month: 6, anniversary_day: 14, anniversary_year: 2001 },
+    [P3]: { anniversary_month: 7, anniversary_day: 2, anniversary_year: 1999 },
+  });
+  assertEquals(rpcs[0]._household, {}, "the spouses' records differ, so nothing writes the anniversary");
+  assertFalse((rpcs[0]._values as { field: string }[]).some((v) => v.field === "anniversary"));
+  assertEquals(rpcs[0]._filled, ["phone_mobile"]);
+  assertEquals(result.copied, 1);
+});
+
+Deno.test("the anniversary's state is the household's source, never a person's own old row", async () => {
+  const HOME = "00000000-0000-0000-0000-0000000000f1";
+  const { db, rpcs } = fakeDb({
+    ...FIXTURE,
+    settings: [{ field: "anniversary", mode: "member" }],
+    states: [],
+    profiles: [{ id: P1, family_id: HOME, first_name: "Kept", last_name: "Name", phone_mobile: null }],
+    familyUnits: [{ id: HOME, anniversary_month: null, anniversary_day: null, anniversary_year: null }],
+    values: [{ profile_id: P1, field: "anniversary", state: "records", church_value: {} }],
+    householdAnniversaries: [{ family_id: HOME, state: "cleared", church_value: {} }],
+  });
+  const { source } = fakeSource();
+  const married = { ...CHURCH, anniversary: { month: 6, day: 14, year: 2001 } };
+  await refreshOrg(db, options({ ...source, peopleForCopy: () => Promise.resolve([married]) }));
+  assertEquals((rpcs[0]._expected as { states: Record<string, unknown> }).states, { anniversary: "cleared" });
+  assertEquals(rpcs[0]._household, {}, "the household cleared it, so it stays empty");
+  assertEquals(rpcs[0]._values, [
+    { field: "anniversary", state: "cleared", church_value: { anniversary_month: 6, anniversary_day: 14, anniversary_year: 2001 } },
+  ]);
+});
+
+Deno.test("someone with no household sends no anniversary reads", async () => {
+  const { db, rpcs } = fakeDb({ ...FIXTURE, settings: [{ field: "anniversary", mode: "member" }] });
+  await refreshOrg(db, options(fakeSource().source));
+  assertEquals(rpcs.length, 1);
+  assertFalse("anniversaries" in (rpcs[0]._expected as object));
 });
 
 Deno.test("a copy whose anniversary was held for the household counts only what it wrote", async () => {

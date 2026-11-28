@@ -44,6 +44,7 @@ vi.mock("@/lib/supabase/client", () => ({
           return { eq: async () => ({ error: null }) };
         },
         is: () => chain,
+        maybeSingle: async () => ({ data: null, error: null }),
         limit: async () => ({ data: state.invites, error: null }),
         then: (resolve: (value: unknown) => void) =>
           resolve({

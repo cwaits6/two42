@@ -9,6 +9,7 @@
 import { logError, logWarn } from "./log.ts";
 import { forEachOrg, type Org } from "./orgs.ts";
 import {
+  anniversaryColumns,
   type Columns,
   type CurrentValues,
   FIELD_COLUMNS,
@@ -42,7 +43,13 @@ import {
   planHouseholdCopy,
   planHouseholdSuggestions,
 } from "./records-households.ts";
-import type { RecordsCopyPerson, RecordsCopySource, RecordsCredentials, RecordsFamily } from "./records-types.ts";
+import type {
+  RecordsCopyPerson,
+  RecordsCopySource,
+  RecordsCredentials,
+  RecordsDate,
+  RecordsFamily,
+} from "./records-types.ts";
 
 type QueryError = { message: string; code?: string } | null;
 
@@ -96,6 +103,7 @@ export type FieldValueRow = { profile_id: string; field: string; state: string; 
 export type OrgSettingsRow = { suggest_children: boolean; mode: string };
 export type HouseholdLinkRow = { family_id: string; external_family_id: string };
 export type HouseholdValueDbRow = { family_id: string; field: string; state: string; church_value: Columns };
+export type HouseholdAnniversaryRow = { family_id: string; state: string; church_value: Columns };
 export type ChildSuggestionRow = { id: string; family_member_id: string | null; photo: string | null };
 export type HouseholdMemberRow = Columns & {
   id: string;
@@ -142,8 +150,10 @@ export type ApplyCopyArgs = {
     profile: Columns;
     household: Columns | null;
     grade: Columns | null;
-    /** Each copied field's state as read, null where it had none. */
+    /** Each copied field's state as read, null where it had none; the anniversary's is the household's. */
     states: Record<string, ValueState | null>;
+    /** The church anniversary read for every linked person in the household, by profile id, when the copy plans it. */
+    anniversaries?: Record<string, Columns>;
   };
   _profile: Columns;
   _household: Columns;
@@ -169,6 +179,7 @@ export interface RecordsRefreshClient {
   from(table: "records_org_settings"): Table<OrgSettingsRow>;
   from(table: "records_household_links"): Table<HouseholdLinkRow>;
   from(table: "records_household_values"): Table<HouseholdValueDbRow>;
+  from(table: "records_household_anniversary"): Table<HouseholdAnniversaryRow>;
   from(table: "records_child_suggestions"): Table<ChildSuggestionRow>;
   rpc(fn: "records_apply_copy", args: ApplyCopyArgs): PromiseLike<{ data: ApplyOutcome | null; error: QueryError }>;
   rpc(
@@ -532,7 +543,7 @@ async function run(
       break;
     }
     const batch = due.slice(i, i + BATCH);
-    done += await copyBatch(db, options, settings, batch, retry, result);
+    done += await copyBatch(db, options, settings, links, batch, retry, result);
     if (done < i + batch.length) {
       result.stoppedAtBudget = true;
       break;
@@ -560,15 +571,13 @@ async function copyBatch(
   db: RecordsRefreshClient,
   options: RefreshOptions,
   settings: Map<RecordsField, FieldMode>,
+  links: readonly PersonLinkRow[],
   batch: { profile_id: string; external_person_id: string }[],
   retry: string[],
   result: RefreshResult,
 ): Promise<number> {
   const { orgId, creds, source } = options;
   const profileIds = batch.map((l) => l.profile_id);
-  const people = new Map<string, RecordsCopyPerson>(
-    (await source.peopleForCopy(creds, batch.map((l) => l.external_person_id))).map((p) => [p.id, p]),
-  );
 
   const profiles = new Map(
     (
@@ -585,6 +594,30 @@ async function copyBatch(
     ).map((row) => [row.id, row]),
   );
   const familyIds = [...new Set([...profiles.values()].map((p) => p.family_id).filter((id): id is string => !!id))];
+  // The anniversary is copied only while every linked person in the household
+  // agrees on it, so each of them is read from the records, in the batch or not.
+  const externalOf = new Map(links.map((l) => [l.profile_id, l.external_person_id]));
+  const householders = new Map<string, string[]>();
+  if (settings.has("anniversary") && familyIds.length > 0) {
+    for (const row of await rowsByIds(
+      familyIds,
+      (chunk) => db.from("profiles").select("id, family_id").eq("org_id", orgId).in("family_id", chunk).order("id"),
+      "household profiles",
+    )) {
+      if (!row.family_id || !externalOf.has(row.id)) continue;
+      householders.set(row.family_id, [...(householders.get(row.family_id) ?? []), row.id]);
+    }
+  }
+  const people = new Map<string, RecordsCopyPerson>(
+    (
+      await source.peopleForCopy(creds, [
+        ...new Set([
+          ...batch.map((l) => l.external_person_id),
+          ...[...householders.values()].flat().map((id) => externalOf.get(id)!),
+        ]),
+      ])
+    ).map((p) => [p.id, p]),
+  );
   const households = new Map(
     familyIds.length === 0
       ? []
@@ -626,10 +659,28 @@ async function copyBatch(
         .order("profile_id"),
     "values",
   )) {
+    // The anniversary's source is the household's, read below. Per-person rows of it stay until a migration drops them.
+    if (row.field === "anniversary") continue;
     const forPerson = stored.get(row.profile_id) ?? new Map<ValueField, StoredValue>();
     forPerson.set(row.field as ValueField, { state: row.state as ValueState, churchValue: row.church_value });
     stored.set(row.profile_id, forPerson);
   }
+  const readAnniversaries = (ids: readonly string[]) =>
+    allRows(
+      () =>
+        db
+          .from("records_household_anniversary")
+          .select("family_id, state, church_value")
+          .eq("org_id", orgId)
+          .in("family_id", ids)
+          .order("family_id"),
+      "household anniversaries",
+    );
+  const anniversaries = new Map<string, StoredValue>();
+  const keepAnniversaries = (rows: HouseholdAnniversaryRow[]) => {
+    for (const row of rows) anniversaries.set(row.family_id, { state: row.state as ValueState, churchValue: row.church_value });
+  };
+  if (familyIds.length > 0) keepAnniversaries(await readAnniversaries(familyIds));
 
   let handled = 0;
   for (const link of batch) {
@@ -639,22 +690,35 @@ async function copyBatch(
     const profile = profiles.get(link.profile_id);
     // Gone or inactive since the presence read; the next run lists them for review.
     if (!person || !profile) continue;
-    const household = profile.family_id ? households.get(profile.family_id) ?? null : null;
+    const familyId = profile.family_id;
+    const household = familyId ? households.get(familyId) ?? null : null;
     const grade = grades.get(link.profile_id) ?? null;
     const current: CurrentValues = {
       profile: pick(profile, PROFILE_COPY_COLUMNS),
       household: household && pick(household, FIELD_COLUMNS.anniversary),
       grade: grade && pick(grade, FIELD_COLUMNS.grade),
     };
+    const own = new Map(stored.get(link.profile_id));
+    const anniversary = familyId ? anniversaries.get(familyId) : undefined;
+    if (anniversary) own.set("anniversary", anniversary);
+    // Everyone linked in the household, this person included; someone the records didn't return holds no anniversary.
+    const householdReads = familyId ? householders.get(familyId) : undefined;
+    const dates = householdReads?.map((id) => ({
+      id,
+      date: people.get(externalOf.get(id)!)?.anniversary ?? { month: null, day: null, year: null },
+    }));
+    const reads = dates && {
+      others: dates.filter((d) => d.id !== link.profile_id).map((d) => d.date),
+      columns: Object.fromEntries(dates.map((d) => [d.id, anniversaryColumns(d.date, options.now())])),
+    };
     try {
-      const outcome = await copyPerson(db, options, settings, link.profile_id, person, current, stored.get(link.profile_id));
+      const outcome = await copyPerson(db, options, settings, link.profile_id, person, current, own, reads);
       if (outcome.copied) result.copied++;
       if (outcome.photoSkipped) result.photosSkipped++;
       if (outcome.stale) retry.push(link.profile_id);
-      // A spouse later in the batch checks the household's anniversary against
-      // what the database holds now, not the batch's first read.
-      const familyId = profile.family_id;
-      if (outcome.householdWritten && familyId) {
+      // A spouse later in the batch plans on the household's anniversary and
+      // its source as this copy left them, not the batch's first read.
+      if (outcome.anniversaryPlanned && familyId) {
         const [row] = await allRows(
           () =>
             db
@@ -667,6 +731,8 @@ async function copyBatch(
         );
         if (row) households.set(row.id, row);
         else households.delete(familyId);
+        anniversaries.delete(familyId);
+        keepAnniversaries(await readAnniversaries([familyId]));
       }
     } catch (err) {
       result.failed++;
@@ -687,16 +753,18 @@ async function copyPerson(
   profileId: string,
   person: RecordsCopyPerson,
   current: CurrentValues,
-  stored: Map<ValueField, StoredValue> | undefined,
-): Promise<{ copied: boolean; photoSkipped: boolean; stale: boolean; householdWritten: boolean }> {
+  stored: Map<ValueField, StoredValue>,
+  reads: { others: RecordsDate[]; columns: Record<string, Columns> } | undefined,
+): Promise<{ copied: boolean; photoSkipped: boolean; stale: boolean; anniversaryPlanned: boolean }> {
   const { orgId } = options;
   const input = {
     settings,
     current,
-    stored: stored ?? new Map(),
+    stored,
     person,
     normalizePhone: options.normalizePhone,
     today: options.now(),
+    otherAnniversaries: reads?.others,
   };
   let plan = planPersonCopy(input);
   let photoSkipped = false;
@@ -723,9 +791,10 @@ async function copyPerson(
       states: Object.fromEntries(
         [...settings.keys(), ...(settings.has("name") ? ["preferred_name"] : [])].map((field) => [
           field,
-          stored?.get(field as ValueField)?.state ?? null,
+          stored.get(field as ValueField)?.state ?? null,
         ]),
       ),
+      ...(reads ? { anniversaries: reads.columns } : {}),
     },
     _profile: plan.profile,
     _household: plan.household,
@@ -749,16 +818,17 @@ async function copyPerson(
       route: "refresh-church-records",
       ids: { org: orgId, profile: profileId },
     });
-    return { copied: false, photoSkipped, stale: true, householdWritten: false };
+    return { copied: false, photoSkipped, stale: true, anniversaryPlanned: false };
   }
-  // "held": the anniversary was left out because another linked person in the
-  // household holds a different one, or cleared it; everything else landed.
+  // "held": the anniversary was left out because the household's linked
+  // people's records hold different ones; everything else landed.
   const written = data === "held" ? { ...plan, household: {} } : plan;
   return {
     copied: (data === "applied" || data === "held") && planWrites(written),
     photoSkipped,
     stale: false,
-    householdWritten: data === "applied" && Object.keys(plan.household).length > 0,
+    anniversaryPlanned: (data === "applied" || data === "held")
+      && (Object.keys(plan.household).length > 0 || plan.values.some((v) => v.field === "anniversary")),
   };
 }
 

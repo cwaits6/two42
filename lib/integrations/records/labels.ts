@@ -2,10 +2,8 @@
 // records. Members never see the product's name, only "your church".
 import {
   type Columns,
-  FIELD_COLUMNS,
   type FieldMode,
   type RecordsField,
-  sameValue,
   type ValueField,
   type ValueState,
 } from "@/supabase/functions/_shared/records-copy";
@@ -90,20 +88,4 @@ export function changeableFilled(
         ? [{ field, label: FIELD_LABELS[field], href: link.href }]
         : [],
   );
-}
-
-type Source = { state: ValueState; churchValue: Columns };
-
-/**
- * The household's anniversary source, from its linked people's. The copy
- * keeps them alike; should they still differ, the household shows no source
- * rather than one person's.
- */
-export function agreedAnniversary(sources: readonly Source[]): Source | null {
-  const [first, ...rest] = sources;
-  if (!first) return null;
-  const agree = rest.every(
-    (s) => s.state === first.state && sameValue(s.churchValue, first.churchValue, FIELD_COLUMNS.anniversary),
-  );
-  return agree ? first : null;
 }

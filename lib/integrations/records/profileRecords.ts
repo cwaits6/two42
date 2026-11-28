@@ -6,7 +6,7 @@
 // "use client" module.
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/log";
-import { agreedAnniversary, type ProfileRecords } from "./labels";
+import type { ProfileRecords } from "./labels";
 
 /**
  * Each requested person's records state; every one is present, with no
@@ -26,7 +26,12 @@ export async function readProfileRecords(profileIds: string[], noticeFor?: strin
   const supabase = await createClient();
   const [settings, values, notice] = await Promise.all([
     supabase.from("records_field_settings").select("field, mode"),
-    supabase.from("records_field_values").select("profile_id, field, state, church_value").in("profile_id", profileIds),
+    // The anniversary's source is the household's. Per-person rows of it stay until a migration drops them.
+    supabase
+      .from("records_field_values")
+      .select("profile_id, field, state, church_value")
+      .in("profile_id", profileIds)
+      .neq("field", "anniversary"),
     noticeFor
       ? supabase
           .from("records_person_state")
@@ -58,42 +63,37 @@ export async function readProfileRecords(profileIds: string[], noticeFor?: strin
   return { ok: true, byProfile };
 }
 
-/** The household's anniversary as it came from the records, when its linked people's sources agree. */
-export function householdAnniversary(read: Record<string, ProfileRecords>): ProfileRecords | null {
-  const withSource = Object.values(read).filter((records) => records.values.anniversary);
-  const agreed = agreedAnniversary(withSource.map((records) => records.values.anniversary!));
-  return agreed ? { ...withSource[0], values: { anniversary: agreed } } : null;
-}
-
 /**
- * The household's own details from the records: its address and home phone,
- * and the anniversary its linked people's sources agree on. Null when none
- * came from the records; not ok when the read failed, as for people.
+ * The household's own details from the records: its address, home phone and
+ * anniversary. Null when none came from the records; not ok when the read
+ * failed, as for people.
  */
 export async function readHouseholdRecords(
   familyId: string,
-  people: Record<string, ProfileRecords>,
 ): Promise<{ ok: true; records: ProfileRecords | null } | { ok: false }> {
   const supabase = await createClient();
-  const [settings, values] = await Promise.all([
+  const [settings, values, anniversary] = await Promise.all([
     supabase.from("records_field_settings").select("field, mode"),
     supabase.from("records_household_values").select("field, state, church_value").eq("family_id", familyId),
+    supabase.from("records_household_anniversary").select("state, church_value").eq("family_id", familyId).maybeSingle(),
   ]);
-  const error = settings.error ?? values.error;
+  const error = settings.error ?? values.error ?? anniversary.error;
   if (error) {
     logError("Church records household labels read failed", error, { step: "records_household_labels" });
     return { ok: false };
   }
-  const anniversary = householdAnniversary(people);
   const own = Object.fromEntries(
-    (values.data ?? []).map((row) => [row.field, { state: row.state, churchValue: row.church_value }]),
+    [...(values.data ?? []), ...(anniversary.data ? [{ field: "anniversary", ...anniversary.data }] : [])].map((row) => [
+      row.field,
+      { state: row.state, churchValue: row.church_value },
+    ]),
   ) as ProfileRecords["values"];
-  if (!anniversary && Object.keys(own).length === 0) return { ok: true, records: null };
+  if (Object.keys(own).length === 0) return { ok: true, records: null };
   return {
     ok: true,
     records: {
       settings: Object.fromEntries((settings.data ?? []).map((row) => [row.field, row.mode])),
-      values: { ...anniversary?.values, ...own },
+      values: own,
       noticeDue: false,
     },
   };

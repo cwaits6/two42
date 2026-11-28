@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(68);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -82,6 +82,8 @@ create function pg_temp.live_details_stored(_org uuid) returns int language sql 
         and (state = 'records' or church_value <> '{}'::jsonb))
   + (select count(*) from public.records_household_values
       where org_id = _org and field = 'address' and (state = 'records' or church_value <> '{}'::jsonb))
+  + (select count(*) from public.records_household_anniversary
+      where org_id = _org and (state = 'records' or church_value <> '{}'::jsonb))
   + (select count(*) from public.records_child_suggestions
       where org_id = _org and (birth_month is not null or birth_day is not null or graduation_year is not null))
   )::int;
@@ -125,13 +127,12 @@ insert into public.records_field_settings (org_id, field, mode)
   select pg_temp.fx('org'), f, 'member' from unnest(array['birthday', 'anniversary', 'address', 'phone_mobile']) f;
 insert into public.records_field_settings (org_id, field, mode) values (pg_temp.fx('org'), 'grade', 'locked');
 
--- What a copy left: Henry's birthday, the household's anniversary (both
--- spouses' sources) and address, and Isaac's grade on his own household
+-- What a copy left: Henry's birthday, the household's anniversary and
+-- address, and Isaac's grade on his own household
 -- member row, all still the church's; Isaac's birthday, which he changed;
 -- Henry's mobile, which live mode keeps; and an open suggested child. And
 -- what a member made their own, which Copy -> Live keeps: Chloe's grade, the
--- Seedly household's address, and its anniversary, which Isaac changed while
--- Ruth's source for it is still the church's.
+-- Seedly household's address, and its anniversary, which Isaac changed.
 update public.profiles set birth_month = 1, birth_day = 2, birth_year = 1980, phone_mobile = '+15125550100'
  where id = pg_temp.fx('henry');
 update public.profiles set birth_month = 5, birth_day = 5, birth_year = null where id = pg_temp.fx('isaac');
@@ -149,14 +150,15 @@ update public.family_units set anniversary_month = 8, anniversary_day = 11, anni
  where id = pg_temp.fx('seedly');
 insert into public.records_field_values (org_id, profile_id, field, state, church_value) values
   (pg_temp.fx('org'), pg_temp.fx('henry'), 'birthday', 'records', '{"birth_month": 1, "birth_day": 2, "birth_year": 1980}'),
-  (pg_temp.fx('org'), pg_temp.fx('henry'), 'anniversary', 'records', '{"anniversary_month": 6, "anniversary_day": 9, "anniversary_year": 2001}'),
-  (pg_temp.fx('org'), pg_temp.fx('chloe'), 'anniversary', 'records', '{"anniversary_month": 6, "anniversary_day": 9, "anniversary_year": 2001}'),
   (pg_temp.fx('org'), pg_temp.fx('henry'), 'phone_mobile', 'records', '{"phone_mobile": "+15125550100"}'),
   (pg_temp.fx('org'), pg_temp.fx('isaac'), 'birthday', 'changed', '{"birth_month": 7, "birth_day": 7, "birth_year": null}'),
   (pg_temp.fx('org'), pg_temp.fx('isaac'), 'grade', 'records', '{"graduation_year": 2030}'),
-  (pg_temp.fx('org'), pg_temp.fx('chloe'), 'grade', 'changed', '{"graduation_year": 2029}'),
-  (pg_temp.fx('org'), pg_temp.fx('isaac'), 'anniversary', 'changed', '{"anniversary_month": 8, "anniversary_day": 12, "anniversary_year": 2018}'),
-  (pg_temp.fx('org'), pg_temp.fx('ruth'), 'anniversary', 'records', '{"anniversary_month": 8, "anniversary_day": 12, "anniversary_year": 2018}');
+  (pg_temp.fx('org'), pg_temp.fx('chloe'), 'grade', 'changed', '{"graduation_year": 2029}');
+insert into public.records_household_anniversary (org_id, family_id, connection_id, state, church_value) values
+  (pg_temp.fx('org'), pg_temp.fx('home'), pg_temp.fx('connection'), 'records',
+   '{"anniversary_month": 6, "anniversary_day": 9, "anniversary_year": 2001}'),
+  (pg_temp.fx('org'), pg_temp.fx('seedly'), pg_temp.fx('connection'), 'changed',
+   '{"anniversary_month": 8, "anniversary_day": 12, "anniversary_year": 2018}');
 insert into public.records_household_values (org_id, family_id, field, state, church_value) values
   (pg_temp.fx('org'), pg_temp.fx('home'), 'address', 'records',
    '{"address_line1": "12 Oak St", "address_line2": null, "city": "Austin", "state": "TX", "postal_code": "78701"}'),
@@ -194,6 +196,8 @@ begin
   insert into public.records_household_links (org_id, family_id, connection_id, external_family_id)
     values (_other, _family, _connection, 'B1');
   insert into public.records_household_values (org_id, family_id, field, state) values (_other, _family, 'address', 'cleared');
+  insert into public.records_household_anniversary (org_id, family_id, connection_id, state)
+    values (_other, _family, _connection, 'cleared');
   insert into public.records_household_suggestions (org_id, connection_id, external_family_id, target_family_id, people, ready)
     values (_other, _connection, 'B1', _family, '[]', true);
   insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name)
@@ -222,7 +226,7 @@ select is(pg_temp.attempt('admin@local.dev', format('select public.records_live_
 
 -- ── Copy -> Live ────────────────────────────────────────────────────────────
 select is(public.records_live_copied_count(pg_temp.fx('org')), 6,
-  'the count names each detail still the church''s once: the birthday, grade, the anniversary of two spouses, the address, and the suggested child''s birthday and grade');
+  'the count names each detail still the church''s once: the birthday, grade, the household''s anniversary, the address, and the suggested child''s birthday and grade');
 
 update public.records_refresh_state set running_since = now() where org_id = pg_temp.fx('org');
 select is(public.records_save_mode(pg_temp.fx('org'), 'live', pg_temp.fx('admin')), '{"outcome": "busy"}'::jsonb,
@@ -259,8 +263,10 @@ select is((select state from public.records_field_values where profile_id = pg_t
 select is((select array[anniversary_month, anniversary_day, anniversary_year] from public.family_units where id = pg_temp.fx('seedly')),
   array[8, 11, 2018]::smallint[], 'an anniversary one of the couple changed stays the household''s');
 select is(
-  (select state || ':' || church_value::text from public.records_field_values where profile_id = pg_temp.fx('isaac') and field = 'anniversary'),
+  (select state || ':' || church_value::text from public.records_household_anniversary where family_id = pg_temp.fx('seedly')),
   'changed:{}', 'with the church''s value forgotten');
+select is((select count(*)::int from public.records_household_anniversary where family_id = pg_temp.fx('home')), 0,
+  'and the source of an anniversary that was still the church''s goes with it');
 select is((select address_line1 || ', ' || city || ' ' || state || ' ' || postal_code from public.family_units where id = pg_temp.fx('seedly')),
   '707 Example Place, Springfield IL 62704', 'an address the household changed stays');
 select is(
@@ -302,6 +308,14 @@ select is(pg_temp.as_service(format(
   $q$update public.records_child_suggestions set birth_month = 3, birth_day = 3 where org_id = %L$q$, pg_temp.fx('org'))),
   'RC002', 'and so is a child''s birthday');
 select is(pg_temp.as_service(format(
+  $q$insert into public.records_household_anniversary (org_id, family_id, connection_id, state)
+     values (%L, %L, %L, 'records')$q$, pg_temp.fx('org'), pg_temp.fx('home'), pg_temp.fx('connection'))),
+  'RC002', 'and a household anniversary that follows the church');
+select is(pg_temp.as_service(format(
+  $q$update public.records_household_anniversary set church_value = '{"anniversary_month": 8}'
+      where family_id = %L$q$, pg_temp.fx('seedly'))),
+  'RC002', 'or keeps the church''s value');
+select is(pg_temp.as_service(format(
   $q$insert into public.records_field_values (org_id, profile_id, field, state, church_value)
      values (%L, %L, 'gender', 'records', '{"gender": "male"}')$q$, pg_temp.fx('org'), pg_temp.fx('henry'))),
   'ok', 'what live mode stores is still copied');
@@ -318,9 +332,10 @@ select is((select count(*)::int from public.records_field_values where profile_i
 select is(pg_temp.attempt('chloe.mockingham@example.test', $q$select public.records_live_hide('anniversary', true)$q$),
   'rows:1', 'the household''s spouse hides its anniversary');
 select is(
-  (select array_agg(state order by profile_id) from public.records_field_values
-    where field = 'anniversary' and profile_id in (pg_temp.fx('henry'), pg_temp.fx('chloe'))),
-  array['cleared', 'cleared'], 'for both of its linked people');
+  (select array_agg(state || ':' || church_value::text) from public.records_household_anniversary where family_id = pg_temp.fx('home')),
+  array['cleared:{}'], 'once, for the household');
+select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('anniversary', true)$q$),
+  'RC001', 'a household with nobody linked to the records has no anniversary to hide');
 select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.records_live_hide('address', true)$q$),
   'rows:1', 'its primary hides its address');
 select is((select state from public.records_household_values where family_id = pg_temp.fx('home') and field = 'address'),
@@ -341,10 +356,12 @@ select is((select state from public.records_household_values where family_id = p
   'cleared', 'so the household''s address stays hidden');
 select is(pg_temp.attempt('mia.fakeworth@example.test', $q$select public.records_live_hide('anniversary', false)$q$),
   'RC001', 'or its anniversary');
-select is(
-  (select array_agg(state order by profile_id) from public.records_field_values
-    where field = 'anniversary' and profile_id in (pg_temp.fx('henry'), pg_temp.fx('chloe'))),
-  array['cleared', 'cleared'], 'which stays hidden too');
+select is((select state from public.records_household_anniversary where family_id = pg_temp.fx('home')),
+  'cleared', 'which stays hidden too');
+select is(pg_temp.attempt('henry.mockingham@example.test', $q$select public.records_live_hide('anniversary', false)$q$),
+  'rows:1', 'its primary shows it again');
+select is((select count(*)::int from public.records_household_anniversary where family_id = pg_temp.fx('home')),
+  0, 'so it comes from the records again');
 
 -- A child added while live is added with no birthday or grade, which the
 -- directory reads live while the church stays live.
@@ -376,7 +393,7 @@ select is((select array[birth_month, birth_day, graduation_year] from public.fam
 create temp table records_tables (name text primary key) on commit drop;
 insert into records_tables values
   ('records_child_suggestions'), ('records_connections'), ('records_field_settings'), ('records_field_values'),
-  ('records_household_links'), ('records_household_suggestions'), ('records_household_values'),
+  ('records_household_anniversary'), ('records_household_links'), ('records_household_suggestions'), ('records_household_values'),
   ('records_intake_requests'), ('records_intake_settings'), ('records_org_settings'), ('records_person_links'), ('records_person_state'), ('records_refresh_state');
 select is(
   (select array_agg(tablename::text order by tablename) from pg_tables where schemaname = 'public' and tablename like 'records\_%'),

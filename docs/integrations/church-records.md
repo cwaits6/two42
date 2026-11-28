@@ -105,6 +105,17 @@ Rules:
 - **Contact details, birthday, anniversary and photo are always
   member-changeable**, and a member clearing one sticks. In two42 you hide
   something by leaving it out, and a church can't take that away.
+- **A clear is remembered while the church's records are connected**
+  (maintainer, 2026-11-28): a member's clear of any detail the records can
+  supply stays empty whether the field is on or off, and whether or not the
+  church had supplied it. Only a real clear counts, a value changed to empty;
+  a detail that was always empty isn't cleared. Entering a value again makes
+  it the member's own. Clears made before the church connected, or before the
+  person (or their household, for its address and home phone) was linked to
+  the records, aren't known, so the first copy fills those. Locked fields
+  (name, suffix, title, gender, a child's grade) still take the church's
+  value over a clear. A church that never connects its records stores
+  nothing.
 - **Values fill in automatically**, and the member gets a one-time notice:
   "Your church filled in some of your details from its records."
 - **Preferred name** stays editable. The records' nick name fills it only
@@ -177,9 +188,10 @@ How it works:
   links the household to the family, and asks the next refresh to copy the
   people it moved in full: the anniversary is copied only through a person
   already in the household, so someone copied before they had one would
-  otherwise never bring it in. Each person who changes household loses
-  their anniversary source, which was the old household's, so that copy is
-  a first fill and keeps a date the new household entered. Whoever stays behind keeps their
+  otherwise never bring it in. The anniversary's source belongs to the
+  household, so the person who moved brings none with them: the new
+  household's own date or clear stands, and a household with no source gets
+  a first fill, which keeps a date it entered. Whoever stays behind keeps their
   household with its address, phone, photo, anniversary and the people in it
   without an account; it is never deleted. A suggestion where anyone leaves a
   household they're in is **Check first**, confirmed one at a time; the rest
@@ -200,10 +212,17 @@ How it works:
   person's: `records` follows the church, `changed` and `cleared` are the
   household's. An address outside the US, or one the household form wouldn't
   accept, counts as empty. While a spouse's own mobile is the household's
-  phone, the copy leaves it alone. The anniversary keeps its per-person source,
-  so a household member's `cleared` anniversary holds back the copy of anyone
-  in the household with no source of their own, such as someone a
-  confirmation moved in.
+  phone, the copy leaves it alone.
+- **The anniversary** is the household's, and its source is kept once per
+  household (`records_household_anniversary`), for any household with
+  someone linked in it, confirmed or not. Each linked person's records hold
+  their own, so each copy reads every linked person in the household, in the
+  batch or not, and copies the anniversary only while their records agree; a
+  person whose records have none doesn't count. While they differ, no copy
+  writes it, whichever spouse is copied first, and the household keeps what
+  it has. A household's clear or change binds everyone in it. A household
+  that never set or cleared its anniversary gets the first copy. The source
+  goes with the household and the connection.
 - **Children.** While the switch is on, each confirmed household's family's
   children are stored as open suggestions (`records_child_suggestions`), with
   only the fields above and never a birth year. A child already linked to an
@@ -419,11 +438,7 @@ and kept up to date.
   `locked` or `member`; no row is *Not from your church's records*. Field names
   are two42's: `name` (first and last), `suffix`, `title`, `gender`,
   `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's;
-  each linked person's records hold their own, so while two linked people in
-  a household differ, the first one copied stands and the other's isn't
-  recorded; a member's change or clear of it is still worked out as usual and
-  takes the new church value, so the two agree again once the church corrects
-  both),
+  see [Households](#households)),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   `records` and `changed` sources, so its values become ordinary two42 data,
@@ -440,12 +455,21 @@ and kept up to date.
 - **Where each value came from** (`records_field_values`): per linked person
   and field, `records`, `changed` or `cleared`, with the church's last value.
   It goes with the link, so unlinking or disconnecting leaves the values as
-  ordinary data, and live mode (T42-274) can find what to remove.
+  ordinary data, and live mode (T42-274) can find what to remove. A linked
+  household's address and home phone keep theirs in `records_household_values`
+  and its anniversary in `records_household_anniversary`. Rows of
+  `records_field_values` with `field = 'anniversary'`, from before the
+  anniversary was kept per household, are no longer read or written; a later
+  migration drops them.
 - **Member edits** are marked by `BEFORE UPDATE` triggers on `profiles`,
   `family_units` and `family_members`, so every screen that saves a profile
   counts: an edit is `changed`, a clear `cleared`, the church's own value
-  `records` again (which is all **Use your church's value** does). A locked
-  value is kept, not refused, because every profile form sends each column.
+  `records` again (which is all **Use your church's value** does). A clear is
+  written as a `cleared` source even with none there yet, and with the field
+  off, for a linked person or a linked household (the anniversary: any
+  household with someone linked). It is an upsert, so it lands whether it
+  commits before or after a church admin's field-off delete of that source. A
+  locked value is kept, not refused, because every profile form sends each column.
   Only a signed-in person's write counts; the refresh writes as the service
   role.
 - **The rules** for one person's copy are `planPersonCopy()` in
@@ -578,12 +602,12 @@ T42-274. A church admin chooses **Live from your church's records** under
 - **Switching** goes through `records_save_mode()`, refused while a refresh
   holds its claim. **Copy → Live**, in one transaction: every live-only value
   whose source is still `records` is cleared from two42 (birthday, the
-  person's own grade row, a household's anniversary when every linked
-  person's source for it is the church's, a linked household's address), its
+  person's own grade row, a household's anniversary while its source is the
+  church's and someone in it is linked, a linked household's address), its
   source is removed, the church's last value is forgotten on the sources
   members changed or cleared, and open child suggestions lose their birthday
   and grade. The confirmation's count is `records_live_copied_count()`, one
-  per value (two spouses' anniversary is one). Values a member changed stay
+  per value. Values a member changed stay
   theirs. A child already added from a suggestion holds no source, so their
   details are ordinary two42 data and stay, like values left after a link
   ends. **Live → Copy** asks the next refresh to copy everyone in full, and
@@ -594,7 +618,8 @@ T42-274. A church admin chooses **Live from your church's records** under
 - **Never stored.** The refresh, nightly and **Refresh now**, reads the mode
   inside its claim and plans no live-only field (`storedFields()`), copies no
   household address, and suggests children with names and photo only. Under
-  that, `records_live_value_guard` and `records_live_child_guard` refuse, in
+  that, `records_live_value_guard`, `records_live_anniversary_guard` and
+  `records_live_child_guard` refuse, in
   live mode, any source of a live-only field that is `records` or keeps a
   church value, and any suggested child with a birthday or grade. Every copy
   of one of these fields writes its source in the same call, so a write path
@@ -633,7 +658,9 @@ T42-274. A church admin chooses **Live from your church's records** under
 - **Hiding.** A live value is never in two42 for a member to leave out, so
   `records_live_hide()` records a `cleared` source instead: a member's own
   birthday, or, for a household's primary or spouse, its address and
-  anniversary. **Don't show** and **Show again** are on the member's own entry
+  anniversary, the anniversary once for the household. The directory reads
+  the anniversary from every linked spouse's records and shows it only while
+  they agree, as the copy does. **Don't show** and **Show again** are on the member's own entry
   and household in the directory. A clear made in live mode stays the
   member's if the church switches back to copy.
 - **Not reachable.** When the provider fails, or the key can't be opened,
