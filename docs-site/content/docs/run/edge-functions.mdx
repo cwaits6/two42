@@ -90,6 +90,8 @@ Read the answer in `net._http_response` and the function's log under **Edge Func
 - **Failed:** the 500 "The runtime didn't refuse a loopback address, so no church was refreshed.", with a "church records refresh stopped: the address check failed" line in the log. Don't schedule it.
 - **Not checked:** `{"orgs":0}` with a "church records refresh skipped: the integration is off" line means `RECORDS_KEY_SECRET` isn't set, and the 500 "RECORDS_KEY_SECRET is not a valid key." means it isn't a valid key. Neither ran the check: set the secret and call it again. The 500 "The church records refresh stopped before it finished." means the check passed but the run failed; read the log before scheduling it.
 
+A passed check refuses loopback before any connection is opened, so on its own it doesn't show that the function can reach a church's records. Schedule it only once the same call also shows one church refreshed: `connected` is at least 1, nothing is listed under `failed`, and that church's **Last refreshed** on its **Church records** page moves to the time of the call. If `connected` is 0, no church is connected yet: don't schedule it. Once a church admin connects their church, call it again and check that church.
+
 Then, to run it nightly, add a `pg_cron` job in the SQL editor that posts to it the way the other jobs do, for example at 08:30 UTC:
 
 ```sql

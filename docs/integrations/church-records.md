@@ -533,8 +533,12 @@ with a 500 if it doesn't.
 It runs on the Supabase Edge Runtime, hosted or the CLI's, with no version to
 pin: it needs `Deno.connect` and `Deno.startTls`, which the Deno 2.1 line the
 runtime is built on has. Schedule it only after a first call on the hosted
-project has passed that check: the **Edge functions** page says how to make
-that call and read the answer.
+project has passed that check and refreshed at least one connected church,
+with nothing under `failed` and that church's **Last refreshed** moving to
+the time of the call. The check alone refuses loopback before any connection
+opens, so it doesn't exercise `Deno.connect` or `Deno.startTls`; with no
+church connected yet, wait to schedule it until one is. The **Edge
+functions** page says how to make that call and read the answer.
 
 ### Still open
 
