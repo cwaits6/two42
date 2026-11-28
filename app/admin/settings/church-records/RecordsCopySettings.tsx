@@ -275,7 +275,7 @@ export function RecordsCopySettings({ label, live, reloads = 0 }: { label: strin
                       </p>
                       {row.reason === "inactive" && <OpenLink href={row.url} label={label} />}
                     </div>
-                    <Button size="lg" variant="outline" disabled={busy} onClick={() => unlink(row)}>
+                    <Button size="lg" variant="outline" disabled={busy} onClick={() => unlink(row)} aria-label={`Unlink ${row.name}`}>
                       Unlink
                     </Button>
                   </li>

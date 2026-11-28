@@ -25,10 +25,10 @@ function row(i: number, over: Partial<SuggestionRow> = {}): SuggestionRow {
 
 function data(): LinksData {
   return {
-    linked: [],
+    linked: [{ profileId: "p800", name: "Lena Linked", personId: "800", personUrl: "https://rock.example.org/Person/800", linkedAt: "2026-11-01T00:00:00Z" }],
     suggestions: [
       ...Array.from({ length: 130 }, (_, i) => row(i)),
-      row(500, { name: "Tom Obrien", confirmableInBulk: false, matched: { email: false, birthday: false } }),
+      row(500, { name: "Tom Obrien", personName: "Thomas Obrien", confirmableInBulk: false, matched: { email: false, birthday: false } }),
       row(501, { profileId: "p500", name: "Tom Obrien", personName: "Thomas Obrien", confirmableInBulk: false }),
       row(600, { name: "Ann Single", confirmableInBulk: false, matched: { email: false, birthday: false } }),
     ],
@@ -101,13 +101,25 @@ describe("PersonLinks", () => {
     expect(posts.map((p) => p.length)).toEqual([100, 30]);
   });
 
-  it("stops at the first failed batch and says how far it got", async () => {
+  it("closes the confirmation once everyone is linked", async () => {
+    await click(button("Link all 130"));
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await click(button("Link 130 people"));
+    await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.textContent).not.toContain("Link 0 people?");
+  });
+
+  it("stops at the first failed batch, closes the confirmation and says how far it got", async () => {
     failAfter = 1;
     await click(button("Link all 130"));
     await click(button("Link 130 people"));
     await settle();
     expect(posts).toHaveLength(2);
-    expect(container.textContent).toContain("Linked 100 of 130, then stopped. One of these no longer matches.");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Linked 100 of 130, then stopped. One of these no longer matches.",
+    );
   });
 
   it("leaves out anyone unticked in the review list", async () => {
@@ -130,13 +142,19 @@ describe("PersonLinks", () => {
     expect(container.textContent).not.toContain("Person 000");
   });
 
-  it("offers a choice when a profile has several possible matches", async () => {
+  it("tells same-name matches apart by their record id, on screen and in each Link button's name", async () => {
     expect(container.textContent).toContain("2 possible matches");
     await click(button("Choose…"));
-    expect(container.textContent).toContain("Thomas Obrien");
-    await click(container.querySelector('[aria-label="Link Tom Obrien to Thomas Obrien"]') as HTMLElement);
+    expect(container.textContent).toContain("Rock RMS ID 500");
+    expect(container.textContent).toContain("Rock RMS ID 501");
+    expect(container.querySelector('[aria-label="Link Tom Obrien to Thomas Obrien, Rock RMS ID 500"]')).not.toBeNull();
+    await click(container.querySelector('[aria-label="Link Tom Obrien to Thomas Obrien, Rock RMS ID 501"]') as HTMLElement);
     await settle();
     expect(posts).toEqual([[{ profileId: "p500", personId: "501" }]]);
+  });
+
+  it("names the person in each Unlink button", () => {
+    expect(container.querySelector('[aria-label="Unlink Lena Linked"]')?.textContent?.trim()).toBe("Unlink");
   });
 
   it("filters every section by name", async () => {

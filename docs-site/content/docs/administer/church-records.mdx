@@ -42,7 +42,7 @@ Church records is off until the operator sets `RECORDS_KEY_SECRET`; see [Environ
 3. Enter the address and the key: for Rock RMS, the **Rock RMS address**, such as `https://rock.yourchurch.org`, and the **REST key**.
 4. Select **Connect Rock RMS**.
 
-Before it saves anything, two42 tries the key on everything a refresh reads, so a missing permission shows now, not at the first refresh. If it can't connect, it says why, such as **Rock RMS didn't accept the key. Check it is active and its user can view everything the key instructions list.** or **Couldn't reach Rock RMS at that address. Check the address and try again.**
+Before it saves anything, two42 tries the key on everything a refresh reads, so a missing permission shows now, not at the first refresh. If it can't connect, it says why, such as **Rock RMS didn't accept the key. Check it is active and its user can view everything the key instructions list.** or **Couldn't reach Rock RMS at that address. Check the address and try again.** A key that can read some of what two42 needs but not all of it is told what's missing, such as **The key's role can't view Groups. Add View on Groups to its role.**
 
 Once connected, the card says **Rock RMS connected** with the address and **Ends in** the key's last four characters. The key is never shown again. Below the card, the **People** tab links people and chooses what two42 copies; the **Households** tab suggests households from the families in your records.
 
@@ -51,7 +51,7 @@ Once connected, the card says **Rock RMS connected** with the address and **Ends
 two42 suggests a person from your records for each approved person in two42 who isn't linked yet. A suggestion shows the person's name in your records and what agreed, such as **Name and email match**, never their details there. Every list is searched with **Search by name** and shown 25 at a time.
 
 - **Ready to link**: the name and an email or birthday agree, and there's only one possible match on each side. **Review list** shows each one with a box to untick anyone you don't want linked. **Link all**, with the number, links them, or **Link** with the number **selected** once you've unticked some. It asks first, then links 100 at a time and shows its progress. If the server refuses a batch it stops there and says how many it linked.
-- **Check first**: only the name agrees, or there's more than one possible match. Use **Open in Rock RMS** to check the record, then **Link**, one person at a time. Someone with several possible matches says how many; **Choose…** shows each match with its own **Link**.
+- **Check first**: only the name agrees, or there's more than one possible match. Use **Open in Rock RMS** to check the record, then **Link**, one person at a time. Someone with several possible matches says how many; **Choose…** shows each match with its id in your records, such as **Rock RMS ID 501**, so two records with the same name can be told apart, and its own **Link**.
 - **No match found**: usually not in your records yet, or spelled differently. **Show** lists them.
 - **Linked**: everyone linked, each with **Open in Rock RMS** and **Unlink**.
 
@@ -174,7 +174,8 @@ Photos don't use the REST key. Rock RMS gives each photo under its own photo sec
 1. Under Admin Tools › Settings › Security Roles, add a role, such as "two42 read-only", with no members but the user below.
 2. Under Admin Tools › Settings › REST Controllers, open **People**, **DefinedValues**, **PhoneNumbers**, **Groups**, **GroupMembers** and **Locations** in turn, and on each, under Security, allow **View** for the role. Grant nothing else: no **Edit** and no **Administrate**.
 3. Under Admin Tools › Settings › REST Keys, add a key, active, on a new user for two42 alone, and add that user to the role.
-4. In two42, [connect](#connect) with the Rock RMS address and that key.
+4. Clear Rock RMS's cache, under Admin › System Information › Clear Cache. Rock RMS applies role and permission changes only after its cache is cleared.
+5. In two42, [connect](#connect) with the Rock RMS address and that key.
 
 Don't use a broad staff role for the key's user: it grants far more than two42 reads.
 
@@ -186,14 +187,17 @@ two42 starts a workflow type you choose for each new person, with their details 
 
 The write key's role needs exactly these, and nothing else:
 
-- **Edit** on the `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}` action of the **Workflows** REST controller, to start the workflow. This is the WorkflowEntry action.
-- **View** on the **WorkflowTypes** REST controller, for **Find workflow types** and the check when you save.
-- **View** on the workflow type you choose. Rock RMS checks this only when it starts a workflow, so a key missing it saves, and its first send fails and is named on the card.
+- **Edit** on the `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}` action of the **Workflows** REST controller, to start the workflow. This is the WorkflowEntry action. Sending needs it: without it, saving is refused and each send fails.
+- **View** on the **WorkflowTypes** REST controller, for **Find workflow types** and the check when you save. Sending doesn't use it: without it, finding and saving are refused, and sending still works.
+- **View** on the workflow type you choose. Rock RMS checks this from version 20.0.12 on, and only when it starts a workflow, so a key missing it saves, and its first send fails and is named on the card. Versions before 20.0.12, such as 19.x, don't check it. Grant it anyway, so sending keeps working after Rock RMS is upgraded.
+
+These were checked on Rock RMS 19.3.4 by removing each one in turn: without the first, sending fails; without the second, finding and saving are refused. Removing the third changed nothing on 19.3.4, as expected. Its effect from 20.0.12 on hasn't been checked on a real Rock RMS yet.
 
 1. Under Admin Tools › Settings › Security Roles, add a role, such as "two42 send new people", with no members but the user below.
 2. Under Admin Tools › Settings › REST Controllers, open **Workflows**, and under its actions open `POST api/Workflows/WorkflowEntry/{WorkflowTypeId}`; under that action's Security, allow **Edit** for the role. Then open **WorkflowTypes** and, under Security, allow **View** for the role. Grant nothing else.
 3. Under Admin Tools › Settings › Workflow Configuration, add a workflow type for new people, such as "New people from two42", active, with four text attributes whose keys are exactly FirstName, LastName, Email and Phone. Give it your own activities for staff to review the person and decide how they are added, and make sure it is persisted, so staff can find it. Under the workflow type's Security, allow **View** for the role.
 4. Under Admin Tools › Settings › REST Keys, add a second key, active, on a new user for this alone, and add that user to the role. Don't reuse the read key's user.
-5. In two42, [turn on sending new people](#send-new-people) with that key and workflow type.
+5. Clear Rock RMS's cache, under Admin › System Information › Clear Cache. Rock RMS applies role and permission changes only after its cache is cleared.
+6. In two42, [turn on sending new people](#send-new-people) with that key and workflow type.
 
 Rock RMS reads the details from the query string of the request's web address, so the person's name and email can appear in the Rock RMS server's web logs, which record the query string by default. Before turning sending on, remove the query string from the Rock RMS site's logging, and from any proxy in front of it, and check with a test person that their name and email no longer appear.

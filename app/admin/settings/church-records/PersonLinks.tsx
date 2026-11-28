@@ -161,8 +161,11 @@ export function PersonLinks({ label }: { label: string }) {
       setBatchError(`Linked ${count(done)} of ${count(rows.length)}, then stopped. ${NETWORK_ERROR}`);
     } finally {
       setProgress(null);
-      setBusy(false);
+      // Closed before the reload, which empties the list the dialog's title counts.
+      setConfirming(false);
+      // Held busy through the reload so the old suggestions can't be acted on again.
       await load();
+      setBusy(false);
     }
   }
 
@@ -364,7 +367,7 @@ export function PersonLinks({ label }: { label: string }) {
                       <p className="text-lg font-semibold">{row.name}</p>
                       <OpenLink href={row.personUrl} label={label} />
                     </div>
-                    <Button size="lg" variant="outline" disabled={busy} onClick={() => unlink(row)}>
+                    <Button size="lg" variant="outline" disabled={busy} onClick={() => unlink(row)} aria-label={`Unlink ${row.name}`}>
                       Unlink
                     </Button>
                   </li>
@@ -382,10 +385,9 @@ export function PersonLinks({ label }: { label: string }) {
         title={`Link ${people(toLink.length)}?`}
         description={`Each person here is linked to the one ${label} record their name and an email or birthday agree with. You can unlink anyone later.`}
         confirmLabel={`Link ${people(toLink.length)}`}
+        pendingLabel={progress ? `Linking ${count(progress.done)} of ${count(progress.total)}…` : "Linking…"}
         confirmVariant="default"
-        onConfirm={async () => {
-          void linkMany(toLink);
-        }}
+        onConfirm={() => linkMany(toLink)}
       />
     </>
   );
@@ -417,7 +419,7 @@ function CheckFirstItem({
           </p>
           <OpenLink href={s.personUrl} label={label} />
         </div>
-        <Button size="lg" variant="outline" disabled={busy} onClick={() => onLink(s)}>
+        <Button size="lg" variant="outline" disabled={busy} onClick={() => onLink(s)} aria-label={`Link ${row.name} to ${s.personName}`}>
           Link
         </Button>
       </li>
@@ -440,10 +442,18 @@ function CheckFirstItem({
             <li key={s.personId} className="flex flex-wrap items-center gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-lg">{s.personName}</p>
-                <p className="text-base text-muted-foreground">{matchedText(s.matched)}</p>
+                <p className="text-base text-muted-foreground">
+                  {label} ID {s.personId} · {matchedText(s.matched)}
+                </p>
                 <OpenLink href={s.personUrl} label={label} />
               </div>
-              <Button size="lg" variant="outline" disabled={busy} onClick={() => onLink(s)} aria-label={`Link ${row.name} to ${s.personName}`}>
+              <Button
+                size="lg"
+                variant="outline"
+                disabled={busy}
+                onClick={() => onLink(s)}
+                aria-label={`Link ${row.name} to ${s.personName}, ${label} ID ${s.personId}`}
+              >
                 Link
               </Button>
             </li>

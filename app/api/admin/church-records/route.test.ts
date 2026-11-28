@@ -85,6 +85,14 @@ describe("/api/admin/church-records", () => {
     expect(store.saveConnection).not.toHaveBeenCalled();
   });
 
+  it("names what the key's role can't view when it can view the rest", async () => {
+    checkConnection.mockRejectedValue(new RecordsError("unauthorized", 401, ["Groups"]));
+    const res = await put({ address: "rock.example.org", key: "abcdefgh1234" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("The key's role can't view Groups. Add View on Groups to its role.");
+    expect(store.saveConnection).not.toHaveBeenCalled();
+  });
+
   it.each([["other"], [undefined], [null]])("refuses a provider that is unknown or missing: %j", async (provider) => {
     const body = provider === undefined ? { address: "rock.example.org", key: "abcdefgh1234" } : { provider, address: "rock.example.org", key: "abcdefgh1234" };
     const res = PUT(new Request("http://test/api/admin/church-records", { method: "PUT", body: JSON.stringify(body) }));

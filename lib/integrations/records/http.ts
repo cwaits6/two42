@@ -24,11 +24,18 @@ export function gateError(status: 401 | 403) {
   return NextResponse.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status });
 }
 
+const AND = new Intl.ListFormat("en", { type: "conjunction" });
+
 /** What a church admin is told when the records can't be used, without the provider's own response. */
 export function recordsFailureMessage(error: RecordsError, product: string): string {
   switch (error.kind) {
-    case "unauthorized":
+    case "unauthorized": {
+      if (error.missing?.length) {
+        const names = AND.format(error.missing);
+        return `The key's role can't view ${names}. Add View on ${names} to its role.`;
+      }
       return `${product} didn't accept the key. Check it is active and its user can view everything the key instructions list.`;
+    }
     case "unreachable":
       return `Couldn't reach ${product} at that address. Check the address and try again.`;
     case "not_provider":
