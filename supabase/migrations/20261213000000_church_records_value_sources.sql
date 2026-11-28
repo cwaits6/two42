@@ -81,7 +81,8 @@ $$;
 revoke execute on function public.records_save_field_settings(uuid, jsonb, uuid) from public, anon, authenticated;
 grant execute on function public.records_save_field_settings(uuid, jsonb, uuid) to service_role;
 
--- As before, and the people it moves are copied in full at the next refresh.
+-- As before, and the people it moves are copied in full at the next refresh,
+-- without the anniversary source of the household they left.
 create or replace function public.records_confirm_household(_org_id uuid, _suggestion_id uuid, _confirmed_by uuid)
   returns text
   language plpgsql
@@ -189,6 +190,15 @@ begin
     values (_org_id, _s.family_name)
     returning id into _target;
   end if;
+
+  -- A mover's anniversary source is their old household's. Kept, it would make
+  -- the full copy below treat the new household's date as the church's and
+  -- replace it; without it the copy is a first fill, which keeps an entered date.
+  delete from public.records_field_values v
+   using public.profiles pr
+   where v.org_id = _org_id and v.field = 'anniversary' and v.profile_id = any (_ids)
+     and pr.id = v.profile_id and pr.org_id = _org_id
+     and pr.family_id is distinct from _target;
 
   update public.profiles pr
      set family_id = _target, relationship = p.relationship

@@ -15,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(40);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -275,8 +275,17 @@ select is((select copied_at is not null from public.records_person_state where p
 
 -- ── Confirming a household ──────────────────────────────────────────────────
 -- Leo leaves the Loremsworth household to join Ruth's as her spouse; Hannah
--- stays where she is.
+-- stays where she is. Both spouses' sources hold the Loremsworth anniversary,
+-- and Ruth entered her household's herself.
 select pg_temp.copy_everyone();
+insert into public.records_field_values (org_id, profile_id, field, state, church_value)
+  select pg_temp.fx('org'), pg_temp.fx(k), 'anniversary', 'records',
+         '{"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}'
+    from unnest(array['leo', 'hannah']) k;
+update public.family_units set anniversary_month = 9, anniversary_day = 2, anniversary_year = 1999
+ where id = pg_temp.fx('fixtureton');
+select is(pg_temp.sources() @> array['hannah:anniversary:records', 'leo:anniversary:records'], true,
+  'non-vacuity: Leo and Hannah follow the church for the Loremsworth anniversary');
 insert into public.records_household_suggestions
   (org_id, connection_id, external_family_id, target_family_id, family_name, people, basis, ready)
 values (pg_temp.fx('org'), pg_temp.fx('connection'), 'F2', pg_temp.fx('fixtureton'), null,
@@ -303,6 +312,10 @@ select is(pg_temp.copied('leo'), false,
   'the person it moved is copied in full at the next refresh, which brings in the household''s anniversary');
 select is(array[pg_temp.copied('ruth'), pg_temp.copied('hannah'), pg_temp.copied('henry')], array[true, true, true],
   'nobody it didn''t move is asked for a full copy');
+select is(pg_temp.sources() && array['leo:anniversary:records'], false,
+  'Leo''s source for his old household''s anniversary goes with the move, so his full copy can''t replace the date Ruth entered');
+select is(pg_temp.sources() @> array['hannah:anniversary:records'], true,
+  'and Hannah, who stays, keeps hers');
 select is((select copied_at is not null from public.records_person_state where profile_id = pg_temp.fx('other_admin')), true,
   'nor anyone in another church');
 
