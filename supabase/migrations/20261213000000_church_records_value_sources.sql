@@ -57,18 +57,20 @@ begin
     return 'saved';
   end if;
 
-  update public.records_field_values v set church_value = '{}'::jsonb, updated_at = now()
-   where v.org_id = _org_id and v.state = 'cleared' and v.church_value <> '{}'::jsonb
-     and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
+  -- Delete before forgetting: a member's edit can turn a source 'cleared'
+  -- without this lock, and the forget's later snapshot then still sees it.
   delete from public.records_field_values v
    where v.org_id = _org_id and v.state <> 'cleared'
      and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
+  update public.records_field_values v set church_value = '{}'::jsonb, updated_at = now()
+   where v.org_id = _org_id and v.state = 'cleared' and v.church_value <> '{}'::jsonb
+     and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
 
+  delete from public.records_household_values v
+   where v.org_id = _org_id and v.state <> 'cleared' and not (_after ? v.field);
   update public.records_household_values v set church_value = '{}'::jsonb, updated_at = now()
    where v.org_id = _org_id and v.state = 'cleared' and v.church_value <> '{}'::jsonb
      and not (_after ? v.field);
-  delete from public.records_household_values v
-   where v.org_id = _org_id and v.state <> 'cleared' and not (_after ? v.field);
 
   update public.records_person_state set copied_at = null
    where org_id = _org_id and copied_at is not null;
