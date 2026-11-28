@@ -44,7 +44,7 @@ import {
   HOUSEHOLD_FIELD_COLUMNS,
   type HouseholdField as RecordsHouseholdField,
 } from "@/supabase/functions/_shared/records-households";
-import { agreedAnniversary, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
+import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
 import { type Columns, FIELD_COLUMNS, type ValueState } from "@/supabase/functions/_shared/records-copy";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
@@ -274,11 +274,8 @@ export function HouseholdsManager() {
     const requestId = ++recordsRequestRef.current;
     setDetailRecords(null);
     if (!family) return;
-    const ids = family.members.map((m) => m.id);
     const [anniversary, household] = await Promise.all([
-      ids.length > 0
-        ? supabase.from("records_field_values").select("state, church_value").eq("field", "anniversary").in("profile_id", ids)
-        : Promise.resolve({ data: [], error: null }),
+      supabase.from("records_household_anniversary").select("state, church_value").eq("family_id", family.id).maybeSingle(),
       supabase.from("records_household_values").select("field, state, church_value").eq("family_id", family.id),
     ]);
     if (recordsRequestRef.current !== requestId) return;
@@ -288,10 +285,9 @@ export function HouseholdsManager() {
       logError("Failed to load the household's sources", error, { route: "/admin/families" });
       return;
     }
-    const agreed = agreedAnniversary(
-      (anniversary.data ?? []).map((row) => ({ state: row.state as ValueState, churchValue: row.church_value as Columns })),
-    );
-    const values: ProfileRecords["values"] = agreed ? { anniversary: agreed } : {};
+    const values: ProfileRecords["values"] = anniversary.data
+      ? { anniversary: { state: anniversary.data.state as ValueState, churchValue: anniversary.data.church_value as Columns } }
+      : {};
     for (const row of household.data ?? []) {
       values[row.field as RecordsHouseholdField] = { state: row.state as ValueState, churchValue: row.church_value as Columns };
     }

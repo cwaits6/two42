@@ -101,7 +101,13 @@ describe("readLiveSources", () => {
     tables.records_field_values = [
       { org_id: ORG, profile_id: "copied", field: "birthday", state: "cleared", church_value: { birth_month: 1 } },
       { org_id: ORG, profile_id: "copied", field: "phone_mobile", state: "changed" },
+      { org_id: ORG, profile_id: "copied", field: "anniversary", state: "changed" },
       { org_id: "org-2", profile_id: "never", field: "birthday", state: "changed" },
+    ];
+    tables.records_household_anniversary = [
+      { org_id: ORG, family_id: "home", state: "cleared", church_value: { anniversary_month: 6 } },
+      { org_id: ORG, family_id: "elsewhere", state: "changed" },
+      { org_id: "org-2", family_id: "home", state: "records" },
     ];
     tables.records_household_links = [
       { org_id: ORG, family_id: "home", external_family_id: "500" },
@@ -123,6 +129,7 @@ describe("readLiveSources", () => {
     expect([...sources.personStates]).toEqual([["copied:birthday", "cleared"]]);
     expect([...sources.householdLinks]).toEqual([["home", "500"]]);
     expect([...sources.addressStates]).toEqual([["home", "changed"]]);
+    expect([...sources.anniversaryStates]).toEqual([["home", "cleared"]]);
     expect([...sources.children]).toEqual([["kid", "700"]]);
     expect(JSON.stringify(sources, (_k, v) => (v instanceof Map || v instanceof Set ? [...v] : v))).not.toContain(
       "birth_month",

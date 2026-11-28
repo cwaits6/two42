@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordsError } from "./errors";
 import { LIVE_UNAVAILABLE, liveDirectory, type LiveSources, planLiveRequest, type VisibleHousehold, type VisiblePerson } from "./livePlan";
-import type { RecordsLiveDetails } from "./types";
+import type { RecordsLiveDetails, RecordsLivePerson } from "./types";
 import { ADDRESS_COLUMNS } from "@/supabase/functions/_shared/records-households";
 
 const ORG = "00000000-0000-0000-0000-0000000000aa";
@@ -67,6 +67,7 @@ const SOURCES: LiveSources = {
     ["00000000-0000-0000-0000-0000000000fe", "599"],
   ]),
   personStates: new Map([[`${CHANGED}:birthday`, "changed"]]),
+  anniversaryStates: new Map(),
   addressStates: new Map(),
   children: new Map([[CHILD, "900"]]),
 };
@@ -85,10 +86,17 @@ describe("planLiveRequest", () => {
     expect(planned.families).toEqual(["500"]);
   });
 
-  it("reads the household's anniversary from its primary, and asks nothing for a field not from the records", () => {
+  it("reads the household's anniversary from both its primary and spouse, and asks nothing for a field not from the records", () => {
     const anniversary = plan().planned.find((p) => p.field === "anniversary");
-    expect(anniversary).toEqual({ kind: "household", id: HOME, field: "anniversary", from: "100" });
+    expect(anniversary).toEqual({ kind: "household", id: HOME, field: "anniversary", from: ["100", "101"] });
     expect(plan({ fields: new Set() }).planned.filter((p) => p.kind !== "child")).toEqual([]);
+  });
+
+  it("follows the household's own anniversary source: a clear hides it, a change keeps two42's", () => {
+    expect(plan({ anniversaryStates: new Map([[HOME, "changed"]]) }).planned.some((p) => p.field === "anniversary")).toBe(false);
+    expect(plan({ anniversaryStates: new Map([[HOME, "cleared"]]) }).hidden).toEqual([
+      { kind: "household", id: HOME, field: "anniversary" },
+    ]);
   });
 
   it("keeps a detail the member hid, offering the viewer only their own and their household's back", () => {
@@ -96,8 +104,8 @@ describe("planLiveRequest", () => {
       personStates: new Map([
         [`${VIEWER}:birthday`, "cleared"],
         [`${CHANGED}:birthday`, "cleared"],
-        [`${VIEWER}:anniversary`, "cleared"],
       ]),
+      anniversaryStates: new Map([[HOME, "cleared"]]),
       addressStates: new Map([[HOME, "cleared"]]),
     });
     expect(planned.people).toEqual(["101", "900"]);
@@ -163,6 +171,23 @@ describe("liveDirectory", () => {
       birthday: { state: "shown", value: { month: 9, day: 1 } },
       grade: { state: "shown", value: 2034 },
     });
+  });
+
+  it("shows the household's anniversary only while its spouses' records agree, as the copy does", () => {
+    const today = new Date("2026-11-26");
+    const read = (spouse: RecordsLivePerson) => ({
+      ...details,
+      people: new Map([...details.people!, ["101", spouse]]),
+    });
+    const june = { birthday: { month: 2, day: 30 }, anniversary: { month: 6, day: 9, year: 2001 }, graduationYear: null };
+    const july = { ...june, anniversary: { month: 7, day: 2, year: 1999 } };
+    expect(liveDirectory(plan(), read(june), today).households[HOME].anniversary).toEqual({
+      state: "shown",
+      value: { month: 6, day: 9, year: 2001 },
+    });
+    expect(liveDirectory(plan(), read(july), today).households[HOME].anniversary).toEqual({ state: "empty" });
+    const missing = { ...details, people: new Map([...details.people!].filter(([id]) => id !== "100")) };
+    expect(liveDirectory(plan(), missing, today).households[HOME].anniversary).toEqual({ state: "empty" });
   });
 
   it("marks only the half that couldn't be read unavailable", () => {

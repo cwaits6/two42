@@ -158,6 +158,7 @@ function liveMode() {
     personLinks: LINKS,
     householdLinks: new Map(),
     personStates: new Map([[`${DAN}:birthday`, "cleared"]]),
+    anniversaryStates: new Map(),
     addressStates: new Map(),
     children: new Map([[KID, "900"]]),
   };
@@ -231,7 +232,8 @@ describe("live details", () => {
         personLinks: LINKS,
         householdLinks: new Map(),
         personStates: new Map(),
-        addressStates: new Map(),
+        anniversaryStates: new Map(),
+    addressStates: new Map(),
         children: new Map(),
       },
     });

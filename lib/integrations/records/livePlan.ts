@@ -3,7 +3,16 @@
 // RLS-scoped directory read, so the provider is asked about exactly the people
 // the viewer may already see and no one else. Values pass through here on the
 // way to the viewer and are never stored, logged or put in an error.
-import { formDate, formGraduationYear, isEmptyValue, pick, type Columns, type ValueState } from "@/supabase/functions/_shared/records-copy";
+import {
+  anniversaryColumns,
+  formDate,
+  formGraduationYear,
+  householdChurchAnniversary,
+  isEmptyValue,
+  pick,
+  type Columns,
+  type ValueState,
+} from "@/supabase/functions/_shared/records-copy";
 import { ADDRESS_COLUMNS, householdChurchValues } from "@/supabase/functions/_shared/records-households";
 import type { DirectoryProfile, FamilyDirectoryFull, HouseholdFamilyMember } from "@/lib/types";
 import type { RecordsLiveDetails } from "./types";
@@ -89,8 +98,10 @@ export interface LiveSources {
   personLinks: ReadonlyMap<string, string>;
   /** External family id by household id. */
   householdLinks: ReadonlyMap<string, string>;
-  /** By `${profileId}:${field}`, for birthday and anniversary. */
+  /** By `${profileId}:${field}`, for the birthday. */
   personStates: ReadonlyMap<string, ValueState>;
+  /** The anniversary's source, by household id. */
+  anniversaryStates: ReadonlyMap<string, ValueState>;
   /** The address's source, by household id. */
   addressStates: ReadonlyMap<string, ValueState>;
   /** External person id by household member id, for children added from a suggestion while children are suggested. */
@@ -99,7 +110,7 @@ export interface LiveSources {
 
 type Planned =
   | { kind: "person"; id: string; field: "birthday"; from: string }
-  | { kind: "household"; id: string; field: "anniversary"; from: string }
+  | { kind: "household"; id: string; field: "anniversary"; from: string[] }
   | { kind: "household"; id: string; field: "address"; from: string }
   | { kind: "child"; id: string; field: "birthday" | "grade"; from: string };
 
@@ -159,11 +170,13 @@ export function planLiveRequest(input: {
         .filter((p) => p.family_id === household.id && sources.personLinks.has(p.id))
         .filter((p) => p.relationship === "primary" || p.relationship === "spouse")
         .sort((a, b) => Number(b.relationship === "primary") - Number(a.relationship === "primary"));
-      const states = couple.map((p) => sources.personStates.get(`${p.id}:anniversary`));
-      if (couple.length > 0 && !states.includes("changed")) {
-        if (states.includes("cleared")) hide({ kind: "household", id: household.id, field: "anniversary" });
+      const state = sources.anniversaryStates.get(household.id);
+      if (couple.length > 0 && state !== "changed") {
+        if (state === "cleared") hide({ kind: "household", id: household.id, field: "anniversary" });
         else if (!filled(household.anniversary_month, household.anniversary_day)) {
-          planned.push({ kind: "household", id: household.id, field: "anniversary", from: sources.personLinks.get(couple[0].id)! });
+          // Every spouse's records are read, so a household is shown an anniversary only while they agree, as the copy does.
+          const from = couple.map((p) => sources.personLinks.get(p.id)!);
+          planned.push({ kind: "household", id: household.id, field: "anniversary", from });
         }
       }
     }
@@ -188,8 +201,8 @@ export function planLiveRequest(input: {
 
   const unique = (ids: string[]) => [...new Set(ids)].sort();
   return {
-    people: unique(planned.filter((p) => !(p.kind === "household" && p.field === "address")).map((p) => p.from)),
-    families: unique(planned.filter((p) => p.kind === "household" && p.field === "address").map((p) => p.from)),
+    people: unique(planned.filter((p) => !(p.kind === "household" && p.field === "address")).flatMap((p) => p.from)),
+    families: unique(planned.flatMap((p) => (p.kind === "household" && p.field === "address" ? [p.from] : []))),
     planned,
     hidden,
     canHide,
@@ -232,18 +245,28 @@ export function liveDirectory(plan: LivePlan, details: RecordsLiveDetails | null
       target[slot.field] = { state: "unavailable" };
       continue;
     }
-    if (isAddress) {
+    if (slot.field === "address") {
       const address = details?.families?.get(slot.from);
       const value = address ? liveAddress(householdChurchValues({ address, homePhone: null }, () => null).address) : null;
       target.address = value ? { state: "shown", value } : { state: "empty" };
       continue;
     }
+    if (slot.field === "anniversary") {
+      // Someone the records didn't return holds no anniversary; spouses whose records differ show none.
+      const dates = slot.from.flatMap((id) => {
+        const spouse = details?.people?.get(id);
+        return spouse ? [formDate(spouse.anniversary, today)] : [];
+      });
+      const agreed = householdChurchAnniversary(dates.map((d) => anniversaryColumns(d, today)));
+      const shown = agreed && dates.find((d) => d.month && d.day);
+      target.anniversary = shown?.month && shown.day
+        ? { state: "shown", value: { month: shown.month, day: shown.day, year: shown.year } }
+        : { state: "empty" };
+      continue;
+    }
     const person = details?.people?.get(slot.from);
     if (!person) {
       target[slot.field] = { state: "empty" };
-    } else if (slot.field === "anniversary") {
-      const { month, day, year } = formDate(person.anniversary, today);
-      target.anniversary = month && day ? { state: "shown", value: { month, day, year } } : { state: "empty" };
     } else if (slot.field === "grade") {
       const grade = formGraduationYear(person.graduationYear);
       target.grade = grade === null ? { state: "empty" } : { state: "shown", value: grade };

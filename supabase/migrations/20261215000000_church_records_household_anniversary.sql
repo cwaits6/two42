@@ -220,10 +220,10 @@ begin
   if _family.id is null then
     _household := '{}'::jsonb;
     _anniversary := null;
-  elsif (_household <> '{}'::jsonb or _anniversary is not null) and jsonb_typeof(_reads) is distinct from 'object' then
-    return 'stale';
-  end if;
-  if _family.id is not null and jsonb_typeof(_reads) = 'object' then
+  elsif _household <> '{}'::jsonb or _anniversary is not null then
+    if jsonb_typeof(_reads) is distinct from 'object' then
+      return 'stale';
+    end if;
     -- Someone who joined or left the household since the reads changes whose records count.
     if exists (
       select 1 from public.records_person_links l

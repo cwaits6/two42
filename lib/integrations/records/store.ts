@@ -532,7 +532,7 @@ export async function readLiveSources(
   suggestChildren: boolean,
 ): Promise<LiveSources> {
   const service = await createServiceClient();
-  const [settings, personLinks, personValues, householdLinks, householdValues, children] = await Promise.all([
+  const [settings, personLinks, personValues, householdLinks, householdValues, anniversaries, children] = await Promise.all([
     service.from("records_field_settings").select("field").eq("org_id", orgId),
     inChunks(visible.profiles, (chunk) =>
       service.from("records_person_links").select("profile_id, external_person_id").eq("org_id", orgId).in("profile_id", chunk),
@@ -542,7 +542,7 @@ export async function readLiveSources(
         .from("records_field_values")
         .select("profile_id, field, state")
         .eq("org_id", orgId)
-        .in("field", ["birthday", "anniversary"])
+        .eq("field", "birthday")
         .in("profile_id", chunk),
     ),
     inChunks(visible.households, (chunk) =>
@@ -555,6 +555,9 @@ export async function readLiveSources(
         .eq("org_id", orgId)
         .eq("field", "address")
         .in("family_id", chunk),
+    ),
+    inChunks(visible.households, (chunk) =>
+      service.from("records_household_anniversary").select("family_id, state").eq("org_id", orgId).in("family_id", chunk),
     ),
     suggestChildren
       ? inChunks(visible.members, (chunk) =>
@@ -575,6 +578,7 @@ export async function readLiveSources(
     householdLinks: new Map(householdLinks.map((row) => [row.family_id, row.external_family_id])),
     personStates: new Map(personValues.map((row) => [`${row.profile_id}:${row.field}`, row.state as ValueState])),
     addressStates: new Map(householdValues.map((row) => [row.family_id, row.state as ValueState])),
+    anniversaryStates: new Map(anniversaries.map((row) => [row.family_id, row.state as ValueState])),
     children: new Map(
       children.flatMap((row) => (row.family_member_id ? [[row.family_member_id, row.external_person_id] as const] : [])),
     ),

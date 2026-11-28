@@ -3,6 +3,7 @@ import {
   type Columns,
   type CopyInput,
   type FieldMode,
+  householdChurchAnniversary,
   planPersonCopy,
   type RecordsField,
   type StoredValue,
@@ -218,6 +219,64 @@ Deno.test("the anniversary needs a household and the grade a household member ro
   );
   assertEquals(both.household, { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 });
   assertEquals(both.grade, { graduation_year: 2031 });
+});
+
+const NO_ANNIVERSARY = { anniversary_month: null, anniversary_day: null, anniversary_year: null };
+const housed = (over: Partial<CopyInput["current"]> = {}) => ({
+  profile: profile(),
+  household: NO_ANNIVERSARY,
+  grade: null,
+  ...over,
+});
+
+Deno.test("the household's anniversary is the one value its linked people's records hold", () => {
+  const june = { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 };
+  const july = { anniversary_month: 7, anniversary_day: 2, anniversary_year: 1999 };
+  assertEquals(householdChurchAnniversary([june, { ...june }]), june);
+  assertEquals(householdChurchAnniversary([june, july]), null, "records that differ hold it back");
+  assertEquals(householdChurchAnniversary([NO_ANNIVERSARY, july]), july, "someone whose records have none doesn't count");
+  assertEquals(householdChurchAnniversary([NO_ANNIVERSARY, {}]), NO_ANNIVERSARY);
+  assertEquals(householdChurchAnniversary([]), NO_ANNIVERSARY);
+});
+
+Deno.test("while the household's linked people's records differ, the anniversary is neither written nor recorded", () => {
+  const plan = planPersonCopy(input({ anniversary: "member" }, {
+    person: person({ anniversary: { month: 6, day: 1, year: 2001 } }),
+    otherAnniversaries: [{ month: 7, day: 2, year: 1999 }],
+    current: housed(),
+  }));
+  assertEquals(plan.household, {});
+  assertEquals(plan.values, []);
+  assertEquals(plan.filled, []);
+});
+
+Deno.test("a household's own anniversary stays while the records change, a clear included", () => {
+  const july = { anniversary_month: 7, anniversary_day: 2, anniversary_year: 1999 };
+  for (const state of ["cleared", "changed"] as const) {
+    const plan = planPersonCopy(input({ anniversary: "member" }, {
+      person: person({ anniversary: { month: 7, day: 2, year: 1999 } }),
+      otherAnniversaries: [{ month: 7, day: 2, year: 1999 }],
+      current: housed(state === "changed" ? { household: { anniversary_month: 4, anniversary_day: 4, anniversary_year: null } } : {}),
+      stored: { anniversary: { state, churchValue: { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 } } },
+    }));
+    assertEquals(plan.household, {}, state);
+    assertEquals(plan.values, [{ field: "anniversary", state, church_value: july }], state);
+  }
+});
+
+Deno.test("a household that never set or cleared its anniversary gets the first copy, through any spouse's records", () => {
+  for (const [own, other] of [
+    [{ month: 6, day: 1, year: 2001 }, { month: 6, day: 1, year: 2001 }],
+    [{ month: null, day: null, year: null }, { month: 6, day: 1, year: 2001 }],
+  ]) {
+    const plan = planPersonCopy(input({ anniversary: "member" }, {
+      person: person({ anniversary: own }),
+      otherAnniversaries: [other],
+      current: housed(),
+    }));
+    assertEquals(plan.household, { anniversary_month: 6, anniversary_day: 1, anniversary_year: 2001 });
+    assertEquals(plan.filled, ["anniversary"]);
+  }
 });
 
 Deno.test("the church's photo is downloaded only to fill an empty photo or follow a new one", () => {
