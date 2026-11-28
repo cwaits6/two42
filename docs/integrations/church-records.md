@@ -188,6 +188,20 @@ How it works:
   anyone it names given another relationship, the household linked elsewhere
   or holding a primary or spouse it didn't), and
   is refused while a refresh runs.
+- **Joining a household another way.** Joining from a household invite
+  (`/api/family-invites/join`) and being added with **Add a member**
+  (`/api/household/link-member`) do the same for the one person, through
+  `restartCopyAfterHouseholdMove()` in `lib/integrations/records/householdMove.ts`
+  on the service client, scoped to the invite's or the caller's org, only
+  once the move is written and only when the person had no household before.
+  The source is deleted first and `records_person_state.copied_at` reset
+  only after that succeeds: the reset without the delete would make the
+  full copy replace a date the new household entered, while the delete
+  alone only waits for the person's next change in the records. A failure
+  in either is logged and never fails the join. Unlike confirming, these
+  don't take the refresh lock; a copy planned across the move is refused by
+  `records_apply_copy()` as stale (the household or the anniversary state
+  it read changed) and marked to be copied in full again.
 - **Relationships.** When the family's two adults are married in the records
   and both are linked, one is `primary` (whoever already is, in the household)
   and the other `spouse`. A child in the records becomes `child`. Anyone whose

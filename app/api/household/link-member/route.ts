@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
+import { restartCopyAfterHouseholdMove } from "@/lib/integrations/records/householdMove";
 
 /**
  * POST /api/household/link-member
@@ -128,6 +129,8 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+
+  await restartCopyAfterHouseholdMove(service, currentProfile.org_id, profile_id, "/api/household/link-member");
 
   return NextResponse.json({
     data: { profile_id, family_id: currentProfile.family_id, relationship: relationship ?? null },

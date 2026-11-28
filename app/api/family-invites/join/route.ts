@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { householdInviteVerdict } from "@/app/join/family/[token]/joinVerdict";
 import { isUuid } from "@/lib/groups/active";
+import { restartCopyAfterHouseholdMove } from "@/lib/integrations/records/householdMove";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { logError, logWarn } from "@/lib/log";
 
@@ -132,6 +133,13 @@ export async function POST(request: Request) {
     if (now?.family_id !== invite.family_id) {
       return NextResponse.json({ error: "Already in a household" }, { status: 409 });
     }
+  }
+
+  // Here rather than after the claim: a retry finds the profile already in
+  // this household and can't tell it moved. Undoing the link below needs
+  // nothing put back, as the dropped source was a household already left.
+  if (profile.family_id === null && linked && linked.length > 0) {
+    await restartCopyAfterHouseholdMove(service, invite.org_id, user.id, "/api/family-invites/join");
   }
 
   // Never take over a member another account already claimed.

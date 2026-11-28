@@ -1,7 +1,8 @@
 // A failed link answers with fixed copy; the database's own text, which names
-// tables, columns and policies, stays out.
+// tables, columns and policies, stays out. A link made restarts the person's
+// church records copy, and a failure there never undoes the link.
 
-import { beforeEach, describe, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { expectSchemaHidden, fakeQueryClient, SCHEMA_REVEALING_ERROR, type QueryAnswer } from "@/lib/supabase/testing";
 
 const db: { answers: Record<string, QueryAnswer[]>; service: Record<string, QueryAnswer[]> } = {
@@ -13,11 +14,25 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => fakeQueryClient(db.service, null),
 }));
 
+const reset = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/integrations/records/householdMove", () => ({ restartCopyAfterHouseholdMove: reset }));
+
 const { POST } = await import("./route");
+
+const CALLER = { org_id: "org-1", role: "member", family_id: "fam-1", setup_completed: true, relationship: "primary" };
+const TARGET = { id: "p-2", org_id: "org-1", family_id: null, role: "member", setup_completed: true };
+const link = () =>
+  POST(
+    new Request("http://localhost/api/household/link-member", {
+      method: "POST",
+      body: JSON.stringify({ profile_id: "p-2", relationship: "child" }),
+    }),
+  );
 
 let log: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.restoreAllMocks();
+  reset.mockClear();
   log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -40,5 +55,30 @@ describe("POST /api/household/link-member when the database refuses", () => {
       what: "link-member error",
       route: "/api/household/link-member",
     });
+  });
+});
+
+describe("POST /api/household/link-member and the church's records", () => {
+  it("restarts the copy for the person linked, in the caller's church", async () => {
+    db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
+    db.service = { profiles: [{ data: [{ id: "p-2" }], error: null }] };
+
+    expect((await link()).status).toBe(200);
+    expect(reset).toHaveBeenCalledExactlyOnceWith(expect.anything(), "org-1", "p-2", "/api/household/link-member");
+  });
+
+  it("restarts nothing when someone else linked them first", async () => {
+    db.answers = { profiles: [{ data: CALLER, error: null }, { data: TARGET, error: null }] };
+    db.service = { profiles: [{ data: [], error: null }] };
+
+    expect((await link()).status).toBe(409);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("refuses someone already in a household without restarting anything", async () => {
+    db.answers = { profiles: [{ data: CALLER, error: null }, { data: { ...TARGET, family_id: "fam-2" }, error: null }] };
+
+    expect((await link()).status).toBe(409);
+    expect(reset).not.toHaveBeenCalled();
   });
 });
