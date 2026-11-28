@@ -73,6 +73,20 @@ stripping, which prints a `MODULE_TYPELESS_PACKAGE_JSON` warning. Usage,
 rotation and what losing a key means:
 [`docs/security/prayer-encryption.md`](../docs/security/prayer-encryption.md).
 
+## `reseal-records-keys.mjs` — re-seal church records keys after a rotation
+
+Re-seals every church's church records read key and write key under the
+current `RECORDS_KEY_SECRET`, opening each with the secret its envelope names
+(`RECORDS_KEY_SECRET` or `RECORDS_KEY_SECRET_PREVIOUS`). Dry run by default: one
+line per key, by church id and provider, as `reseal`, `noop` or `unopenable`.
+`--apply` writes, each update guarded on the value it read; rerunnable. It
+exits non-zero while any key is unopenable, and never prints a key. It imports
+`lib/integrations/records/reseal.ts` and the shared
+`supabase/functions/_shared/records-crypto.ts` directly under Node's type
+stripping, which prints a `MODULE_TYPELESS_PACKAGE_JSON` warning. The rotation
+steps are under "Rotating the records secret" on the docs site's Environment
+variables page (`docs-site/content/docs/run/environment.mdx`).
+
 ## `check-service-role-org-scope.mjs` — the service-role tenancy guard
 
 Service-role Supabase clients carry `BYPASSRLS`, so the `.eq("org_id", …)`

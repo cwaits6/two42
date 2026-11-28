@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
-import { sealKey } from "@/lib/integrations/records/crypto";
+import { intakeKeyLabel, sealKey } from "@/lib/integrations/records/crypto";
 import { intakeLastFailureMessage } from "@/lib/integrations/records/http";
 import {
   deleteIntakeSettings,
-  intakeKeyLabel,
   readIntakeSettings,
   readIntakeStatus,
   saveIntakeSettings,

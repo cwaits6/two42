@@ -7,6 +7,8 @@ sources:
   - "lib/prayer/crypto.ts"
   - "lib/integrations/records/crypto.ts"
   - "supabase/functions/_shared/records-crypto.ts"
+  - "lib/integrations/records/reseal.ts"
+  - "scripts/reseal-records-keys.mjs"
   - "lib/serving/links.ts"
   - "lib/serving/config.ts"
   - "lib/email/domainCap.ts"
@@ -62,7 +64,8 @@ Keep two copies of each prayer key outside the host. Text sealed with a lost bod
 
 | Variable | Kind | Required | What it does, and what breaks without it |
 |---|---|---|---|
-| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. Changing it makes every saved key unreadable, and each church admin connects again; the links stay. A church that sends new people also enters its write key again with **Change** on the **Send new people** card; until then each send is recorded as couldn't send. Set the same value in the edge function secrets. |
+| `RECORDS_KEY_SECRET` | secret | no | Turns on church records and seals each church's key to them: 32 random bytes in base64 (`openssl rand -base64 32`). Unset, no church can connect, change what two42 copies or refresh; details already copied keep their labels, and a locked one stays locked until it is set again and the church admin changes the setting. To replace it without any church connecting again, follow [Rotating the records secret](#rotating-the-records-secret). Changed any other way, or with the previous secret removed before the re-seal, saved keys no longer open and each church admin enters their read and write keys again. Set the same value in the edge function secrets. |
+| `RECORDS_KEY_SECRET_PREVIOUS` | secret | no | The old secret, set only while rotating it, so keys sealed with it still open. A value that is set but isn't a 32-byte base64 key turns church records off, the same as a malformed `RECORDS_KEY_SECRET`, and the app logs which variable is at fault. Set the same value in the edge function secrets. |
 
 ### Serving
 
@@ -118,8 +121,23 @@ Set once per Supabase project with `npx supabase secrets set NAME=value`, or und
 | `SERVING_LINK_MODE` | no | Same meaning as the app's. |
 | `APP_NAME`, `BRAND_COLOR` | no | Fallbacks for the email branding when a church's branding is empty. |
 | `RECORDS_KEY_SECRET` | no | The same value as the app's. `refresh-church-records` opens each church's key with it; unset, that function does nothing. |
+| `RECORDS_KEY_SECRET_PREVIOUS` | no | The same value as the app's, set only while rotating the records secret. Set but not a 32-byte base64 key, `refresh-church-records` answers 500 and refreshes nothing. |
 
 Supabase injects `SUPABASE_URL` and the service key (`SUPABASE_SECRET_KEYS` on hosted projects, `SUPABASE_SERVICE_ROLE_KEY` on the local stack). Do not set them.
+
+## Rotating the records secret
+
+`RECORDS_KEY_SECRET` can be replaced without any church admin connecting again or entering a key again. Each saved key names the secret that sealed it, so while both secrets are set every key opens with its own.
+
+1. Generate the new secret with `openssl rand -base64 32`. Keep the old one.
+2. Set `RECORDS_KEY_SECRET_PREVIOUS` to the old secret and `RECORDS_KEY_SECRET` to the new one, in the edge function secrets and in the app's environment, then redeploy the app. Every saved key still opens, and keys saved from now on are sealed with the new secret.
+3. From a shell with the same two values, `SUPABASE_URL` and the service key, run `node scripts/reseal-records-keys.mjs`. It is a dry run: it lists each church's read key and write key, by church id and provider, as `reseal`, `noop` or `unopenable`. Run it again with `--apply`, which re-seals each key under the new secret. Wait until the deployment from before step 2 no longer serves any request (on Vercel, once the step 2 deployment is live and a few minutes have passed), because a key saved through it is sealed with the old secret. Then run it once more without `--apply`: every key shows `noop` and it exits 0. A key that shows `reseal` here was saved during the switch; run `--apply` again. A key shown as `unopenable` was sealed with neither secret; that church admin enters it again, with **Change key** for the read key or **Change** on the **Send new people** card for the write key.
+4. Remove `RECORDS_KEY_SECRET_PREVIOUS` from the edge function secrets and the app's environment, and redeploy the app.
+5. Keep the old secret for as long as you keep backups taken before step 3. Keys in those backups are sealed with it.
+
+### If the secret may have leaked
+
+Rotate it as above, then ask each church admin to make a new read key, and a new write key if the church sends new people, in their church software (for Rock RMS, see [The read key](/docs/administer/church-records#the-read-key)), enter them with **Change key** and **Change** on the **Send new people** card, and delete the old keys there. Rotating alone is not enough: anyone holding the leaked secret and a copy of the database or a backup can open the old keys.
 
 ## Vault secrets
 

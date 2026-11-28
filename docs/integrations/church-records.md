@@ -246,10 +246,15 @@ The integration is off unless `RECORDS_KEY_SECRET` is set: 32 random bytes,
 base64. Without it every church records route answers 404 and the settings
 page is gone; details already copied keep their labels, and a locked one stays
 locked, because the database keeps enforcing the settings it holds. Generate one with `openssl rand -base64 32` and set it in
-Production only, like the prayer keys. Changing it makes every saved key
-unreadable, and each church admin has to connect again; the links stay. A
-church that sends new people also enters its write key again with **Change** on the
-**Send new people** card; until then each send is recorded as couldn't send.
+Production only, like the prayer keys. It can be rotated without any church
+admin connecting again: set the old value as `RECORDS_KEY_SECRET_PREVIOUS`,
+re-seal the saved keys with `scripts/reseal-records-keys.mjs`, then remove it.
+Changing it any other way, or removing the previous secret before the re-seal,
+leaves the saved keys unreadable. If the old value is still at hand, set it
+again as `RECORDS_KEY_SECRET_PREVIOUS` and run the re-seal, and no church admin
+has to do anything; without it, each church admin enters both keys again.
+The steps, and what to do if the secret may have leaked, are under **Rotating
+the records secret** on the docs site's **Environment variables** page.
 
 ### For a church admin
 
@@ -524,7 +529,7 @@ Address and home phone go to the household, never to the person.
 ### For the operator
 
 Set `RECORDS_KEY_SECRET` in the edge function secrets as well, the same value
-as the app's, and schedule `refresh-church-records` nightly (no migration
+as the app's (and `RECORDS_KEY_SECRET_PREVIOUS` while rotating it), and schedule `refresh-church-records` nightly (no migration
 does), off the hour so the scheduled-jobs check, which doesn't know the job,
 doesn't count its responses: see the docs site's **Edge functions** page. Before it opens a key the
 function checks the runtime refuses a request to a loopback address, and stops

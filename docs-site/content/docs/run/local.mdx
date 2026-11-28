@@ -45,7 +45,7 @@ Then set six values and clear two.
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | the example sets a placeholder, and any non-empty value loads Google Maps with it, so event maps show an error instead of staying out |
 | `RESEND_API_KEY` | the example sets a placeholder; the app does not need Resend locally |
 
-To try church records locally, also set `RECORDS_KEY_SECRET` to `openssl rand -base64 32`; left unset, no page shows them.
+To try church records locally, also set `RECORDS_KEY_SECRET` to `openssl rand -base64 32`; left unset, no page shows them. Leave `RECORDS_KEY_SECRET_PREVIOUS` unset: it is only for [rotating the secret](/docs/run/environment#rotating-the-records-secret).
 
 Leave the rest as it is. The app runs without Resend or Google Maps: without a Resend key, invite emails fail with "We couldn't send the email", and with the Maps key empty the event location is a plain text field and event maps are left out.
 

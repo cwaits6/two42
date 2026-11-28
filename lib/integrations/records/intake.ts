@@ -10,7 +10,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { orgDisplayName } from "@/lib/branding";
 import { logError, logWarn } from "@/lib/log";
-import { openKey } from "./crypto";
+import { intakeKeyLabel, openKey, type RecordsSecrets } from "./crypto";
 import { recordsIntegrationEnabled } from "./enabled";
 import { RecordsError, type RecordsFailure } from "./errors";
 import { providerFor } from "./providers";
@@ -20,14 +20,6 @@ import type { Database } from "@/lib/supabase/database.types";
 
 type IntakeState = Database["public"]["Enums"]["records_intake_state"];
 type IntakeRequestUpdate = Database["public"]["Tables"]["records_intake_requests"]["Update"];
-
-/**
- * The write key's sealing label: one of its own, so a write key copied into
- * the read key's column, or the reverse, fails to open.
- */
-export function intakeKeyLabel(providerId: string): string {
-  return `${providerId}-intake`;
-}
 
 export interface IntakeSettings {
   connectionId: string;
@@ -71,7 +63,7 @@ export interface IntakeCredentials {
  */
 export async function loadIntakeCredentials(
   orgId: string,
-  secret: Buffer,
+  secret: RecordsSecrets,
   settingId?: string,
 ): Promise<IntakeCredentials | null> {
   const service = await createServiceClient();
@@ -286,7 +278,7 @@ export async function sendNewPerson(
   profileId: string,
   acceptId: string,
   person: RecordsNewPerson,
-  secret: Buffer,
+  secret: RecordsSecrets,
 ): Promise<void> {
   const ids = { org: orgId, user: profileId };
   try {
@@ -338,7 +330,7 @@ async function submitClaimed(
   orgId: string,
   settingId: string,
   person: RecordsNewPerson,
-  secret: Buffer,
+  secret: RecordsSecrets,
   ids: { org: string; user: string },
 ): Promise<RecordsFailure | null> {
   let loaded: IntakeCredentials | null;

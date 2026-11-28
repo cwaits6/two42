@@ -85,7 +85,8 @@ const log = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock("@/lib/log", () => log);
 
 vi.mock("./crypto", () => ({
-  openKey: (_secret: Buffer, org: string, label: string, sealed: string) => {
+  intakeKeyLabel: (id: string) => `${id}-intake`,
+  openKey: (_secret: unknown, org: string, label: string, sealed: string) => {
     if (sealed === "sealed-under-old-secret") throw new Error("unsupported state or unable to authenticate data");
     return `${org}|${label}|${sealed}`;
   },
@@ -108,7 +109,7 @@ const { acceptConsent, INTAKE_UNKNOWN_AFTER_MS, intakeOffer, readIntakeStatus, s
 );
 
 const ORG = "org-1";
-const SECRET = Buffer.alloc(32);
+const SECRET = { current: Buffer.alloc(32), previous: null };
 const person = { firstName: "Nora", lastName: "Setupwell", email: "nora@example.test", phone: "5551234567" };
 
 beforeEach(() => {
