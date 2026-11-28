@@ -1162,9 +1162,13 @@ church. Callers pass the org from the setup link's `signup_token` row
 The `records_intake_settings_cleanup()` trigger, `after delete` on
 `records_intake_settings`, deletes only that church's not-yet-sent consents
 (`org_id = old.org_id`); it is `SECURITY INVOKER` with EXECUTE revoked from
-`public`, `anon` and `authenticated`. Both tables carry the restrictive
+`public`, `anon` and `authenticated`. The `records_intake_link_cleanup()`
+trigger (`20261214000000_church_records_intake_link.sql`), `after insert or
+update of profile_id` on `records_person_links`, deletes only the linked
+person's `consented` row in the link's own church (`org_id = new.org_id and
+profile_id = new.profile_id`), the same way. Both tables carry the restrictive
 isolation floor and grant nothing to `anon` or `authenticated`.
-`supabase/tests/church_records_intake_suite.sql` proves the boundary.
+`supabase/tests/church_records_intake_suite.sql` and `church_records_intake_link_suite.sql` prove the boundary.
 
 ## Church records member edits — definer-function bypass surfaces
 

@@ -719,7 +719,9 @@ anyone else, through the suggestions and an admin's confirmation.
   because the phone isn't known before.
 - **Once.** Each person is sent at most once
   (`records_intake_requests`, one row per person): a second save or a retry
-  sends nobody. A linked person is never sent. A failed send is recorded and
+  sends nobody. A linked person is never sent: linking someone removes a
+  consent of theirs not yet sent, so nothing waits for them, and keeps a send
+  already started, sent or failed. A failed send is recorded and
   **never retried**, because a timeout can follow a send the records already
   took. A send is queued with the acceptance profile setup saved, and goes only
   if that acceptance is still current and sending hasn't been turned off and on
@@ -744,7 +746,10 @@ their own session. `records_intake_consent()`, `records_intake_accept()`,
 `records_intake_withdraw()` and `records_intake_claim()` store nothing while
 sending is off (a withdrawal is kept either way) and never accept or claim a
 linked person
-(`supabase/migrations/20261212000000_church_records_intake.sql`).
+(`supabase/migrations/20261212000000_church_records_intake.sql`). The
+`records_intake_link_cleanup()` trigger, after a link is inserted, deletes
+that person's `consented` row in the link's church
+(`supabase/migrations/20261214000000_church_records_intake_link.sql`).
 
 ### Each provider's own way
 
