@@ -2687,8 +2687,10 @@ begin
   -- one copied stands: this person's isn't written or announced, and an older
   -- church value is forgotten. A member's change or clear keeps the planned
   -- state and the new church value, so the spouses' sources can agree again
-  -- once the church corrects both. The answer is 'held' so the caller doesn't
-  -- count the household.
+  -- once the church corrects both. Another linked person's clear holds back a
+  -- write too: someone who joined the household after the clear has no source
+  -- of their own, so their plan reads the cleared anniversary as never filled. The answer is 'held' so the
+  -- caller doesn't count the household.
   if _anniversary is not null and _family.id is not null and exists (
     select 1
       from public.records_field_values v
@@ -2697,8 +2699,9 @@ begin
        and v.field = 'anniversary'
        and v.profile_id <> _profile_id
        and p.family_id = _family.id
-       and public.records_pick(v.church_value, public.records_field_columns('anniversary'))
-           <> public.records_pick(_anniversary, public.records_field_columns('anniversary'))
+       and ((v.state = 'cleared' and _household <> '{}'::jsonb)
+            or public.records_pick(v.church_value, public.records_field_columns('anniversary'))
+               <> public.records_pick(_anniversary, public.records_field_columns('anniversary')))
   ) then
     _household := '{}'::jsonb;
     _values := (
@@ -2923,10 +2926,22 @@ begin
     returning id into _target;
   end if;
 
+  -- A mover's anniversary source is their old household's. Kept, it would make
+  -- the full copy below treat the new household's date as the church's and
+  -- replace it; without it the copy is a first fill, which keeps an entered date.
+  delete from public.records_field_values v
+   using public.profiles pr
+   where v.org_id = _org_id and v.field = 'anniversary' and v.profile_id = any (_ids)
+     and pr.id = v.profile_id and pr.org_id = _org_id
+     and pr.family_id is distinct from _target;
+
   update public.profiles pr
      set family_id = _target, relationship = p.relationship
     from jsonb_to_recordset(_s.people) as p(profile_id uuid, relationship text)
    where pr.id = p.profile_id and pr.org_id = _org_id;
+
+  update public.records_person_state set copied_at = null
+   where org_id = _org_id and profile_id = any (_ids) and copied_at is not null;
 
   insert into public.records_household_links (org_id, family_id, connection_id, external_family_id, confirmed_by)
   values (_org_id, _target, _s.connection_id, _s.external_family_id, _confirmed_by)
@@ -3640,12 +3655,20 @@ begin
     return 'saved';
   end if;
 
+  -- Delete before forgetting: a member's edit can turn a source 'cleared'
+  -- without this lock, and the forget's later snapshot then still sees it.
   delete from public.records_field_values v
-   where v.org_id = _org_id
+   where v.org_id = _org_id and v.state <> 'cleared'
+     and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
+  update public.records_field_values v set church_value = '{}'::jsonb, updated_at = now()
+   where v.org_id = _org_id and v.state = 'cleared' and v.church_value <> '{}'::jsonb
      and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
 
   delete from public.records_household_values v
-   where v.org_id = _org_id and not (_after ? v.field);
+   where v.org_id = _org_id and v.state <> 'cleared' and not (_after ? v.field);
+  update public.records_household_values v set church_value = '{}'::jsonb, updated_at = now()
+   where v.org_id = _org_id and v.state = 'cleared' and v.church_value <> '{}'::jsonb
+     and not (_after ? v.field);
 
   update public.records_person_state set copied_at = null
    where org_id = _org_id and copied_at is not null;
