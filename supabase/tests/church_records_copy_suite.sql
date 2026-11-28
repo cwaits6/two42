@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
+select plan(58);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -83,6 +83,31 @@ $$;
 
 create function pg_temp.state(_profile uuid, _field text) returns text language sql stable as $$
   select state from public.records_field_values where profile_id = _profile and field = _field;
+$$;
+
+create function pg_temp.date(_month int, _day int, _year int) returns jsonb language sql immutable as $$
+  select jsonb_build_object('anniversary_month', _month, 'anniversary_day', _day, 'anniversary_year', _year);
+$$;
+
+-- The same church anniversary read for every linked person in the household.
+create function pg_temp.reads(_profile uuid, _value jsonb) returns jsonb language sql stable as $$
+  select jsonb_build_object('anniversaries', jsonb_object_agg(l.profile_id, _value))
+    from public.records_person_links l
+    join public.profiles p on p.id = l.profile_id and p.org_id = l.org_id
+   where p.family_id = (select family_id from public.profiles where id = _profile);
+$$;
+
+-- Leo's records hold this anniversary, Isaac's still the first one copied.
+create function pg_temp.differing(_value jsonb) returns jsonb language sql stable as $$
+  select jsonb_build_object('anniversaries', jsonb_build_object(
+    pg_temp.fx('member'), _value, pg_temp.fx('member2'), pg_temp.date(6, 1, 2001)));
+$$;
+
+-- The household's anniversary source, as (state,church month).
+create function pg_temp.anniversary() returns text language sql stable as $$
+  select (h.state, h.church_value ->> 'anniversary_month')::text
+    from public.records_household_anniversary h
+   where h.family_id = (select family_id from public.profiles where id = pg_temp.fx('member'));
 $$;
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
@@ -235,7 +260,8 @@ insert into public.family_members (family_id, first_name, relationship, claimed_
 
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || pg_temp.reads(pg_temp.fx('member'), pg_temp.date(6, 1, 2001)),
     '{"phone_mobile": "+15125550101", "birth_month": 3, "birth_day": 4, "birth_year": null}',
     '{"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}',
     '{"graduation_year": 2032}',
@@ -256,102 +282,118 @@ select is(
      join public.records_person_state s on s.profile_id = p.id
     where p.id = pg_temp.fx('member')),
   '(+15125550101,3,4,6,2032,t,t)', 'the copy writes the profile, household and grade, and records the notice');
+select is(pg_temp.anniversary(), '(records,6)',
+  'the anniversary''s source is the household''s, not the person''s');
 
 select public.records_apply_copy(
-  pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+  pg_temp.fx('org'), pg_temp.fx('member2'),
+  pg_temp.expected(pg_temp.fx('member2')) || pg_temp.reads(pg_temp.fx('member2'), pg_temp.date(6, 1, 2001))
+    || '{"states": {"anniversary": "records"}}',
   '{"phone_mobile": "+15125550102"}', '{}', '{}',
   '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550102"}},
     {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
   '{}');
 
--- Linked spouses whose records hold different anniversaries: the first one copied stands.
+-- Linked spouses whose records hold different anniversaries: nothing writes it.
 savepoint anniversary_differs;
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+    pg_temp.fx('org'), pg_temp.fx('member2'),
+    pg_temp.expected(pg_temp.fx('member2')) || pg_temp.differing(pg_temp.date(7, 2, 1999)),
     '{"phone_mobile": "+15125550103"}', '{"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}', '{}',
     '[{"field": "phone_mobile", "state": "records", "church_value": {"phone_mobile": "+15125550103"}},
       {"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
     '{anniversary}'),
-  'held', 'a spouse''s copy with a different anniversary is applied without it');
+  'held', 'a spouse''s copy while the spouses'' records differ is applied without the anniversary');
 select is(
-  (select (f.anniversary_month, p.phone_mobile,
-           (select count(*) from public.records_field_values v where v.profile_id = p.id and v.field = 'anniversary'),
-           s.notice_filled_at is not null)::text
+  (select (f.anniversary_month, p.phone_mobile, s.notice_filled_at is not null)::text
      from public.profiles p
      join public.family_units f on f.id = p.family_id
      join public.records_person_state s on s.profile_id = p.id
     where p.id = pg_temp.fx('member2')),
-  '(6,+15125550103,0,f)',
-  'the household keeps the anniversary already copied, the spouse''s differing one isn''t recorded or announced, and the rest of the copy lands');
+  '(6,+15125550103,f)',
+  'the household keeps its anniversary, the differing one isn''t announced, and the rest of the copy lands');
+select is(pg_temp.anniversary(), '(records,6)', 'and the household''s source is left as it was');
 rollback to savepoint anniversary_differs;
 
--- Both spouses cleared the anniversary, then the church corrected both records.
+-- The household cleared the anniversary, then the church corrected both records.
 savepoint anniversary_cleared;
-update public.records_field_values set state = 'cleared' where org_id = pg_temp.fx('org') and field = 'anniversary';
+update public.records_household_anniversary set state = 'cleared' where org_id = pg_temp.fx('org');
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+    pg_temp.fx('org'), pg_temp.fx('member2'),
+    pg_temp.expected(pg_temp.fx('member2')) || pg_temp.differing(pg_temp.date(7, 2, 1999)),
     '{}', '{}', '{}',
     '[{"field": "anniversary", "state": "cleared", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
     '{}'),
-  'held', 'non-vacuity: a cleared anniversary that differs from the spouse''s records is held');
-select is(
-  (select state from public.records_field_values where profile_id = pg_temp.fx('member2') and field = 'anniversary'),
-  'cleared', 'a member''s cleared anniversary is kept while their records differ from their spouse''s');
+  'held', 'non-vacuity: a cleared anniversary is held while the spouses'' records differ');
+select is(pg_temp.anniversary(), '(cleared,6)', 'and the clear is kept');
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || pg_temp.reads(pg_temp.fx('member'), pg_temp.date(7, 2, 1999)),
     '{}', '{}', '{}',
     '[{"field": "anniversary", "state": "cleared", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
     '{}'),
-  'applied', 'once both spouses'' records agree, the other spouse''s cleared copy is no longer held');
-select is(
-  (select array_agg(distinct (state, church_value ->> 'anniversary_month')::text)
-     from public.records_field_values where org_id = pg_temp.fx('org') and field = 'anniversary'),
-  array['(cleared,7)'], 'a held clear stays cleared and takes the corrected church value');
+  'applied', 'once both spouses'' records agree, the copy is no longer held');
+select is(pg_temp.anniversary(), '(cleared,7)', 'the clear stays and takes the corrected church value');
 rollback to savepoint anniversary_cleared;
 
--- Both spouses changed the anniversary, then the church corrected both records.
+-- The household changed the anniversary, then the church corrected both records.
 savepoint anniversary_corrected;
-update public.records_field_values set state = 'changed' where org_id = pg_temp.fx('org') and field = 'anniversary';
+update public.records_household_anniversary set state = 'changed' where org_id = pg_temp.fx('org');
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || pg_temp.differing(pg_temp.date(5, 5, 2005)),
     '{}', '{}', '{}',
     '[{"field": "anniversary", "state": "changed", "church_value": {"anniversary_month": 5, "anniversary_day": 5, "anniversary_year": 2005}}]',
     '{}'),
   'held', 'non-vacuity: the first corrected spouse is held against the other''s older records');
 select is(
   public.records_apply_copy(
-    pg_temp.fx('org'), pg_temp.fx('member2'), pg_temp.expected(pg_temp.fx('member2')),
+    pg_temp.fx('org'), pg_temp.fx('member2'),
+    pg_temp.expected(pg_temp.fx('member2')) || pg_temp.reads(pg_temp.fx('member2'), pg_temp.date(5, 5, 2005)),
     '{}', '{}', '{}',
     '[{"field": "anniversary", "state": "changed", "church_value": {"anniversary_month": 5, "anniversary_day": 5, "anniversary_year": 2005}}]',
     '{}'),
   'applied', 'once both spouses'' records agree, the second spouse''s copy is no longer held');
-select is(
-  (select array_agg(distinct (state, church_value ->> 'anniversary_month')::text)
-     from public.records_field_values where org_id = pg_temp.fx('org') and field = 'anniversary'),
-  array['(changed,5)'], 'a held change keeps its state and takes the corrected church value');
+select is(pg_temp.anniversary(), '(changed,5)', 'a change keeps its state and takes the corrected church value');
 rollback to savepoint anniversary_corrected;
 
--- Both spouses changed the anniversary to the household's value; the church corrected only the first's records.
-savepoint anniversary_matches;
-update public.records_field_values
-   set state = 'changed', church_value = '{"anniversary_month": 5, "anniversary_day": 5, "anniversary_year": 2005}'
- where org_id = pg_temp.fx('org') and field = 'anniversary';
+-- What the database refuses whatever the plan says.
+savepoint anniversary_refused;
+update public.records_household_anniversary set state = 'changed' where org_id = pg_temp.fx('org');
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member')) || pg_temp.reads(pg_temp.fx('member'), pg_temp.date(9, 9, 2009)),
+    '{}', '{"anniversary_month": 9, "anniversary_day": 9, "anniversary_year": 2009}', '{}',
+    '[{"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 9, "anniversary_day": 9, "anniversary_year": 2009}}]',
+    '{anniversary}'),
+  'applied', 'non-vacuity: a plan that would write over the household''s own anniversary is applied');
+select is(
+  (select (f.anniversary_month, h.state, h.church_value ->> 'anniversary_month', s.notice_filled_at is not null)::text
+     from public.family_units f
+     join public.records_household_anniversary h on h.family_id = f.id
+     join public.records_person_state s on s.profile_id = pg_temp.fx('member')
+    where f.id = (select family_id from public.profiles where id = pg_temp.fx('member'))),
+  '(6,changed,9,t)', 'without writing it: the household''s change stays, with the church''s new value beside it');
 select is(
   public.records_apply_copy(
     pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
-    '{}', '{}', '{}',
-    '[{"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
-    '{}'),
-  'held', 'non-vacuity: the corrected spouse is held against the other''s older records');
+    '{}', '{"anniversary_month": 9, "anniversary_day": 9, "anniversary_year": 2009}', '{}', '[]', '{anniversary}'),
+  'stale', 'a copy that writes the anniversary without reading the household''s linked people is refused');
 select is(
-  (select (state, church_value ->> 'anniversary_month')::text
-     from public.records_field_values where profile_id = pg_temp.fx('member') and field = 'anniversary'),
-  '(records,6)', 'a held change that now matches the church''s value goes back to the church''s records');
-rollback to savepoint anniversary_matches;
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'),
+    pg_temp.expected(pg_temp.fx('member'))
+      || jsonb_build_object('anniversaries', jsonb_build_object(pg_temp.fx('member'), pg_temp.date(9, 9, 2009))),
+    '{}', '{}', '{}',
+    '[{"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 9, "anniversary_day": 9, "anniversary_year": 2009}}]',
+    '{}'),
+  'stale', 'and so is one that read only some of them');
+rollback to savepoint anniversary_refused;
 
 savepoint states_checked;
 select is(
@@ -406,15 +448,22 @@ select is(
       format('select count(*)::int from public.records_field_values where profile_id = %L', pg_temp.fx('member2'))),
     pg_temp.seen('isaac.seedly@example.test',
       format('select count(*)::int from public.records_field_values where profile_id = %L', pg_temp.fx('member'))),
-    pg_temp.seen('isaac.seedly@example.test',
-      format('select count(*)::int from public.records_field_values where profile_id = %L and field = %L',
-             pg_temp.fx('member'), 'anniversary')),
     pg_temp.seen('zoe.dummyfield@example.test', 'select count(*)::int from public.records_field_values'),
     pg_temp.seen('admin@local.dev', 'select count(*)::int from public.records_field_values'),
     pg_temp.seen('owner@copy-boundary.example.test', 'select count(*)::int from public.records_field_values')
   ],
-  array[5, 2, 1, 1, 0, 7, 0],
-  'a member reads their own sources; a household manager those of the people they edit; the rest of the household only the anniversary; nobody else any; a church admin every one in their church only');
+  array[4, 1, 0, 0, 5, 0],
+  'a member reads their own sources; a household manager those of the people they edit; nobody else any; a church admin every one in their church only');
+select is(
+  array[
+    pg_temp.seen('leo.loremsworth@example.test', 'select count(*)::int from public.records_household_anniversary'),
+    pg_temp.seen('isaac.seedly@example.test', 'select count(*)::int from public.records_household_anniversary'),
+    pg_temp.seen('zoe.dummyfield@example.test', 'select count(*)::int from public.records_household_anniversary'),
+    pg_temp.seen('admin@local.dev', 'select count(*)::int from public.records_household_anniversary'),
+    pg_temp.seen('owner@copy-boundary.example.test', 'select count(*)::int from public.records_household_anniversary')
+  ],
+  array[1, 1, 0, 1, 0],
+  'everyone in the household reads its anniversary''s source, and a church admin every household''s in their church only');
 
 select is(
   array[
@@ -470,9 +519,7 @@ select is(
     format('update public.family_units set anniversary_month = 7 where id = (select family_id from public.profiles where id = %L)',
            pg_temp.fx('member'))),
   'rows:1', 'non-vacuity: a member edits their household''s anniversary');
-select is(
-  array[pg_temp.state(pg_temp.fx('member'), 'anniversary'), pg_temp.state(pg_temp.fx('member2'), 'anniversary')],
-  array['changed', 'changed'], 'an anniversary edit marks it changed for everyone in the household');
+select is(pg_temp.anniversary(), '(changed,6)', 'an anniversary edit marks it changed, once for the household');
 
 set local role service_role;
 update public.profiles set phone_mobile = '+15125550123' where id = pg_temp.fx('member2');
@@ -496,7 +543,8 @@ on conflict (org_id) do update set cursor = excluded.cursor;
 delete from public.records_connections where org_id = pg_temp.fx('org');
 select is(
   array[
-    (select count(*)::int from public.records_field_values where org_id = pg_temp.fx('org')),
+    (select count(*)::int from public.records_field_values where org_id = pg_temp.fx('org'))
+      + (select count(*)::int from public.records_household_anniversary where org_id = pg_temp.fx('org')),
     (select count(*)::int from public.records_person_state where org_id = pg_temp.fx('org')),
     (select count(*)::int from public.records_refresh_state where org_id = pg_temp.fx('org')),
     (select count(*)::int from public.records_field_settings where org_id = pg_temp.fx('org'))

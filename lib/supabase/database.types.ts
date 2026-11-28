@@ -1347,6 +1347,44 @@ isOneToOne: false
       referencedColumns: ["org_id","profile_id"]
     }
                   ]
+                },"records_household_anniversary": {
+                  Row: {
+                    "church_value": NonNullable<Json>,"connection_id": string,"family_id": string,"org_id": string,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "church_value"?: NonNullable<Json>,"connection_id": string,"family_id": string,"org_id"?: string,"state": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "church_value"?: NonNullable<Json>,"connection_id"?: string,"family_id"?: string,"org_id"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "records_household_anniversary_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
+      foreignKeyName: "records_household_anniversary_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_anniversary_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "families_directory_full"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "records_household_anniversary_family_fkey"
+      columns: ["family_id","org_id"]
+isOneToOne: false
+      referencedRelation: "family_units"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"records_household_links": {
                   Row: {
                     "confirmed_at": string,"confirmed_by": string | null,"connection_id": string,"external_family_id": string,"family_id": string,"org_id": string

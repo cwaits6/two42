@@ -230,6 +230,8 @@ begin
     values (_org, _family, (select connection_id from public.records_connections where org_id = _org), '1', _owner);
   insert into public.records_household_values (org_id, family_id, field, state, church_value)
     values (_org, _family, 'address', 'records', '{"address_line1": "1 Leak St"}');
+  insert into public.records_household_anniversary (org_id, family_id, connection_id, state, church_value)
+    values (_org, _family, (select connection_id from public.records_connections where org_id = _org), 'cleared', '{}');
   insert into public.records_household_suggestions (org_id, connection_id, external_family_id, target_family_id, people, ready)
     values (_org, (select connection_id from public.records_connections where org_id = _org), '2', _family, '[]', true);
   insert into public.records_child_suggestions (org_id, family_id, external_person_id, first_name, last_name)
